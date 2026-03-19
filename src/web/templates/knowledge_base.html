@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}知识库管理 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="knowledgeBaseApp()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-database"></i> 知识库管理</h2>
+        <button class="btn btn-primary" @click="showCreateModal = true">
+            <i class="bi bi-plus-circle"></i> 创建知识库
+        </button>
+    </div>
+
+    <!-- Knowledge Base List -->
+    <div class="row" id="kb-list">
+        <template x-if="kbList.length === 0 && !loading">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 暂无知识库，点击上方按钮创建
+                </div>
+            </div>
+        </template>
+
+        <template x-for="kb in kbList" :key="kb.id">
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0" x-text="kb.name"></h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" @click="showKbDetail(kb)" title="查看详情">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" @click="confirmDelete(kb)" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text text-muted" x-text="kb.description || '无描述'"></p>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-file-earmark"></i> <span x-text="kb.document_count || 0"></span> 文档</span>
+                            <span x-text="formatDate(kb.created_at)"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create KB Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showCreateModal }" tabindex="-1" x-show="showCreateModal"
+         @click.self="showCreateModal = false" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> 创建知识库</h5>
+                    <button type="button" class="btn-close" @click="showCreateModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称 *</label>
+                        <input type="text" class="form-control" x-model="newKb.name" placeholder="输入知识库名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="newKb.description" placeholder="输入描述（可选）"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showCreateModal = false">取消</button>
+                    <button type="button" class="btn btn-primary" @click="createKb()" :disabled="!newKb.name">
+                        <span x-show="creating" class="spinner-border spinner-border-sm"></span>
+                        创建
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KB Detail Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showDetailModal }" tabindex="-1" x-show="showDetailModal"
+         @click.self="showDetailModal = false" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-info-circle"></i> 知识库详情</h5>
+                    <button type="button" class="btn-close" @click="showDetailModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <template x-if="selectedKb">
+                        <div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>名称：</strong> <span x-text="selectedKb.name"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>ID：</strong> <code x-text="selectedKb.id"></code>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <strong>描述：</strong> <span x-text="selectedKb.description || '无'"></span>
+                            </div>
+
+                            <hr>
+                            <h6><i class="bi bi-file-earmark"></i> 文档列表</h6>
+
+                            <!-- Upload Document -->
+                            <form @submit.prevent="uploadDocument()" class="mb-3">
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="docFile" accept=".txt,.md,.pdf,.docx,.doc"
+                                           @change="docFile = $event.target.files[0]">
+                                    <button class="btn btn-primary" type="submit" :disabled="!docFile || uploading">
+                                        <span x-show="uploading" class="spinner-border spinner-border-sm"></span>
+                                        <span x-text="uploading ? '上传中...' : '上传'"></span>
+                                    </button>
+                                </div>
+                                <small class="text-muted">支持：txt, md, pdf, docx, doc</small>
+                            </form>
+
+                            <!-- Document List -->
+                            <div class="list-group">
+                                <template x-if="!selectedKb.documents || selectedKb.documents.length === 0">
+                                    <div class="list-group-item text-muted">暂无文档</div>
+                                </template>
+                                <template x-for="doc in selectedKb.documents" :key="doc.id">
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>
+                                            <i class="bi bi-file-earmark-text"></i>
+                                            <span x-text="doc.filename || doc.id"></span>
+                                        </span>
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.id)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showDeleteModal }" tabindex="-1" x-show="showDeleteModal"
+         style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger"></i> 确认删除</h5>
+                    <button type="button" class="btn-close" @click="showDeleteModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除知识库 "<strong x-text="deleteTarget?.name"></strong>" 吗？</p>
+                    <p class="text-danger"><small>此操作不可恢复！</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showDeleteModal = false">取消</button>
+                    <button type="button" class="btn btn-danger" @click="deleteKb()">
+                        <span x-show="deleting" class="spinner-border spinner-border-sm"></span>
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+        <div class="toast" :class="{ 'show': toast.show }" role="alert">
+            <div class="toast-header">
+                <i :class="toast.type === 'success' ? 'bi-check-circle text-success' : 'bi-exclamation-circle text-danger'"></i>
+                <strong class="me-auto ms-2" x-text="toast.title"></strong>
+                <button type="button" class="btn-close" @click="toast.show = false"></button>
+            </div>
+            <div class="toast-body" x-text="toast.message"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function knowledgeBaseApp() {
+    return {
+        kbList: [],
+        loading: true,
+        showCreateModal: false,
+        showDetailModal: false,
+        showDeleteModal: false,
+        creating: false,
+        deleting: false,
+        uploading: false,
+        newKb: { name: '', description: '' },
+        selectedKb: null,
+        deleteTarget: null,
+        docFile: null,
+        toast: { show: false, type: 'success', title: '', message: '' },
+
+        init() {
+            this.loadKbList();
+        },
+
+        async loadKbList() {
+            this.loading = true;
+            try {
+                const response = await fetch('/api/kb');
+                const data = await response.json();
+                if (data.success) {
+                    this.kbList = data.data;
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '加载知识库列表失败');
+            }
+            this.loading = false;
+        },
+
+        async createKb() {
+            this.creating = true;
+            try {
+                const response = await fetch('/api/kb', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newKb)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '知识库创建成功');
+                    this.showCreateModal = false;
+                    this.newKb = { name: '', description: '' };
+                    this.loadKbList();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '创建知识库失败');
+            }
+            this.creating = false;
+        },
+
+        async showKbDetail(kb) {
+            try {
+                const response = await fetch(`/api/kb/${kb.id}`);
+                const data = await response.json();
+                if (data.success) {
+                    this.selectedKb = data.data;
+                    this.showDetailModal = true;
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '获取知识库详情失败');
+            }
+        },
+
+        confirmDelete(kb) {
+            this.deleteTarget = kb;
+            this.showDeleteModal = true;
+        },
+
+        async deleteKb() {
+            if (!this.deleteTarget) return;
+            this.deleting = true;
+            try {
+                const response = await fetch(`/api/kb/${this.deleteTarget.id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '知识库已删除');
+                    this.showDeleteModal = false;
+                    this.deleteTarget = null;
+                    this.loadKbList();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '删除知识库失败');
+            }
+            this.deleting = false;
+        },
+
+        async uploadDocument() {
+            if (!this.docFile || !this.selectedKb) return;
+            this.uploading = true;
+            try {
+                const formData = new FormData();
+                formData.append('file', this.docFile);
+                const response = await fetch(`/api/kb/${this.selectedKb.id}/documents`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '文档上传成功');
+                    this.docFile = null;
+                    document.getElementById('docFile').value = '';
+                    // Refresh detail
+                    this.showKbDetail(this.selectedKb);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '上传文档失败');
+            }
+            this.uploading = false;
+        },
+
+        async deleteDocument(docId) {
+            if (!confirm('确定要删除此文档吗？')) return;
+            try {
+                const response = await fetch(`/api/kb/${this.selectedKb.id}/documents/${docId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '文档已删除');
+                    this.showKbDetail(this.selectedKb);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '删除文档失败');
+            }
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('zh-CN');
+        },
+
+        showToast(type, title, message) {
+            this.toast = { show: true, type, title, message };
+            setTimeout(() => { this.toast.show = false; }, 3000);
+        }
+    };
+}
+</script>
+{% endblock %}

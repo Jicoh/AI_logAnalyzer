@@ -11,7 +11,7 @@ from datetime import datetime
 
 from .document_loader import DocumentLoader, load_document_chunks
 from .bm25_retriever import BM25Retriever
-from utils.cache import HybridCache
+from src.utils.cache import HybridCache
 
 
 class KnowledgeBaseManager:

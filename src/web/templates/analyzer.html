@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}日志分析 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="analyzerApp()">
+    <div class="row">
+        <!-- Left Panel: Configuration -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-upload"></i> 上传日志文件
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">日志文件</label>
+                        <input type="file" class="form-control" id="logFile" accept=".log,.txt"
+                               @change="logFile = $event.target.files[0]">
+                        <small class="text-muted">支持格式：log, txt</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-plug"></i> 选择分析插件
+                </div>
+                <div class="card-body">
+                    <template x-for="plugin in plugins" :key="plugin.id">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   :id="'plugin-' + plugin.id"
+                                   :value="plugin.id"
+                                   x-model="selectedPlugins">
+                            <label class="form-check-label" :for="'plugin-' + plugin.id">
+                                <span x-text="plugin.name"></span>
+                                <br><small class="text-muted" x-text="plugin.description"></small>
+                            </label>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-robot"></i> AI 分析设置
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="enableAi" x-model="enableAi">
+                        <label class="form-check-label" for="enableAi">启用 AI 分析</label>
+                    </div>
+
+                    <div x-show="enableAi" x-cloak>
+                        <div class="mb-3">
+                            <label class="form-label">关联知识库</label>
+                            <select class="form-select" x-model="selectedKbId">
+                                <option value="">不使用知识库</option>
+                                <template x-for="kb in kbList" :key="kb.id">
+                                    <option :value="kb.id" x-text="kb.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">自定义提示词（可选）</label>
+                            <textarea class="form-control" x-model="userPrompt"
+                                      rows="3" placeholder="输入额外的分析要求..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary w-100" @click="startAnalysis()"
+                    :disabled="!logFile || analyzing">
+                <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
+                <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
+            </button>
+        </div>
+
+        <!-- Right Panel: Results -->
+        <div class="col-lg-8">
+            <!-- Status -->
+            <div class="card mb-4" x-show="analyzing || completed" x-cloak>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-activity"></i> 分析状态</span>
+                    <span class="badge" :class="statusBadgeClass" x-text="statusText"></span>
+                </div>
+                <div class="card-body">
+                    <div class="progress mb-2">
+                        <div class="progress-bar" :class="progressBarClass"
+                             :style="'width: ' + progress + '%'"></div>
+                    </div>
+                    <small class="text-muted" x-text="statusMessage"></small>
+                </div>
+            </div>
+
+            <!-- Plugin Results -->
+            <div class="card mb-4" x-show="pluginResult" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-list-check"></i> 插件分析结果
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h3 class="text-danger" x-text="pluginResult?.error_count || 0"></h3>
+                                <small class="text-muted">错误数</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h3 class="text-warning" x-text="pluginResult?.warning_count || 0"></h3>
+                                <small class="text-muted">警告数</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h3 class="text-info" x-text="pluginResult?.statistics?.total_lines || 0"></h3>
+                                <small class="text-muted">总行数</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Errors List -->
+                    <div x-show="pluginResult?.errors?.length > 0">
+                        <h6 class="text-danger"><i class="bi bi-x-circle"></i> 错误详情</h6>
+                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>行号</th>
+                                        <th>时间</th>
+                                        <th>组件</th>
+                                        <th>消息</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="err in pluginResult?.errors" :key="err.line_number">
+                                        <tr>
+                                            <td><code x-text="err.line_number"></code></td>
+                                            <td x-text="err.timestamp || '-'"></td>
+                                            <td x-text="err.component || '-'"></td>
+                                            <td><small x-text="err.message"></small></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Warnings List -->
+                    <div x-show="pluginResult?.warnings?.length > 0" class="mt-3">
+                        <h6 class="text-warning"><i class="bi bi-exclamation-triangle"></i> 警告详情</h6>
+                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>行号</th>
+                                        <th>时间</th>
+                                        <th>组件</th>
+                                        <th>消息</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="warn in pluginResult?.warnings" :key="warn.line_number">
+                                        <tr>
+                                            <td><code x-text="warn.line_number"></code></td>
+                                            <td x-text="warn.timestamp || '-'"></td>
+                                            <td x-text="warn.component || '-'"></td>
+                                            <td><small x-text="warn.message"></small></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Results -->
+            <div class="card" x-show="enableAi && (analyzing || aiResult)" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-robot"></i> AI 分析结果
+                </div>
+                <div class="card-body">
+                    <div class="ai-result" x-html="formatAiResult(aiResult)"></div>
+                    <div x-show="analyzing && !aiResult" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">等待 AI 分析...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="card" x-show="!analyzing && !completed">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-file-earmark-text display-4"></i>
+                    <p class="mt-3">请上传日志文件并点击"开始分析"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function analyzerApp() {
+    return {
+        logFile: null,
+        plugins: [],
+        selectedPlugins: ['log_parser'],
+        kbList: [],
+        selectedKbId: '',
+        enableAi: true,
+        userPrompt: '',
+        analyzing: false,
+        completed: false,
+        progress: 0,
+        statusText: '准备中',
+        statusMessage: '',
+        pluginResult: null,
+        aiResult: '',
+        eventSource: null,
+
+        init() {
+            this.loadPlugins();
+            this.loadKbList();
+        },
+
+        get statusBadgeClass() {
+            if (this.analyzing) return 'bg-primary';
+            if (this.completed) return 'bg-success';
+            return 'bg-secondary';
+        },
+
+        get progressBarClass() {
+            if (this.completed) return 'bg-success';
+            return 'bg-primary';
+        },
+
+        async loadPlugins() {
+            try {
+                const response = await fetch('/api/analyze/plugins');
+                const data = await response.json();
+                if (data.success) {
+                    this.plugins = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load plugins:', error);
+            }
+        },
+
+        async loadKbList() {
+            try {
+                const response = await fetch('/api/kb');
+                const data = await response.json();
+                if (data.success) {
+                    this.kbList = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load knowledge bases:', error);
+            }
+        },
+
+        startAnalysis() {
+            if (!this.logFile) return;
+
+            this.analyzing = true;
+            this.completed = false;
+            this.progress = 0;
+            this.statusText = '分析中';
+            this.statusMessage = '正在处理...';
+            this.pluginResult = null;
+            this.aiResult = '';
+
+            const formData = new FormData();
+            formData.append('file', this.logFile);
+            this.selectedPlugins.forEach(p => formData.append('plugins', p));
+            formData.append('enable_ai', this.enableAi ? 'true' : 'false');
+            if (this.selectedKbId) formData.append('kb_id', this.selectedKbId);
+            if (this.userPrompt) formData.append('user_prompt', this.userPrompt);
+
+            // Use fetch with POST for SSE
+            fetch('/api/analyze/stream', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                const processLine = (line) => {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            this.handleSSEEvent(data);
+                        } catch (e) {
+                            console.error('Failed to parse SSE:', e);
+                        }
+                    }
+                };
+
+                const readChunk = () => {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            this.analyzing = false;
+                            this.completed = true;
+                            return;
+                        }
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+                        lines.forEach(processLine);
+                        readChunk();
+                    });
+                };
+
+                readChunk();
+            }).catch(error => {
+                console.error('Analysis error:', error);
+                this.statusText = '错误';
+                this.statusMessage = error.message;
+                this.analyzing = false;
+            });
+        },
+
+        handleSSEEvent(data) {
+            switch (data.stage) {
+                case 'plugin':
+                    if (data.status === 'start') {
+                        this.progress = 10;
+                        this.statusMessage = data.message;
+                    } else if (data.status === 'complete') {
+                        this.progress = 40;
+                        this.pluginResult = data.result;
+                        this.statusMessage = '插件分析完成';
+                    }
+                    break;
+
+                case 'ai':
+                    if (data.status === 'start') {
+                        this.progress = 50;
+                        this.statusMessage = data.message;
+                    } else if (data.status === 'complete') {
+                        this.progress = 100;
+                        this.aiResult = data.result;
+                    } else if (data.status === 'error') {
+                        this.statusMessage = data.message;
+                    } else if (data.chunk) {
+                        this.aiResult += data.chunk;
+                        this.progress = Math.min(90, this.progress + 0.5);
+                    }
+                    break;
+
+                case 'complete':
+                    this.analyzing = false;
+                    this.completed = true;
+                    this.progress = 100;
+                    this.statusText = '完成';
+                    this.statusMessage = data.message;
+                    break;
+
+                case 'error':
+                    this.statusText = '错误';
+                    this.statusMessage = data.message;
+                    this.analyzing = false;
+                    break;
+            }
+        },
+
+        formatAiResult(text) {
+            if (!text) return '';
+            // Simple markdown-like formatting
+            return text
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>')
+                .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        }
+    };
+}
+</script>
+
+<style>
+.ai-result {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+.ai-result pre {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+}
+.ai-result code {
+    background: #f8f9fa;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+}
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

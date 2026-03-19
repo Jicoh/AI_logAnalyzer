@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Log Analyzer{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="d-flex" style="height: 100vh;">
+        <!-- Sidebar -->
+        <div class="sidebar bg-dark text-white">
+            <div class="sidebar-header">
+                <i class="bi bi-terminal"></i> AI Log Analyzer
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('main.index') }}" class="nav-link {% if active_page == 'analyzer' %}active{% endif %}">
+                    <i class="bi bi-search"></i> 日志分析
+                </a>
+                <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
+                    <i class="bi bi-database"></i> 知识库
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content flex-grow-1">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.0/dist/htmx.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

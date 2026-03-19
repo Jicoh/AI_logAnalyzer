@@ -9,7 +9,7 @@
 - 编程语言：Python 3.10+
 - 检索技术：BM25
 - AI接口：支持动态配置的AI API调用
-- 交互方式：命令行界面（CLI）
+- 交互方式：命令行界面（CLI）、Web界面
 
 ---
 
@@ -41,6 +41,14 @@
 - 所有功能通过命令行操作
 - 支持参数化调用
 
+### 2.6 Web界面
+- 支持 Web 访问（默认端口：127.0.0.1:18888）
+- 知识库查看和更改（创建、删除、列表、添加/删除文档）
+- 添加日志文件进行分析
+- 自由勾选插件进行分析
+- AI 功能开关（可开启/关闭）
+- 分析结果流式展示
+
 ---
 
 ## 三、项目结构
@@ -58,10 +66,12 @@ AI_logAnalyzer/
 │   └── {knowledge_base_id}/      # 按知识库ID分类
 │       └── document_id.txt      # 文档ID记录文件
 ├── data/                         # 数据目录
+│   ├── uploads/                 # 上传文件目录
+│   ├── cache/                   # 缓存目录
 │   ├── plugin_output/           # 插件分析输出
 │   └── ai_output/               # AI分析输出
 ├── src/                          # 源代码目录
-│   ├── main.py                  # 主入口
+│   ├── main.py                  # CLI主入口
 │   ├── plugin_analyzer/         # 插件分析模块
 │   │   ├── __init__.py
 │   │   └── analyzer.py
@@ -77,9 +87,25 @@ AI_logAnalyzer/
 │   ├── config_manager/          # 配置管理模块
 │   │   ├── __init__.py
 │   │   └── manager.py
-│   └── utils/                   # 工具模块
+│   ├── utils/                   # 工具模块
+│   │   ├── __init__.py
+│   │   └── file_utils.py
+│   └── web/                     # Web模块
 │       ├── __init__.py
-│       └── file_utils.py
+│       ├── routes/              # 路由模块
+│       │   ├── __init__.py
+│       │   ├── main.py          # 页面路由
+│       │   ├── kb_api.py        # 知识库API
+│       │   └── analyze_api.py   # 分析API
+│       ├── templates/           # 模板文件
+│       │   ├── base.html
+│       │   ├── index.html
+│       │   ├── knowledge_base.html
+│       │   └── analyzer.html
+│       └── static/              # 静态资源
+│           ├── css/style.css
+│           └── js/app.js
+├── web_app.py                    # Web应用入口
 └── requirements.txt             # 依赖文件
 ```
 
@@ -373,6 +399,7 @@ jieba>=0.42.1         # 中文分词
 pypdf>=3.0.0          # PDF处理
 python-docx>=0.8.11   # Word文档处理
 requests>=2.28.0      # HTTP请求
+flask>=2.3.0          # Web框架
 ```
 
 ---
@@ -385,3 +412,5 @@ requests>=2.28.0      # HTTP请求
 4. AI分析能输出有意义的问题诊断和解决方案
 5. 所有功能可通过命令行调用
 6. 配置文件可动态修改并生效
+7. Web界面可通过浏览器访问（127.0.0.1:18888）
+8. Web界面支持知识库管理和日志分析功能
