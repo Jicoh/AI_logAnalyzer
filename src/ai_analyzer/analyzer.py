@@ -1,17 +1,20 @@
 """
 AI分析器模块
 整合插件分析结果、知识库内容，调用AI进行分析
+支持流式响应和并行知识库检索
 """
 
 import os
 import json
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Generator, Dict, Any
 
 from .client import AIClient
 
 
 class AIAnalyzer:
-    """AI分析器"""
+    """AI分析器，支持流式响应和并行检索"""
 
     def __init__(self, config_manager, kb_manager=None):
         """
@@ -44,9 +47,9 @@ class AIAnalyzer:
                 return f.read()
         return ""
 
-    def analyze(self, plugin_result, log_content, kb_id=None, user_prompt=None):
+    def analyze(self, plugin_result, log_content, kb_id=None, user_prompt=None) -> Generator[str, None, Dict[str, Any]]:
         """
-        执行AI分析
+        流式执行AI分析
 
         Args:
             plugin_result: 插件分析结果
@@ -54,10 +57,13 @@ class AIAnalyzer:
             kb_id: 知识库ID
             user_prompt: 用户自定义提示词
 
+        Yields:
+            str: AI分析结果的文本片段
+
         Returns:
-            dict: 分析结果
+            dict: 完整的分析结果（通过生成器的return值）
         """
-        # 获取知识库内容
+        # 并行获取知识库内容
         knowledge_content = ""
         if kb_id and self.kb_manager:
             knowledge_content = self._get_knowledge_content(kb_id, plugin_result)
@@ -70,36 +76,68 @@ class AIAnalyzer:
             user_prompt=user_prompt
         )
 
-        # 调用AI分析
-        analysis_result = self.client.analyze(prompt)
+        # 流式调用AI分析
+        full_analysis = []
+        for chunk in self.client.analyze(prompt):
+            full_analysis.append(chunk)
+            yield chunk
 
         # 构建返回结果
-        return {
+        result = {
             'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'kb_id': kb_id,
             'plugin_result': plugin_result,
-            'analysis': analysis_result
+            'analysis': ''.join(full_analysis)
         }
+        return result
 
-    def _get_knowledge_content(self, kb_id, plugin_result):
-        """从知识库获取相关内容"""
+    def _get_knowledge_content(self, kb_id, plugin_result) -> str:
+        """
+        并行从知识库获取相关内容
+
+        Args:
+            kb_id: 知识库ID
+            plugin_result: 插件分析结果
+
+        Returns:
+            str: 合并后的知识库内容
+        """
         # 根据错误信息构建查询
         queries = []
 
         if plugin_result.get('errors'):
             for err in plugin_result['errors'][:3]:
-                queries.append(err.get('message', ''))
+                msg = err.get('message', '')
+                if msg:
+                    queries.append(msg)
 
         if plugin_result.get('warnings'):
             for warn in plugin_result['warnings'][:2]:
-                queries.append(warn.get('message', ''))
+                msg = warn.get('message', '')
+                if msg:
+                    queries.append(msg)
 
-        # 搜索知识库
+        if not queries:
+            return ""
+
+        # 并行搜索知识库
         all_results = []
-        for query in queries:
-            if query:
-                results = self.kb_manager.search(kb_id, query, top_n=2)
-                all_results.extend(results)
+        max_workers = min(4, len(queries))  # 最多4个并发
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有查询任务
+            future_to_query = {
+                executor.submit(self._search_kb, kb_id, query, 2): query
+                for query in queries
+            }
+
+            # 收集结果
+            for future in as_completed(future_to_query):
+                try:
+                    results = future.result()
+                    all_results.extend(results)
+                except Exception:
+                    pass  # 忽略单个查询失败
 
         # 去重并合并
         seen = set()
@@ -112,6 +150,22 @@ class AIAnalyzer:
                 content_parts.append(content)
 
         return '\n\n'.join(content_parts)
+
+    def _search_kb(self, kb_id: str, query: str, top_n: int) -> list:
+        """
+        搜索单个知识库（用于并行调用）
+
+        Args:
+            kb_id: 知识库ID
+            query: 查询文本
+            top_n: 返回数量
+
+        Returns:
+            list: 搜索结果
+        """
+        if self.kb_manager:
+            return self.kb_manager.search(kb_id, query, top_n)
+        return []
 
     def _build_prompt(self, plugin_result, log_content, knowledge_content, user_prompt):
         """构建分析提示词"""
@@ -164,9 +218,9 @@ class AIAnalyzer:
             json.dump(result, f, ensure_ascii=False, indent=4)
 
 
-def analyze_with_ai(config_manager, kb_manager, plugin_result, log_content, kb_id=None, user_prompt=None):
+def analyze_with_ai(config_manager, kb_manager, plugin_result, log_content, kb_id=None, user_prompt=None) -> Generator[str, None, Dict[str, Any]]:
     """
-    使用AI分析日志的便捷函数
+    使用AI分析日志的便捷函数（流式）
 
     Args:
         config_manager: 配置管理器
@@ -176,8 +230,11 @@ def analyze_with_ai(config_manager, kb_manager, plugin_result, log_content, kb_i
         kb_id: 知识库ID
         user_prompt: 用户提示词
 
+    Yields:
+        str: AI分析结果的文本片段
+
     Returns:
-        dict: 分析结果
+        dict: 完整分析结果
     """
     analyzer = AIAnalyzer(config_manager, kb_manager)
     return analyzer.analyze(plugin_result, log_content, kb_id, user_prompt)

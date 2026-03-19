@@ -76,26 +76,44 @@ def cmd_analyze(args):
     # 执行AI分析
     print("正在进行AI分析...")
     ai_analyzer = AIAnalyzer(config_manager, kb_manager)
-    result = ai_analyzer.analyze(
+
+    # 流式输出分析结果
+    print("\n" + "="*50)
+    print("分析报告")
+    print("="*50)
+
+    gen = ai_analyzer.analyze(
         plugin_result=plugin_result,
         log_content=log_content,
         kb_id=kb_id,
         user_prompt=user_prompt
     )
 
+    # 收集完整结果并流式输出
+    result = None
+    try:
+        while True:
+            chunk = next(gen)
+            print(chunk, end='', flush=True)
+    except StopIteration as e:
+        # 生成器结束，获取返回值
+        result = e.value
+
+    print()  # 换行
+
+    if result is None:
+        result = {
+            'analysis_time': '未知',
+            'kb_id': kb_id,
+            'plugin_result': plugin_result,
+            'analysis': ''
+        }
+
     # 保存AI分析结果
     ai_output = os.path.join('data', 'ai_output', os.path.basename(args.log).replace('.txt', '_ai.json'))
     ensure_dir(os.path.dirname(ai_output))
     ai_analyzer.save_result(result, ai_output)
-    print(f"AI分析结果已保存: {ai_output}")
-
-    # 输出分析摘要
-    print("\n" + "="*50)
-    print("分析报告")
-    print("="*50)
-    print(result['analysis'][:5000])
-    if len(result['analysis']) > 5000:
-        print(f"\n... (输出已截断，完整结果请查看: {ai_output})")
+    print(f"\nAI分析结果已保存: {ai_output}")
 
     return 0
 

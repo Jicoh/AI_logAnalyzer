@@ -1,6 +1,7 @@
 """
 知识库管理模块
 管理知识库的创建、删除、查询和文档管理
+支持查询结果缓存
 """
 
 import os
@@ -10,6 +11,7 @@ from datetime import datetime
 
 from .document_loader import DocumentLoader, load_document_chunks
 from .bm25_retriever import BM25Retriever
+from utils.cache import HybridCache
 
 
 class KnowledgeBaseManager:
@@ -21,7 +23,7 @@ class KnowledgeBaseManager:
 
         Args:
             document_dir: 文档存储目录
-            config: 配置字典，包含bm25参数
+            config: 配置字典，包含bm25参数和缓存参数
         """
         if document_dir is None:
             document_dir = self._get_default_document_dir()
@@ -29,6 +31,14 @@ class KnowledgeBaseManager:
         self.config = config or {}
         self.kb_registry_path = os.path.join(self.document_dir, 'kb_registry.json')
         self.kb_registry = self._load_registry()
+
+        # 初始化缓存
+        cache_config = self.config.get('cache', {})
+        self.cache = HybridCache(
+            memory_size=cache_config.get('memory_size', 500),
+            ttl=cache_config.get('ttl', 3600),
+            cache_dir=cache_config.get('cache_dir', None)
+        )
 
     def _get_default_document_dir(self):
         """获取默认文档目录"""
@@ -303,7 +313,7 @@ class KnowledgeBaseManager:
 
     def search(self, kb_id, query, top_n=5):
         """
-        在知识库中搜索
+        在知识库中搜索（带缓存）
 
         Args:
             kb_id: 知识库ID
@@ -313,7 +323,22 @@ class KnowledgeBaseManager:
         Returns:
             list: 搜索结果
         """
+        # 生成缓存键
+        cache_key = f"search_{kb_id}_{query}_{top_n}"
+
+        # 先查缓存
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # 缓存未命中，执行搜索
         retriever = self.get_retriever(kb_id)
         if not retriever:
             return []
-        return retriever.retrieve(query, top_n)
+
+        result = retriever.retrieve(query, top_n)
+
+        # 写入缓存
+        self.cache.set(cache_key, result)
+
+        return result
