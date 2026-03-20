@@ -11,6 +11,9 @@ from datetime import datetime
 
 from .document_loader import DocumentLoader, load_document_chunks
 from .bm25_retriever import BM25Retriever
+from .embedding_client import EmbeddingClient
+from .vector_retriever import VectorRetriever
+from .hybrid_retriever import HybridRetriever
 from src.utils.cache import HybridCache
 
 
@@ -23,7 +26,7 @@ class KnowledgeBaseManager:
 
         Args:
             document_dir: 文档存储目录
-            config: 配置字典，包含bm25参数和缓存参数
+            config: 配置字典，包含bm25参数、embedding参数、检索参数和缓存参数
         """
         if document_dir is None:
             document_dir = self._get_default_document_dir()
@@ -31,6 +34,10 @@ class KnowledgeBaseManager:
         self.config = config or {}
         self.kb_registry_path = os.path.join(self.document_dir, 'kb_registry.json')
         self.kb_registry = self._load_registry()
+
+        # 初始化 Embedding 客户端
+        embedding_config = self.config.get('embedding', {})
+        self.embedding_client = EmbeddingClient(embedding_config)
 
         # 初始化缓存
         cache_config = self.config.get('cache', {})
@@ -260,7 +267,7 @@ class KnowledgeBaseManager:
         return True
 
     def _update_index(self, kb_id):
-        """更新知识库索引"""
+        """更新知识库索引（BM25 + 向量索引）"""
         kb_info = self.get(kb_id)
         if not kb_info:
             return
@@ -279,13 +286,33 @@ class KnowledgeBaseManager:
 
         # 构建索引
         if all_chunks:
+            # 1. 构建 BM25 索引
             bm25_config = self.config.get('bm25', {})
-            retriever = BM25Retriever(
+            bm25_retriever = BM25Retriever(
                 k1=bm25_config.get('k1', 1.5),
                 b=bm25_config.get('b', 0.75)
             )
-            retriever.index_documents(all_chunks)
-            retriever.save_index(os.path.join(kb_dir, 'index'))
+            bm25_retriever.index_documents(all_chunks)
+            bm25_retriever.save_index(os.path.join(kb_dir, 'index'))
+
+            # 2. 构建向量索引（如果启用）
+            if self.embedding_client.is_enabled():
+                embedding_config = self.config.get('embedding', {})
+                vector_retriever = VectorRetriever(
+                    self.embedding_client,
+                    dimension=embedding_config.get('dimension', 1536)
+                )
+                success = vector_retriever.index_documents(all_chunks)
+                if success:
+                    vector_retriever.save_index(os.path.join(kb_dir, 'vector_index'))
+                else:
+                    # 清理可能存在的旧向量索引
+                    vector_index_path = os.path.join(kb_dir, 'vector_index')
+                    vector_chunks_path = os.path.join(kb_dir, 'vector_index.chunks')
+                    if os.path.exists(vector_index_path):
+                        os.remove(vector_index_path)
+                    if os.path.exists(vector_chunks_path):
+                        os.remove(vector_chunks_path)
 
     def get_retriever(self, kb_id):
         """
@@ -295,7 +322,7 @@ class KnowledgeBaseManager:
             kb_id: 知识库ID
 
         Returns:
-            BM25Retriever: 检索器实例
+            HybridRetriever: 混合检索器实例
         """
         kb_dir = os.path.join(self.document_dir, kb_id)
         index_path = os.path.join(kb_dir, 'index')
@@ -303,13 +330,31 @@ class KnowledgeBaseManager:
         if not os.path.exists(index_path):
             return None
 
+        # 加载 BM25 检索器
         bm25_config = self.config.get('bm25', {})
-        retriever = BM25Retriever(
+        bm25_retriever = BM25Retriever(
             k1=bm25_config.get('k1', 1.5),
             b=bm25_config.get('b', 0.75)
         )
-        retriever.load_index(index_path)
-        return retriever
+        bm25_retriever.load_index(index_path)
+
+        # 加载向量检索器（如果启用且存在）
+        vector_retriever = None
+        retrieval_config = self.config.get('retrieval', {})
+        mode = retrieval_config.get('mode', 'bm25')
+
+        if mode in ['vector', 'hybrid'] and self.embedding_client.is_enabled():
+            vector_index_path = os.path.join(kb_dir, 'vector_index')
+            if os.path.exists(vector_index_path):
+                embedding_config = self.config.get('embedding', {})
+                vector_retriever = VectorRetriever(
+                    self.embedding_client,
+                    dimension=embedding_config.get('dimension', 1536)
+                )
+                vector_retriever.load_index(vector_index_path)
+
+        # 返回混合检索器
+        return HybridRetriever(bm25_retriever, vector_retriever, self.config)
 
     def search(self, kb_id, query, top_n=5):
         """

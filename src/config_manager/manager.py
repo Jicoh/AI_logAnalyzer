@@ -25,6 +25,23 @@ class ConfigManager:
         "bm25": {
             "k1": 1.5,
             "b": 0.75
+        },
+        "embedding": {
+            "enabled": False,
+            "provider": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "",
+            "model": "text-embedding-3-small",
+            "dimension": 1536,
+            "batch_size": 100,
+            "timeout": 60
+        },
+        "retrieval": {
+            "mode": "bm25",
+            "bm25_weight": 0.4,
+            "vector_weight": 0.6,
+            "top_n_multiplier": 2,
+            "rrf_k": 60
         }
     }
 

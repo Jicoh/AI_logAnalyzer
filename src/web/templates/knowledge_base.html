@@ -94,7 +94,7 @@
                                     <strong>名称：</strong> <span x-text="selectedKb.name"></span>
                                 </div>
                                 <div class="col-md-6">
-                                    <strong>ID：</strong> <code x-text="selectedKb.id"></code>
+                                    <strong>ID：</strong> <code x-text="selectedKb.kb_id || selectedKb.id"></code>
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -119,16 +119,14 @@
 
                             <!-- Document List -->
                             <div class="list-group">
-                                <template x-if="!selectedKb.documents || selectedKb.documents.length === 0">
-                                    <div class="list-group-item text-muted">暂无文档</div>
-                                </template>
-                                <template x-for="doc in selectedKb.documents" :key="doc.id">
+                                <div x-show="!selectedKb.documents || selectedKb.documents.length === 0" class="list-group-item text-muted">暂无文档</div>
+                                <template x-for="doc in selectedKb.documents" :key="doc.doc_id">
                                     <div class="list-group-item d-flex justify-content-between align-items-center">
                                         <span>
                                             <i class="bi bi-file-earmark-text"></i>
-                                            <span x-text="doc.filename || doc.id"></span>
+                                            <span x-text="doc.file_name || doc.doc_id"></span>
                                         </span>
-                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.id)">
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.doc_id)">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -240,7 +238,8 @@ function knowledgeBaseApp() {
 
         async showKbDetail(kb) {
             try {
-                const response = await fetch(`/api/kb/${kb.id}`);
+                const kbId = kb.id || kb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}`);
                 const data = await response.json();
                 if (data.success) {
                     this.selectedKb = data.data;
@@ -260,7 +259,8 @@ function knowledgeBaseApp() {
             if (!this.deleteTarget) return;
             this.deleting = true;
             try {
-                const response = await fetch(`/api/kb/${this.deleteTarget.id}`, { method: 'DELETE' });
+                const kbId = this.deleteTarget.id || this.deleteTarget.kb_id;
+                const response = await fetch(`/api/kb/${kbId}`, { method: 'DELETE' });
                 const data = await response.json();
                 if (data.success) {
                     this.showToast('success', '成功', '知识库已删除');
@@ -282,7 +282,8 @@ function knowledgeBaseApp() {
             try {
                 const formData = new FormData();
                 formData.append('file', this.docFile);
-                const response = await fetch(`/api/kb/${this.selectedKb.id}/documents`, {
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/documents`, {
                     method: 'POST',
                     body: formData
                 });
@@ -305,7 +306,8 @@ function knowledgeBaseApp() {
         async deleteDocument(docId) {
             if (!confirm('确定要删除此文档吗？')) return;
             try {
-                const response = await fetch(`/api/kb/${this.selectedKb.id}/documents/${docId}`, { method: 'DELETE' });
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/documents/${docId}`, { method: 'DELETE' });
                 const data = await response.json();
                 if (data.success) {
                     this.showToast('success', '成功', '文档已删除');

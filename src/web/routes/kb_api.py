@@ -39,6 +39,10 @@ def list_kb():
     try:
         manager = get_kb_manager()
         kb_list = manager.list()
+        # Add 'id' field as alias for 'kb_id' for frontend compatibility
+        for kb in kb_list:
+            if 'kb_id' in kb and 'id' not in kb:
+                kb['id'] = kb['kb_id']
         return jsonify({'success': True, 'data': kb_list})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -59,6 +63,10 @@ def create_kb():
         kb_id = manager.create(name, description)
         kb_info = manager.get(kb_id)
 
+        # Add 'id' field as alias for 'kb_id' for frontend compatibility
+        if kb_info and 'kb_id' in kb_info and 'id' not in kb_info:
+            kb_info['id'] = kb_info['kb_id']
+
         return jsonify({'success': True, 'data': kb_info}), 201
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -73,6 +81,10 @@ def get_kb(kb_id):
 
         if kb_info is None:
             return jsonify({'success': False, 'error': 'Knowledge base not found'}), 404
+
+        # Add 'id' field as alias for 'kb_id' for frontend compatibility
+        if 'kb_id' in kb_info and 'id' not in kb_info:
+            kb_info['id'] = kb_info['kb_id']
 
         return jsonify({'success': True, 'data': kb_info})
     except Exception as e:
