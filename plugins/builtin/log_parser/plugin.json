@@ -1,0 +1,10 @@
+{
+    "id": "log_parser",
+    "name": "Log Parser",
+    "version": "1.0.0",
+    "description": "Parse log files and extract errors, warnings, and statistics",
+    "category": "parser",
+    "author": "AI Log Analyzer Team",
+    "tags": ["log", "parser", "error", "warning", "bmc"],
+    "enabled": true
+}

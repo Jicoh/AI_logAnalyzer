@@ -6,7 +6,7 @@
 <div x-data="analyzerApp()">
     <div class="row">
         <!-- Left Panel: Configuration -->
-        <div class="col-lg-4">
+        <div class="col-lg-3">
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="bi bi-upload"></i> 上传日志文件
@@ -14,10 +14,18 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label class="form-label">日志文件</label>
-                        <input type="file" class="form-control" id="logFile" accept=".log,.txt"
-                               @change="logFile = $event.target.files[0]">
-                        <small class="text-muted">支持格式：log, txt</small>
+                        <input type="file" class="form-control" id="logFile"
+                               accept=".log,.txt,.tar.gz,.tgz,.tar,.zip"
+                               @change="handleFileChange($event)">
+                        <small class="text-muted" x-show="logFile && logFileName" x-text="'已选择: ' + logFileName"></small>
+                        <small class="text-warning" x-show="!logFile && logFileName">
+                            <i class="bi bi-exclamation-circle"></i> 上次文件: <span x-text="logFileName"></span>（需重新选择）
+                        </small>
+                        <small class="text-muted" x-show="!logFile && !logFileName">支持格式：log, txt, tar.gz, tgz, tar, zip</small>
                     </div>
+                    <button class="btn btn-outline-secondary btn-sm" x-show="completed || wasInterrupted" @click="clearState()">
+                        <i class="bi bi-x-circle"></i> 清除结果
+                    </button>
                 </div>
             </div>
 
@@ -25,17 +33,45 @@
                 <div class="card-header">
                     <i class="bi bi-plug"></i> 选择分析插件
                 </div>
-                <div class="card-body">
-                    <template x-for="plugin in plugins" :key="plugin.id">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox"
-                                   :id="'plugin-' + plugin.id"
-                                   :value="plugin.id"
-                                   x-model="selectedPlugins">
-                            <label class="form-check-label" :for="'plugin-' + plugin.id">
-                                <span x-text="plugin.name"></span>
-                                <br><small class="text-muted" x-text="plugin.description"></small>
-                            </label>
+                <div class="card-body p-2">
+                    <template x-for="(categoryData, category) in pluginCategories" :key="category">
+                        <div class="border rounded mb-2">
+                            <div class="d-flex justify-content-between align-items-center p-2 bg-light"
+                                 style="cursor: pointer;"
+                                 @click="toggleCategory(category)">
+                                <div>
+                                    <i class="bi" :class="expandedCategories[category] ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                    <span class="fw-bold ms-1" x-text="getCategoryLabel(category)"></span>
+                                    <span class="badge bg-secondary ms-1" x-text="categoryData.plugins.length"></span>
+                                </div>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary me-1"
+                                            @click.stop="selectAllInCategory(category)"
+                                            x-show="categoryData.plugins.length > 1">
+                                        全选
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @click.stop="deselectAllInCategory(category)"
+                                            x-show="categoryData.plugins.length > 1">
+                                        取消
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="p-2" x-show="expandedCategories[category]" x-cloak>
+                                <template x-for="plugin in categoryData.plugins" :key="plugin.id">
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox"
+                                               :id="'plugin-' + plugin.id"
+                                               :value="plugin.id"
+                                               x-model="selectedPlugins">
+                                        <label class="form-check-label d-inline-block" :for="'plugin-' + plugin.id"
+                                               style="max-width: calc(100% - 20px);">
+                                            <span x-text="plugin.name" class="fw-medium"></span>
+                                            <small class="text-muted d-block" style="font-size: 0.75rem;" x-text="plugin.description"></small>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -79,19 +115,25 @@
         </div>
 
         <!-- Right Panel: Results -->
-        <div class="col-lg-8">
+        <div class="col-lg-9">
             <!-- Status -->
-            <div class="card mb-4" x-show="analyzing || completed" x-cloak>
+            <div class="card mb-4" x-show="analyzing || completed || wasInterrupted" x-cloak>
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-activity"></i> 分析状态</span>
                     <span class="badge" :class="statusBadgeClass" x-text="statusText"></span>
                 </div>
                 <div class="card-body">
-                    <div class="progress mb-2">
+                    <div class="progress mb-2" x-show="analyzing || completed">
                         <div class="progress-bar" :class="progressBarClass"
                              :style="'width: ' + progress + '%'"></div>
                     </div>
                     <small class="text-muted" x-text="statusMessage"></small>
+                    <div x-show="analyzing" class="alert alert-info py-1 px-2 mt-2 mb-0">
+                        <small><i class="bi bi-info-circle"></i> 分析进行中，请勿切换页面</small>
+                    </div>
+                    <div x-show="wasInterrupted" class="alert alert-warning py-1 px-2 mt-2 mb-0">
+                        <small><i class="bi bi-exclamation-triangle"></i> 分析已中断，请重新上传文件进行分析</small>
+                    </div>
                 </div>
             </div>
 
@@ -179,13 +221,13 @@
             </div>
 
             <!-- AI Results -->
-            <div class="card" x-show="enableAi && (analyzing || aiResult)" x-cloak>
+            <div class="card" x-show="aiResult" x-cloak>
                 <div class="card-header">
                     <i class="bi bi-robot"></i> AI 分析结果
                 </div>
                 <div class="card-body">
                     <div class="ai-result" x-html="formatAiResult(aiResult)"></div>
-                    <div x-show="analyzing && !aiResult" class="text-center py-4">
+                    <div x-show="analyzing && enableAi && !aiResult" class="text-center py-4">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
@@ -208,10 +250,14 @@
 
 {% block extra_scripts %}
 <script>
+const STORAGE_KEY = 'analyzer_state';
+
 function analyzerApp() {
     return {
         logFile: null,
-        plugins: [],
+        logFileName: '',
+        pluginCategories: {},
+        expandedCategories: {},
         selectedPlugins: ['log_parser'],
         kbList: [],
         selectedKbId: '',
@@ -219,6 +265,7 @@ function analyzerApp() {
         userPrompt: '',
         analyzing: false,
         completed: false,
+        wasInterrupted: false,
         progress: 0,
         statusText: '准备中',
         statusMessage: '',
@@ -229,9 +276,108 @@ function analyzerApp() {
         init() {
             this.loadPlugins();
             this.loadKbList();
+            this.restoreState();
+        },
+
+        saveState() {
+            const state = {
+                logFileName: this.logFileName,
+                selectedPlugins: this.selectedPlugins,
+                selectedKbId: this.selectedKbId,
+                enableAi: this.enableAi,
+                userPrompt: this.userPrompt,
+                completed: this.completed,
+                progress: this.progress,
+                statusText: this.statusText,
+                statusMessage: this.statusMessage,
+                pluginResult: this.pluginResult,
+                aiResult: this.aiResult,
+                analyzing: this.analyzing,
+                timestamp: Date.now()
+            };
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                console.log('State saved:', state);
+            } catch (e) {
+                console.error('Failed to save state:', e);
+            }
+        },
+
+        restoreState() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const state = JSON.parse(saved);
+                    this.logFileName = state.logFileName || '';
+                    this.selectedPlugins = state.selectedPlugins || ['log_parser'];
+                    this.selectedKbId = state.selectedKbId || '';
+                    this.enableAi = state.enableAi !== undefined ? state.enableAi : true;
+                    this.userPrompt = state.userPrompt || '';
+                    this.completed = state.completed || false;
+                    this.progress = state.progress || 0;
+                    this.statusText = state.statusText || '准备中';
+                    this.statusMessage = state.statusMessage || '';
+                    this.pluginResult = state.pluginResult || null;
+                    this.aiResult = state.aiResult || '';
+
+                    // Check if analysis was interrupted
+                    if (state.analyzing && !state.completed) {
+                        this.wasInterrupted = true;
+                        this.statusText = '已中断';
+                        this.statusMessage = '分析过程中断，请重新上传文件分析';
+                    }
+                    console.log('State restored:', state);
+                } catch (e) {
+                    console.error('Failed to restore state:', e);
+                }
+            }
+        },
+
+        clearState() {
+            localStorage.removeItem(STORAGE_KEY);
+            this.logFile = null;
+            this.logFileName = '';
+            this.completed = false;
+            this.wasInterrupted = false;
+            this.progress = 0;
+            this.statusText = '准备中';
+            this.statusMessage = '';
+            this.pluginResult = null;
+            this.aiResult = '';
+        },
+
+        getCategoryLabel(category) {
+            const labels = {
+                'parser': '解析器',
+                'analyzer': '分析器',
+                'detector': '检测器',
+                'reporter': '报告器',
+                'other': '其他'
+            };
+            return labels[category] || category;
+        },
+
+        toggleCategory(category) {
+            this.expandedCategories[category] = !this.expandedCategories[category];
+        },
+
+        selectAllInCategory(category) {
+            const plugins = this.pluginCategories[category]?.plugins || [];
+            plugins.forEach(p => {
+                if (!this.selectedPlugins.includes(p.id)) {
+                    this.selectedPlugins.push(p.id);
+                }
+            });
+        },
+
+        deselectAllInCategory(category) {
+            const plugins = this.pluginCategories[category]?.plugins || [];
+            const ids = plugins.map(p => p.id);
+            this.selectedPlugins = this.selectedPlugins.filter(id => !ids.includes(id));
         },
 
         get statusBadgeClass() {
+            if (this.wasInterrupted) return 'bg-warning';
             if (this.analyzing) return 'bg-primary';
             if (this.completed) return 'bg-success';
             return 'bg-secondary';
@@ -244,10 +390,23 @@ function analyzerApp() {
 
         async loadPlugins() {
             try {
-                const response = await fetch('/api/analyze/plugins');
+                const response = await fetch('/api/analyze/plugins/categories');
                 const data = await response.json();
                 if (data.success) {
-                    this.plugins = data.data;
+                    this.pluginCategories = data.data;
+                    // Auto-expand all categories
+                    for (const cat of Object.keys(data.data)) {
+                        this.expandedCategories[cat] = true;
+                    }
+                    // Only auto-select if no saved state
+                    if (this.selectedPlugins.length === 0) {
+                        for (const cat of Object.values(data.data)) {
+                            if (cat.plugins.length > 0) {
+                                this.selectedPlugins.push(cat.plugins[0].id);
+                                break;
+                            }
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Failed to load plugins:', error);
@@ -266,11 +425,21 @@ function analyzerApp() {
             }
         },
 
+        handleFileChange(event) {
+            if (event.target.files && event.target.files[0]) {
+                this.logFile = event.target.files[0];
+                this.logFileName = event.target.files[0].name;
+                this.wasInterrupted = false;
+                this.saveState();
+            }
+        },
+
         startAnalysis() {
             if (!this.logFile) return;
 
             this.analyzing = true;
             this.completed = false;
+            this.wasInterrupted = false;
             this.progress = 0;
             this.statusText = '分析中';
             this.statusMessage = '正在处理...';
@@ -308,6 +477,7 @@ function analyzerApp() {
                         if (done) {
                             this.analyzing = false;
                             this.completed = true;
+                            this.saveState();
                             return;
                         }
 
@@ -324,6 +494,7 @@ function analyzerApp() {
                 this.statusText = '错误';
                 this.statusMessage = error.message;
                 this.analyzing = false;
+                this.saveState();
             });
         },
 
@@ -337,6 +508,7 @@ function analyzerApp() {
                         this.progress = 40;
                         this.pluginResult = data.result;
                         this.statusMessage = '插件分析完成';
+                        this.saveState();
                     }
                     break;
 
@@ -346,9 +518,14 @@ function analyzerApp() {
                         this.statusMessage = data.message;
                     } else if (data.status === 'complete') {
                         this.progress = 100;
-                        this.aiResult = data.result;
+                        // Use accumulated result if data.result is empty
+                        if (data.result) {
+                            this.aiResult = data.result;
+                        }
+                        this.saveState();
                     } else if (data.status === 'error') {
                         this.statusMessage = data.message;
+                        this.saveState();
                     } else if (data.chunk) {
                         this.aiResult += data.chunk;
                         this.progress = Math.min(90, this.progress + 0.5);
@@ -361,12 +538,14 @@ function analyzerApp() {
                     this.progress = 100;
                     this.statusText = '完成';
                     this.statusMessage = data.message;
+                    this.saveState();
                     break;
 
                 case 'error':
                     this.statusText = '错误';
                     this.statusMessage = data.message;
                     this.analyzing = false;
+                    this.saveState();
                     break;
             }
         },

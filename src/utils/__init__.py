@@ -9,6 +9,11 @@ from .file_utils import (
     file_exists,
     dir_exists,
     get_filename,
-    join_path
+    join_path,
+    get_archive_type,
+    is_archive_file,
+    is_log_file,
+    extract_archive,
+    create_work_directory
 )
 from .cache import LRUCache, DiskCache, HybridCache

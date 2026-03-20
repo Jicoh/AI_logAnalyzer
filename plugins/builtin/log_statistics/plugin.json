@@ -1,0 +1,10 @@
+{
+    "id": "log_statistics",
+    "name": "Log Statistics",
+    "version": "1.0.0",
+    "description": "Analyze log file statistics: time distribution, component activity, and patterns",
+    "category": "analyzer",
+    "author": "AI Log Analyzer Team",
+    "tags": ["statistics", "analysis", "metrics", "patterns"],
+    "enabled": true
+}

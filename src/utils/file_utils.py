@@ -1,10 +1,14 @@
 """
 文件工具模块
-提供文件读写、JSON处理等通用功能
+提供文件读写、JSON处理、压缩文件处理等通用功能
 """
 
 import json
 import os
+import tarfile
+import zipfile
+import shutil
+from datetime import datetime
 
 
 def read_file(file_path, encoding='utf-8'):
@@ -78,3 +82,103 @@ def get_filename(file_path):
 def join_path(*args):
     """拼接路径"""
     return os.path.join(*args)
+
+
+def get_archive_type(file_path):
+    """
+    获取压缩文件类型
+
+    Returns:
+        str: 'tar.gz', 'tar', 'zip' 或 None
+    """
+    lower_path = file_path.lower()
+    if lower_path.endswith('.tar.gz') or lower_path.endswith('.tgz'):
+        return 'tar.gz'
+    elif lower_path.endswith('.tar'):
+        return 'tar'
+    elif lower_path.endswith('.zip'):
+        return 'zip'
+    return None
+
+
+def is_archive_file(file_path):
+    """检查是否为压缩文件"""
+    return get_archive_type(file_path) is not None
+
+
+def is_log_file(file_path):
+    """检查是否为日志文件（txt或log）"""
+    lower_path = file_path.lower()
+    return lower_path.endswith('.txt') or lower_path.endswith('.log')
+
+
+def extract_archive(archive_path, extract_to):
+    """
+    解压压缩文件
+
+    Args:
+        archive_path: 压缩文件路径
+        extract_to: 解压目标目录
+
+    Returns:
+        list: 解压后的文件列表
+    """
+    archive_type = get_archive_type(archive_path)
+    ensure_dir(extract_to)
+
+    extracted_files = []
+
+    if archive_type == 'tar.gz' or archive_type == 'tar':
+        with tarfile.open(archive_path, 'r:*') as tar:
+            # 安全处理：避免路径穿越
+            for member in tar.getmembers():
+                if member.name.startswith('/') or '..' in member.name:
+                    continue
+                tar.extract(member, extract_to)
+                extracted_path = os.path.join(extract_to, member.name)
+                if os.path.isfile(extracted_path):
+                    extracted_files.append(extracted_path)
+
+    elif archive_type == 'zip':
+        with zipfile.ZipFile(archive_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('/'):
+                    continue
+                # 安全处理：避免路径穿越
+                if name.startswith('/') or '..' in name:
+                    continue
+                zf.extract(name, extract_to)
+                extracted_path = os.path.join(extract_to, name)
+                if os.path.isfile(extracted_path):
+                    extracted_files.append(extracted_path)
+
+    return extracted_files
+
+
+def create_work_directory(base_dir, filename):
+    """
+    创建工作目录，格式为 时间戳_文件名
+
+    Args:
+        base_dir: 基础目录（data/temp）
+        filename: 原始文件名
+
+    Returns:
+        str: 创建的工作目录路径
+    """
+    # 移除扩展名，获取干净的文件名
+    clean_name = filename
+    for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
+        if clean_name.lower().endswith(ext):
+            clean_name = clean_name[:-len(ext)]
+            break
+
+    # 生成时间戳
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # 创建目录名
+    dir_name = f"{timestamp}_{clean_name}"
+    work_dir = os.path.join(base_dir, dir_name)
+
+    ensure_dir(work_dir)
+    return work_dir

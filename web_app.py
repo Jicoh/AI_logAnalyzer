@@ -39,6 +39,12 @@ def create_app():
     uploads_dir = os.path.join(root_dir, 'data', 'uploads')
     os.makedirs(uploads_dir, exist_ok=True)
 
+    # Preload plugins
+    print("Preloading plugins...")
+    from plugins.manager import get_plugin_manager
+    plugin_manager = get_plugin_manager()
+    print(f"Available plugins: {[p.id for p in plugin_manager.get_all_plugins()]}")
+
     # Register routes
     register_routes(app)
 

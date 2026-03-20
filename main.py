@@ -10,12 +10,14 @@ import sys
 # 添加src到路径
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 sys.path.insert(0, src_path)
+# 添加项目根目录到路径（用于plugins模块）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config_manager import ConfigManager
-from plugin_analyzer import LogAnalyzer
 from knowledge_base import KnowledgeBaseManager
 from ai_analyzer import AIAnalyzer
 from utils import read_file, write_json, ensure_dir
+from plugins.manager import get_plugin_manager
 
 
 def cmd_analyze(args):
@@ -31,17 +33,42 @@ def cmd_analyze(args):
     # 读取日志内容
     log_content = read_file(args.log)
 
+    # 初始化插件管理器
+    plugin_manager = get_plugin_manager()
+
+    # 确定要使用的插件
+    if args.plugins:
+        # 用户指定的插件
+        plugin_ids = [p.strip() for p in args.plugins.split(',')]
+    else:
+        # 使用所有可用插件
+        plugin_ids = [p.id for p in plugin_manager.get_all_plugins()]
+
+    if not plugin_ids:
+        print("错误: 没有可用的插件")
+        return 1
+
+    # 显示可用的插件
+    print(f"使用插件: {', '.join(plugin_ids)}")
+
     # 插件分析
     print(f"正在分析日志: {args.log}")
-    analyzer = LogAnalyzer()
-    plugin_result = analyzer.analyze(args.log)
+    try:
+        plugin_result = plugin_manager.run_analysis(plugin_ids, args.log)
+        result_dict = plugin_result.to_dict()
+    except Exception as e:
+        print(f"插件分析失败: {e}")
+        return 1
 
-    print(f"发现 {plugin_result['error_count']} 个错误, {plugin_result['warning_count']} 个警告")
+    print(f"发现 {result_dict['error_count']} 个错误, {result_dict['warning_count']} 个警告")
 
     # 保存插件分析结果
-    plugin_output = os.path.join('data', 'plugin_output', os.path.basename(args.log).replace('.txt', '_plugin.json'))
-    ensure_dir(os.path.dirname(plugin_output))
-    analyzer.save_results(plugin_output)
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    plugin_output_dir = os.path.join('data', 'plugin_output', timestamp)
+    ensure_dir(plugin_output_dir)
+    plugin_output = os.path.join(plugin_output_dir, 'plugin_result.json')
+    write_json(plugin_output, result_dict)
     print(f"插件分析结果已保存: {plugin_output}")
 
     # AI分析
@@ -83,7 +110,7 @@ def cmd_analyze(args):
     print("="*50)
 
     gen = ai_analyzer.analyze(
-        plugin_result=plugin_result,
+        plugin_result=result_dict,
         log_content=log_content,
         kb_id=kb_id,
         user_prompt=user_prompt
@@ -223,6 +250,28 @@ def cmd_config(args):
     return 1
 
 
+def cmd_plugin(args):
+    """插件管理命令"""
+    plugin_manager = get_plugin_manager()
+
+    if args.plugin_action == 'list':
+        plugins = plugin_manager.get_all_plugins()
+        if not plugins:
+            print("暂无可用插件")
+            return 0
+        print("可用插件列表:")
+        for plugin in plugins:
+            info = plugin.get_info()
+            print(f"  [{info.id}] {info.name} (v{info.version})")
+            print(f"      分类: {info.category.name}")
+            print(f"      描述: {info.description}")
+            if info.tags:
+                print(f"      标签: {', '.join(info.tags)}")
+        return 0
+
+    return 1
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='AI日志分析器')
@@ -231,9 +280,17 @@ def main():
     # analyze 命令
     analyze_parser = subparsers.add_parser('analyze', help='分析日志文件')
     analyze_parser.add_argument('--log', '-l', required=True, help='日志文件路径')
+    analyze_parser.add_argument('--plugins', help='指定使用的插件ID，多个插件用逗号分隔')
     analyze_parser.add_argument('--kb', '-k', help='知识库ID')
     analyze_parser.add_argument('--prompt', '-p', help='自定义提示词或提示词文件路径')
     analyze_parser.add_argument('--no-ai', action='store_true', help='仅运行插件分析，跳过AI分析')
+
+    # plugin 命令
+    plugin_parser = subparsers.add_parser('plugin', help='插件管理')
+    plugin_subparsers = plugin_parser.add_subparsers(dest='plugin_action', help='插件操作')
+
+    # plugin list
+    plugin_list = plugin_subparsers.add_parser('list', help='列出可用插件')
 
     # kb 命令
     kb_parser = subparsers.add_parser('kb', help='知识库管理')
@@ -291,6 +348,8 @@ def main():
 
     if args.command == 'analyze':
         return cmd_analyze(args)
+    elif args.command == 'plugin':
+        return cmd_plugin(args)
     elif args.command == 'kb':
         return cmd_kb(args)
     elif args.command == 'config':
