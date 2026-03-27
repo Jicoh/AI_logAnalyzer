@@ -42,6 +42,13 @@ class ConfigManager:
             "vector_weight": 0.6,
             "top_n_multiplier": 2,
             "rrf_k": 60
+        },
+        "faiss": {
+            "enabled": True,
+            "index_type": "auto",
+            "nlist": 100,
+            "nprobe": 10,
+            "use_gpu": False
         }
     }
 

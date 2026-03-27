@@ -13,5 +13,22 @@
     "bm25": {
         "k1": 1.5,
         "b": 0.75
+    },
+    "embedding": {
+        "enabled": true,
+        "provider": "ollama",
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "model": "qwen3-embedding:latest",
+        "dimension": 4096,
+        "batch_size": 100,
+        "timeout": 60
+    },
+    "retrieval": {
+        "mode": "hybrid",
+        "bm25_weight": 0.4,
+        "vector_weight": 0.6,
+        "top_n_multiplier": 2,
+        "rrf_k": 60
     }
 }

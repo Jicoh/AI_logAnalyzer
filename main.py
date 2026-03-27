@@ -217,6 +217,18 @@ def cmd_kb(args):
             print(f"内容: {r['chunk']['content'][:200]}...")
         return 0
 
+    elif args.kb_action == 'reindex':
+        result = kb_manager.reindex(args.kb_id)
+        if result['status'] == 'success':
+            print(f"索引重建成功")
+            print(f"  文档数量: {result['indexed_count']}")
+            vector_status = '已构建' if result['vector_index'] else '未构建 (embedding未启用)'
+            print(f"  向量索引: {vector_status}")
+            return 0
+        else:
+            print(f"索引重建失败: {result['message']}")
+            return 1
+
     return 1
 
 
@@ -327,6 +339,10 @@ def main():
     kb_search.add_argument('--kb-id', required=True, help='知识库ID')
     kb_search.add_argument('--query', '-q', required=True, help='搜索查询')
     kb_search.add_argument('--top', '-t', type=int, default=5, help='返回结果数量')
+
+    # kb reindex
+    kb_reindex = kb_subparsers.add_parser('reindex', help='重建知识库索引')
+    kb_reindex.add_argument('--kb-id', required=True, help='知识库ID')
 
     # config 命令
     config_parser = subparsers.add_parser('config', help='配置管理')

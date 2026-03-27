@@ -102,7 +102,15 @@
                             </div>
 
                             <hr>
-                            <h6><i class="bi bi-file-earmark"></i> 文档列表</h6>
+                            <!-- Rebuild Index Button -->
+                            <div class="mb-3 d-flex justify-content-between align-items-center">
+                                <h6><i class="bi bi-file-earmark"></i> 文档列表</h6>
+                                <button class="btn btn-outline-secondary btn-sm" @click="reindexKb()" :disabled="reindexing">
+                                    <span x-show="reindexing" class="spinner-border spinner-border-sm"></span>
+                                    <i x-show="!reindexing" class="bi bi-arrow-repeat"></i>
+                                    <span x-text="reindexing ? '重建中...' : '重建索引'"></span>
+                                </button>
+                            </div>
 
                             <!-- Upload Document -->
                             <form @submit.prevent="uploadDocument()" class="mb-3">
@@ -189,6 +197,7 @@ function knowledgeBaseApp() {
         creating: false,
         deleting: false,
         uploading: false,
+        reindexing: false,
         newKb: { name: '', description: '' },
         selectedKb: null,
         deleteTarget: null,
@@ -318,6 +327,25 @@ function knowledgeBaseApp() {
             } catch (error) {
                 this.showToast('error', '错误', '删除文档失败');
             }
+        },
+
+        async reindexKb() {
+            if (!this.selectedKb) return;
+            this.reindexing = true;
+            try {
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/reindex`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    const vectorMsg = data.vector_index ? '向量索引已构建' : '向量索引未构建 (embedding未启用)';
+                    this.showToast('success', '成功', `${data.message} - ${vectorMsg}`);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '重建索引失败');
+            }
+            this.reindexing = false;
         },
 
         formatDate(dateStr) {

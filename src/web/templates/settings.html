@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+
+{% block title %}设置 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="settingsApp()" x-init="init()">
+    <div class="row">
+        <div class="col-12">
+            <h4 class="mb-4"><i class="bi bi-gear"></i> 系统设置</h4>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6">
+            <!-- API Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-cloud"></i> API 设置
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Base URL</label>
+                        <input type="text" class="form-control" x-model="config.api.base_url"
+                               placeholder="https://api.example.com/v1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <div class="input-group">
+                            <input :type="showApiKey ? 'text' : 'password'" class="form-control"
+                                   x-model="config.api.api_key" placeholder="sk-...">
+                            <button class="btn btn-outline-secondary" type="button" @click="showApiKey = !showApiKey">
+                                <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Model</label>
+                        <input type="text" class="form-control" x-model="config.api.model"
+                               placeholder="gpt-4, glm-4, etc.">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Temperature</label>
+                            <input type="number" class="form-control" x-model="config.api.temperature"
+                                   min="0" max="2" step="0.1">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Max Tokens</label>
+                            <input type="number" class="form-control" x-model="config.api.max_tokens"
+                                   min="1" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BM25 Parameters -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-bar-chart"></i> BM25 参数
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">k1 (词频饱和参数)</label>
+                            <input type="number" class="form-control" x-model="config.bm25.k1"
+                                   min="0" max="3" step="0.1">
+                            <small class="text-muted">通常在 1.2-2.0 之间</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">b (文档长度归一化)</label>
+                            <input type="number" class="form-control" x-model="config.bm25.b"
+                                   min="0" max="1" step="0.05">
+                            <small class="text-muted">通常在 0.75 左右</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Retrieval Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-search"></i> 检索设置
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">检索模式</label>
+                        <select class="form-select" x-model="config.retrieval.mode">
+                            <option value="bm25">BM25</option>
+                            <option value="vector">Vector</option>
+                            <option value="hybrid">Hybrid (混合)</option>
+                        </select>
+                    </div>
+                    <div x-show="config.retrieval.mode === 'hybrid'">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">BM25 权重</label>
+                                <input type="number" class="form-control" x-model="config.retrieval.bm25_weight"
+                                       min="0" max="1" step="0.1">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Vector 权重</label>
+                                <input type="number" class="form-control" x-model="config.retrieval.vector_weight"
+                                       min="0" max="1" step="0.1">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">RRF K 参数</label>
+                            <input type="number" class="form-control" x-model="config.retrieval.rrf_k"
+                                   min="1" max="100" step="1">
+                            <small class="text-muted">Reciprocal Rank Fusion 参数，通常为 60</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <!-- Embedding Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-diagram-3"></i> Embedding 设置
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="embeddingEnabled"
+                               x-model="config.embedding.enabled">
+                        <label class="form-check-label" for="embeddingEnabled">启用向量嵌入</label>
+                    </div>
+
+                    <div x-show="config.embedding.enabled" x-cloak>
+                        <div class="mb-3">
+                            <label class="form-label">Provider</label>
+                            <select class="form-select" x-model="config.embedding.provider">
+                                <option value="ollama">Ollama</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Base URL</label>
+                            <input type="text" class="form-control" x-model="config.embedding.base_url"
+                                   placeholder="http://localhost:11434/v1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">API Key</label>
+                            <input type="password" class="form-control" x-model="config.embedding.api_key"
+                                   placeholder="可选">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Model</label>
+                            <input type="text" class="form-control" x-model="config.embedding.model"
+                                   placeholder="nomic-embed-text, text-embedding-ada-002, etc.">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Dimension</label>
+                                <input type="number" class="form-control" x-model="config.embedding.dimension"
+                                       min="1" step="1">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Batch Size</label>
+                                <input type="number" class="form-control" x-model="config.embedding.batch_size"
+                                       min="1" step="1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Default Prompt -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-chat-left-text"></i> 默认提示词</span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" @click="savePrompt()">
+                            <i class="bi bi-save"></i> 保存
+                        </button>
+                        <button class="btn btn-outline-secondary" @click="resetPrompt()">
+                            <i class="bi bi-arrow-counterclockwise"></i> 恢复默认
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Warning when prompt is empty -->
+                    <div class="alert alert-warning py-2 mb-3" x-show="!defaultPrompt || defaultPrompt.trim() === ''" x-cloak>
+                        <i class="bi bi-exclamation-triangle"></i> 提示词为空，AI 分析将无法正常工作。请点击"恢复默认"按钮。
+                    </div>
+                    <div class="mb-3">
+                        <textarea class="form-control font-monospace" x-model="defaultPrompt"
+                                  rows="15" style="font-size: 0.85rem;"
+                                  placeholder="输入默认提示词模板..."></textarea>
+                    </div>
+                    <small class="text-muted">
+                        可用变量: <code>{plugin_analysis}</code>,
+                        <code>{knowledge_content}</code>,
+                        <code>{log_content}</code>,
+                        <code>{user_prompt}</code>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn btn-secondary" @click="loadConfig()">
+                    <i class="bi bi-arrow-counterclockwise"></i> 重置
+                </button>
+                <button class="btn btn-primary" @click="saveConfig()" :disabled="saving">
+                    <span x-show="saving" class="spinner-border spinner-border-sm"></span>
+                    <span x-text="saving ? '保存中...' : '保存配置'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast" :class="toast.show ? 'show' : ''" role="alert" x-show="toast.show" x-cloak>
+            <div class="toast-header" :class="toast.type === 'error' ? 'bg-danger text-white' : 'bg-success text-white'">
+                <strong class="me-auto" x-text="toast.title"></strong>
+                <button type="button" class="btn-close btn-close-white" @click="toast.show = false"></button>
+            </div>
+            <div class="toast-body" x-text="toast.message"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function settingsApp() {
+    return {
+        config: {
+            api: {
+                base_url: '',
+                api_key: '',
+                model: '',
+                temperature: 0.7,
+                max_tokens: 4096
+            },
+            bm25: {
+                k1: 1.5,
+                b: 0.75
+            },
+            embedding: {
+                enabled: true,
+                provider: 'ollama',
+                base_url: '',
+                api_key: '',
+                model: '',
+                dimension: 4096,
+                batch_size: 100
+            },
+            retrieval: {
+                mode: 'hybrid',
+                bm25_weight: 0.4,
+                vector_weight: 0.6,
+                rrf_k: 60
+            }
+        },
+        defaultPrompt: '',
+        showApiKey: false,
+        saving: false,
+        toast: {
+            show: false,
+            type: 'success',
+            title: '',
+            message: ''
+        },
+
+        init() {
+            this.loadConfig();
+            this.loadPrompt();
+        },
+
+        async loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    // Merge loaded config with defaults
+                    if (data.data.api) {
+                        this.config.api = { ...this.config.api, ...data.data.api };
+                    }
+                    if (data.data.bm25) {
+                        this.config.bm25 = { ...this.config.bm25, ...data.data.bm25 };
+                    }
+                    if (data.data.embedding) {
+                        this.config.embedding = { ...this.config.embedding, ...data.data.embedding };
+                    }
+                    if (data.data.retrieval) {
+                        this.config.retrieval = { ...this.config.retrieval, ...data.data.retrieval };
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+                this.showToast('error', '加载失败', '无法加载配置');
+            }
+        },
+
+        async saveConfig() {
+            this.saving = true;
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        api: {
+                            base_url: this.config.api.base_url,
+                            api_key: this.config.api.api_key,
+                            model: this.config.api.model,
+                            temperature: parseFloat(this.config.api.temperature),
+                            max_tokens: parseInt(this.config.api.max_tokens)
+                        },
+                        bm25: {
+                            k1: parseFloat(this.config.bm25.k1),
+                            b: parseFloat(this.config.bm25.b)
+                        },
+                        embedding: {
+                            enabled: this.config.embedding.enabled,
+                            provider: this.config.embedding.provider,
+                            base_url: this.config.embedding.base_url,
+                            api_key: this.config.embedding.api_key,
+                            model: this.config.embedding.model,
+                            dimension: parseInt(this.config.embedding.dimension),
+                            batch_size: parseInt(this.config.embedding.batch_size)
+                        },
+                        retrieval: {
+                            mode: this.config.retrieval.mode,
+                            bm25_weight: parseFloat(this.config.retrieval.bm25_weight),
+                            vector_weight: parseFloat(this.config.retrieval.vector_weight),
+                            rrf_k: parseInt(this.config.retrieval.rrf_k)
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '保存成功', '配置已更新');
+                } else {
+                    this.showToast('error', '保存失败', data.error || '未知错误');
+                }
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                this.showToast('error', '保存失败', error.message);
+            } finally {
+                this.saving = false;
+            }
+        },
+
+        async loadPrompt() {
+            try {
+                const response = await fetch('/api/config/prompt');
+                const data = await response.json();
+                if (data.success) {
+                    this.defaultPrompt = data.data.content;
+                }
+            } catch (error) {
+                console.error('Failed to load prompt:', error);
+            }
+        },
+
+        async savePrompt() {
+            try {
+                const response = await fetch('/api/config/prompt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        content: this.defaultPrompt
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '保存成功', '提示词已更新');
+                } else {
+                    this.showToast('error', '保存失败', data.error || '未知错误');
+                }
+            } catch (error) {
+                console.error('Failed to save prompt:', error);
+                this.showToast('error', '保存失败', error.message);
+            }
+        },
+
+        async resetPrompt() {
+            if (confirm('确定要重置提示词为默认值吗？')) {
+                try {
+                    const response = await fetch('/api/config/prompt/reset', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.defaultPrompt = data.data.content;
+                        this.showToast('success', '重置成功', '提示词已恢复默认');
+                    }
+                } catch (error) {
+                    console.error('Failed to reset prompt:', error);
+                    this.showToast('error', '重置失败', error.message);
+                }
+            }
+        },
+
+        showToast(type, title, message) {
+            this.toast = {
+                show: true,
+                type: type,
+                title: title,
+                message: message
+            };
+            setTimeout(() => {
+                this.toast.show = false;
+            }, 3000);
+        }
+    };
+}
+</script>
+
+<style>
+.font-monospace {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

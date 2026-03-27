@@ -195,3 +195,23 @@ def search_kb(kb_id):
         return jsonify({'success': True, 'data': results})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@kb_bp.route('/api/kb/<kb_id>/reindex', methods=['POST'])
+def reindex_kb(kb_id):
+    """重建知识库索引（包括向量索引）"""
+    try:
+        manager = get_kb_manager()
+        result = manager.reindex(kb_id)
+
+        if result['status'] == 'success':
+            return jsonify({
+                'success': True,
+                'message': result['message'],
+                'indexed_count': result['indexed_count'],
+                'vector_index': result['vector_index']
+            })
+        else:
+            return jsonify({'success': False, 'error': result['message']}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500

@@ -14,7 +14,7 @@ import importlib.util
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from plugins.base import BasePlugin, PluginCategory, PluginInfo, AnalysisResult
+from plugins.base import BasePlugin, PluginCategory, PluginInfo, AnalysisResult, MultiPluginAnalysisResult
 
 
 class PluginManager:
@@ -211,7 +211,7 @@ class PluginManager:
             categories[cat_value]['plugins'].append(plugin.get_info().to_dict())
         return categories
 
-    def run_analysis(self, plugin_ids: List[str], log_file: str) -> AnalysisResult:
+    def run_analysis(self, plugin_ids: List[str], log_file: str) -> MultiPluginAnalysisResult:
         """
         Run analysis using specified plugins.
 
@@ -220,7 +220,7 @@ class PluginManager:
             log_file: Path to the log file to analyze.
 
         Returns:
-            Combined AnalysisResult from all plugins.
+            MultiPluginAnalysisResult containing per-plugin results.
         """
         if not plugin_ids:
             raise ValueError("No plugins specified for analysis")
@@ -238,14 +238,14 @@ class PluginManager:
         if not results:
             raise RuntimeError("No plugins successfully executed")
 
-        # Combine results
+        # Combine results into multi-plugin structure
         return self._combine_results(results)
 
     def run_analysis_multiple_files(
         self,
         plugin_ids: List[str],
         log_files: List[str]
-    ) -> AnalysisResult:
+    ) -> MultiPluginAnalysisResult:
         """
         Run analysis on multiple log files using specified plugins.
 
@@ -254,7 +254,7 @@ class PluginManager:
             log_files: List of log file paths to analyze.
 
         Returns:
-            Combined AnalysisResult from all plugins and files.
+            MultiPluginAnalysisResult containing per-plugin results.
         """
         all_results = []
 
@@ -273,63 +273,57 @@ class PluginManager:
 
         return self._combine_results(all_results)
 
-    def _combine_results(self, results: List[AnalysisResult]) -> AnalysisResult:
+    def _combine_results(self, results: List[AnalysisResult]) -> MultiPluginAnalysisResult:
         """
-        Combine multiple analysis results into one.
+        Combine multiple analysis results into MultiPluginAnalysisResult.
+
+        Results are stored by plugin ID, preserving per-plugin structure.
+        When the same plugin runs on multiple files, its results are merged.
 
         Args:
             results: List of AnalysisResult objects to combine.
 
         Returns:
-            Combined AnalysisResult.
+            MultiPluginAnalysisResult with per-plugin structure.
         """
         if not results:
-            return AnalysisResult(
-                plugin_id='combined',
-                plugin_name='Combined Analysis',
+            return MultiPluginAnalysisResult(
                 analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                log_file='multiple'
+                log_file='none'
             )
 
-        if len(results) == 1:
-            return results[0]
-
-        # Combine multiple results
-        combined = AnalysisResult(
-            plugin_id='combined',
-            plugin_name='Combined Analysis',
+        multi_result = MultiPluginAnalysisResult(
             analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             log_file=', '.join(set(r.log_file for r in results))
         )
 
-        total_errors = 0
-        total_warnings = 0
-        all_errors = []
-        all_warnings = []
-        all_statistics = {}
-
+        # Group results by plugin_id
         for result in results:
-            total_errors += result.error_count
-            total_warnings += result.warning_count
-            all_errors.extend(result.errors)
-            all_warnings.extend(result.warnings)
-            # Merge statistics
-            for key, value in result.statistics.items():
-                if key in all_statistics:
-                    if isinstance(value, (int, float)):
-                        all_statistics[key] += value
-                    elif isinstance(value, dict):
-                        all_statistics[key].update(value)
-                else:
-                    all_statistics[key] = value
+            plugin_id = result.plugin_id
+            if plugin_id in multi_result.plugins:
+                # Merge with existing result for same plugin
+                existing = multi_result.plugins[plugin_id]
+                existing.error_count += result.error_count
+                existing.warning_count += result.warning_count
+                existing.errors.extend(result.errors)
+                existing.warnings.extend(result.warnings)
+                # Merge statistics
+                for key, value in result.statistics.items():
+                    if key in existing.statistics:
+                        if isinstance(value, (int, float)) and isinstance(existing.statistics[key], (int, float)):
+                            existing.statistics[key] += value
+                        elif isinstance(value, dict) and isinstance(existing.statistics[key], dict):
+                            existing.statistics[key].update(value)
+                    else:
+                        existing.statistics[key] = value
+                # Merge raw_output if both are dicts
+                if isinstance(result.raw_output, dict) and isinstance(existing.raw_output, dict):
+                    existing.raw_output.update(result.raw_output)
+            else:
+                # Create new entry for this plugin
+                multi_result.plugins[plugin_id] = result
 
-        combined.error_count = total_errors
-        combined.warning_count = total_warnings
-        combined.errors = all_errors
-        combined.warnings = all_warnings
-        combined.statistics = all_statistics
-
-        return combined
+        return multi_result
 
     def cleanup(self) -> None:
         """Clean up all loaded plugins."""

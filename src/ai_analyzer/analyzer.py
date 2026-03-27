@@ -40,11 +40,27 @@ class AIAnalyzer:
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'default_prompt.txt')
 
+    def _get_prompt_template_path(self):
+        """获取提示词模板文件路径"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        return os.path.join(project_root, 'config', 'default_prompt_template.txt')
+
     def _load_default_prompt(self):
-        """加载默认提示词"""
+        """加载默认提示词，优先使用用户自定义，否则使用模板"""
+        # 先尝试加载用户自定义提示词
         if os.path.exists(self.default_prompt_path):
             with open(self.default_prompt_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    return content
+
+        # 回退到模板文件
+        template_path = self._get_prompt_template_path()
+        if os.path.exists(template_path):
+            with open(template_path, 'r', encoding='utf-8') as f:
                 return f.read()
+
         return ""
 
     def analyze(self, plugin_result, log_content, kb_id=None, user_prompt=None) -> Generator[str, None, Dict[str, Any]]:

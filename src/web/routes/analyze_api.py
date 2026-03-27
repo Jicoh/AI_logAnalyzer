@@ -110,19 +110,23 @@ def analyze_stream():
             temp_base = get_temp_base_dir()
             work_dir = create_work_directory(temp_base, filename)
 
-            # 保存上传的文件
-            uploaded_file_path = os.path.join(work_dir, filename)
-            file.save(uploaded_file_path)
-
             # 根据文件类型处理
             file_category = get_file_category(filename)
             all_log_content = ""
             log_file_paths = []
 
             if file_category == 'archive':
-                # 解压压缩文件
-                extract_dir = os.path.join(work_dir, 'extracted')
-                extracted_files = extract_archive(uploaded_file_path, extract_dir)
+                # 保存压缩包到临时位置，解压后删除
+                temp_archive_path = os.path.join(temp_base, f"temp_{filename}")
+                file.save(temp_archive_path)
+
+                try:
+                    # 解压压缩文件到工作目录
+                    extracted_files = extract_archive(temp_archive_path, work_dir)
+                finally:
+                    # 删除临时压缩包
+                    if os.path.exists(temp_archive_path):
+                        os.remove(temp_archive_path)
 
                 # 查找所有日志文件
                 for f in extracted_files:
@@ -133,7 +137,9 @@ def analyze_stream():
                     yield generate_sse_event({'stage': 'error', 'message': 'No log files found in archive'})
                     return
             else:
-                # 直接是日志文件
+                # 直接是日志文件，保存到工作目录
+                uploaded_file_path = os.path.join(work_dir, filename)
+                file.save(uploaded_file_path)
                 log_file_paths = [uploaded_file_path]
 
             # 读取所有日志内容
@@ -180,6 +186,7 @@ def analyze_stream():
             })
 
             # Stage 2: AI Analysis (if enabled)
+            ai_result_data = None
             if enable_ai:
                 yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'Starting AI analysis...'})
 
@@ -202,6 +209,17 @@ def analyze_stream():
                             'stage': 'ai',
                             'chunk': chunk
                         })
+
+                    ai_result_data = {
+                        'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'kb_id': kb_id,
+                        'analysis': full_analysis
+                    }
+
+                    # Save AI result
+                    ai_output_file = os.path.join(plugin_output_dir, 'ai_result.json')
+                    with open(ai_output_file, 'w', encoding='utf-8') as f:
+                        json.dump(ai_result_data, f, indent=4, ensure_ascii=False)
 
                     yield generate_sse_event({
                         'stage': 'ai',
@@ -265,9 +283,12 @@ def get_config():
         manager = get_config_manager()
         config = manager.get_all()
 
-        # Hide sensitive information
-        if 'ai' in config and 'api_key' in config['ai']:
-            config['ai']['api_key'] = '***' if config['ai']['api_key'] else ''
+        # Hide sensitive information (but show masked version for settings page)
+        if 'api' in config and 'api_key' in config['api']:
+            api_key = config['api']['api_key']
+            if api_key and api_key != '***':
+                # Show masked version: sk-****xxxx
+                config['api']['api_key'] = api_key[:6] + '****' + api_key[-4:] if len(api_key) > 10 else '****'
 
         return jsonify({'success': True, 'data': config})
     except Exception as e:
@@ -281,21 +302,162 @@ def update_config():
         data = request.get_json()
         manager = get_config_manager()
 
-        # Update only allowed fields
-        if 'ai' in data:
-            ai_config = data['ai']
-            if 'enable_ai' in ai_config:
-                manager.set('ai.enable_ai', ai_config['enable_ai'])
-            if 'model' in ai_config:
-                manager.set('ai.model', ai_config['model'])
-            if 'temperature' in ai_config:
-                manager.set('ai.temperature', ai_config['temperature'])
-            if 'max_tokens' in ai_config:
-                manager.set('ai.max_tokens', ai_config['max_tokens'])
-            # Don't allow updating API key via web for security
+        # Update API settings
+        if 'api' in data:
+            api_config = data['api']
+            if 'base_url' in api_config:
+                manager.set('api.base_url', api_config['base_url'])
+            if 'api_key' in api_config and api_config['api_key'] and not api_config['api_key'].startswith('sk-****'):
+                # Only update if not masked value
+                manager.set('api.api_key', api_config['api_key'])
+            if 'model' in api_config:
+                manager.set('api.model', api_config['model'])
+            if 'temperature' in api_config:
+                manager.set('api.temperature', float(api_config['temperature']))
+            if 'max_tokens' in api_config:
+                manager.set('api.max_tokens', int(api_config['max_tokens']))
+
+        # Update BM25 settings
+        if 'bm25' in data:
+            bm25_config = data['bm25']
+            if 'k1' in bm25_config:
+                manager.set('bm25.k1', float(bm25_config['k1']))
+            if 'b' in bm25_config:
+                manager.set('bm25.b', float(bm25_config['b']))
+
+        # Update Embedding settings
+        if 'embedding' in data:
+            emb_config = data['embedding']
+            if 'enabled' in emb_config:
+                manager.set('embedding.enabled', emb_config['enabled'])
+            if 'provider' in emb_config:
+                manager.set('embedding.provider', emb_config['provider'])
+            if 'base_url' in emb_config:
+                manager.set('embedding.base_url', emb_config['base_url'])
+            if 'api_key' in emb_config:
+                manager.set('embedding.api_key', emb_config['api_key'])
+            if 'model' in emb_config:
+                manager.set('embedding.model', emb_config['model'])
+            if 'dimension' in emb_config:
+                manager.set('embedding.dimension', int(emb_config['dimension']))
+            if 'batch_size' in emb_config:
+                manager.set('embedding.batch_size', int(emb_config['batch_size']))
+
+        # Update Retrieval settings
+        if 'retrieval' in data:
+            ret_config = data['retrieval']
+            if 'mode' in ret_config:
+                manager.set('retrieval.mode', ret_config['mode'])
+            if 'bm25_weight' in ret_config:
+                manager.set('retrieval.bm25_weight', float(ret_config['bm25_weight']))
+            if 'vector_weight' in ret_config:
+                manager.set('retrieval.vector_weight', float(ret_config['vector_weight']))
+            if 'rrf_k' in ret_config:
+                manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
 
         manager.save()
 
         return jsonify({'success': True, 'message': 'Configuration updated'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# Config directory
+CONFIG_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    'config'
+)
+# User's custom prompt file
+DEFAULT_PROMPT_FILE = os.path.join(CONFIG_DIR, 'default_prompt.txt')
+# Default prompt template (read-only)
+DEFAULT_PROMPT_TEMPLATE = os.path.join(CONFIG_DIR, 'default_prompt_template.txt')
+
+
+def get_default_prompt_template():
+    """Get the default prompt template content."""
+    if os.path.exists(DEFAULT_PROMPT_TEMPLATE):
+        with open(DEFAULT_PROMPT_TEMPLATE, 'r', encoding='utf-8') as f:
+            return f.read()
+    # Fallback template if file is missing
+    return """你是一名专业的服务器BMC日志分析专家。请根据以下信息分析日志中存在的问题，并提供可能的原因和解决方案。
+
+## 日志分析结果
+{plugin_analysis}
+
+## 相关知识库内容
+{knowledge_content}
+
+## 日志原文
+{log_content}
+
+## 用户补充说明
+{user_prompt}
+
+请按照以下格式输出分析报告：
+
+### 问题总结
+简要总结日志中发现的主要问题。
+
+### 问题详情
+列出每个问题的详细信息：
+1. 问题类型
+2. 发生时间
+3. 影响范围
+4. 可能原因
+
+### 解决方案建议
+针对每个问题提供具体的解决方案建议。
+
+### 风险评估
+评估当前问题的严重程度和潜在风险。"""
+
+
+@analyze_bp.route('/api/config/prompt', methods=['GET'])
+def get_prompt():
+    """Get default prompt content."""
+    try:
+        if os.path.exists(DEFAULT_PROMPT_FILE):
+            with open(DEFAULT_PROMPT_FILE, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            content = ''
+
+        return jsonify({'success': True, 'data': {'content': content}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/config/prompt', methods=['POST'])
+def update_prompt():
+    """Update default prompt content."""
+    try:
+        data = request.get_json()
+        content = data.get('content', '')
+
+        # Ensure config directory exists
+        config_dir = os.path.dirname(DEFAULT_PROMPT_FILE)
+        os.makedirs(config_dir, exist_ok=True)
+
+        with open(DEFAULT_PROMPT_FILE, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        return jsonify({'success': True, 'message': 'Prompt updated'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/config/prompt/reset', methods=['POST'])
+def reset_prompt():
+    """Reset default prompt to original content."""
+    try:
+        default_content = get_default_prompt_template()
+
+        # Ensure config directory exists
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+
+        with open(DEFAULT_PROMPT_FILE, 'w', encoding='utf-8') as f:
+            f.write(default_content)
+
+        return jsonify({'success': True, 'data': {'content': default_content}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

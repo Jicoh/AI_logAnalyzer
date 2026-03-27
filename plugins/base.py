@@ -77,6 +77,61 @@ class AnalysisResult:
         }
 
 
+@dataclass
+class MultiPluginAnalysisResult:
+    """Multiple plugins analysis result with per-plugin structure."""
+    analysis_time: str
+    log_file: str
+    plugins: Dict[str, AnalysisResult] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            'analysis_time': self.analysis_time,
+            'log_file': self.log_file,
+            'plugins': {
+                plugin_id: result.to_dict()
+                for plugin_id, result in self.plugins.items()
+            }
+        }
+
+    def get_total_errors(self) -> int:
+        """Get total error count across all plugins."""
+        return sum(r.error_count for r in self.plugins.values())
+
+    def get_total_warnings(self) -> int:
+        """Get total warning count across all plugins."""
+        return sum(r.warning_count for r in self.plugins.values())
+
+    def get_all_errors(self) -> List[Dict]:
+        """Get all errors from all plugins."""
+        all_errors = []
+        for result in self.plugins.values():
+            all_errors.extend(result.errors)
+        return all_errors
+
+    def get_all_warnings(self) -> List[Dict]:
+        """Get all warnings from all plugins."""
+        all_warnings = []
+        for result in self.plugins.values():
+            all_warnings.extend(result.warnings)
+        return all_warnings
+
+    def get_merged_statistics(self) -> Dict[str, Any]:
+        """Get merged statistics from all plugins."""
+        merged = {}
+        for result in self.plugins.values():
+            for key, value in result.statistics.items():
+                if key in merged:
+                    if isinstance(value, (int, float)) and isinstance(merged[key], (int, float)):
+                        merged[key] += value
+                    elif isinstance(value, dict) and isinstance(merged[key], dict):
+                        merged[key].update(value)
+                else:
+                    merged[key] = value
+        return merged
+
+
 class BasePlugin(ABC):
     """
     Abstract base class for all plugins.

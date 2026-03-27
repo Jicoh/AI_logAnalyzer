@@ -12,16 +12,24 @@
 <body>
     <div class="d-flex" style="height: 100vh;">
         <!-- Sidebar -->
-        <div class="sidebar bg-dark text-white">
+        <div class="sidebar bg-dark text-white d-flex flex-column">
             <div class="sidebar-header">
                 <i class="bi bi-terminal"></i> AI Log Analyzer
             </div>
-            <nav class="sidebar-nav">
+            <nav class="sidebar-nav flex-grow-1">
                 <a href="{{ url_for('main.index') }}" class="nav-link {% if active_page == 'analyzer' %}active{% endif %}">
                     <i class="bi bi-search"></i> 日志分析
                 </a>
                 <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
                     <i class="bi bi-database"></i> 知识库
+                </a>
+                <a href="{{ url_for('main.history') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
+                    <i class="bi bi-clock-history"></i> 历史记录
+                </a>
+            </nav>
+            <nav class="sidebar-nav border-top border-secondary">
+                <a href="{{ url_for('main.settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+                    <i class="bi bi-gear"></i> 设置
                 </a>
             </nav>
         </div>

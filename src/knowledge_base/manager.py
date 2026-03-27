@@ -298,9 +298,11 @@ class KnowledgeBaseManager:
             # 2. 构建向量索引（如果启用）
             if self.embedding_client.is_enabled():
                 embedding_config = self.config.get('embedding', {})
+                faiss_config = self.config.get('faiss', {})
                 vector_retriever = VectorRetriever(
                     self.embedding_client,
-                    dimension=embedding_config.get('dimension', 1536)
+                    dimension=embedding_config.get('dimension', 1536),
+                    faiss_config=faiss_config
                 )
                 success = vector_retriever.index_documents(all_chunks)
                 if success:
@@ -347,14 +349,48 @@ class KnowledgeBaseManager:
             vector_index_path = os.path.join(kb_dir, 'vector_index')
             if os.path.exists(vector_index_path):
                 embedding_config = self.config.get('embedding', {})
+                faiss_config = self.config.get('faiss', {})
                 vector_retriever = VectorRetriever(
                     self.embedding_client,
-                    dimension=embedding_config.get('dimension', 1536)
+                    dimension=embedding_config.get('dimension', 1536),
+                    faiss_config=faiss_config
                 )
                 vector_retriever.load_index(vector_index_path)
 
         # 返回混合检索器
         return HybridRetriever(bm25_retriever, vector_retriever, self.config)
+
+    def reindex(self, kb_id: str) -> dict:
+        """
+        重建知识库索引（包括向量索引）
+
+        Args:
+            kb_id: 知识库ID
+
+        Returns:
+            dict: 结果信息，包含 status, message, indexed_count, vector_index
+        """
+        kb_info = self.get(kb_id)
+        if not kb_info:
+            return {'status': 'error', 'message': f'知识库不存在: {kb_id}'}
+
+        if not kb_info['documents']:
+            return {'status': 'error', 'message': '知识库无文档'}
+
+        # 调用 _update_index 重建索引
+        self._update_index(kb_id)
+
+        # 检查向量索引是否成功构建
+        kb_dir = os.path.join(self.document_dir, kb_id)
+        vector_index_path = os.path.join(kb_dir, 'vector_index')
+        vector_index_exists = os.path.exists(vector_index_path)
+
+        return {
+            'status': 'success',
+            'message': '索引重建完成',
+            'indexed_count': kb_info['document_count'],
+            'vector_index': vector_index_exists and self.embedding_client.is_enabled()
+        }
 
     def search(self, kb_id, query, top_n=5):
         """
