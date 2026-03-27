@@ -30,10 +30,16 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-plug"></i> 选择分析插件
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-plug"></i> 选择分析插件</span>
+                    <span class="badge bg-success" x-show="aiSelectionMode">
+                        <i class="bi bi-robot"></i> AI 选择
+                    </span>
                 </div>
                 <div class="card-body p-2">
+                    <div class="alert alert-info py-2 mb-2" x-show="aiSelectionMode">
+                        <small><i class="bi bi-lock"></i> AI 模式启用时，插件将由 AI 自动选择</small>
+                    </div>
                     <template x-for="(categoryData, category) in pluginCategories" :key="category">
                         <div class="border rounded mb-2">
                             <div class="d-flex justify-content-between align-items-center p-2 bg-light"
@@ -44,7 +50,7 @@
                                     <span class="fw-bold ms-1" x-text="getCategoryLabel(category)"></span>
                                     <span class="badge bg-secondary ms-1" x-text="categoryData.plugins.length"></span>
                                 </div>
-                                <div>
+                                <div x-show="!aiSelectionMode">
                                     <button class="btn btn-sm btn-outline-primary me-1"
                                             @click.stop="selectAllInCategory(category)"
                                             x-show="categoryData.plugins.length > 1">
@@ -63,10 +69,14 @@
                                         <input class="form-check-input" type="checkbox"
                                                :id="'plugin-' + plugin.id"
                                                :value="plugin.id"
+                                               :disabled="aiSelectionMode"
                                                x-model="selectedPlugins">
                                         <label class="form-check-label d-inline-block" :for="'plugin-' + plugin.id"
                                                style="max-width: calc(100% - 20px);">
                                             <span x-text="plugin.name" class="fw-medium"></span>
+                                            <span class="badge bg-success ms-1" x-show="aiSelectionMode && selectionResult?.selected_plugins?.includes(plugin.id)">
+                                                <i class="bi bi-check"></i> 已选
+                                            </span>
                                             <small class="text-muted d-block" style="font-size: 0.75rem;" x-text="plugin.description"></small>
                                         </label>
                                     </div>
@@ -83,11 +93,37 @@
                 </div>
                 <div class="card-body">
                     <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="enableAi" x-model="enableAi">
+                        <input class="form-check-input" type="checkbox" id="enableAi" x-model="enableAi"
+                               @change="if(!enableAi) aiSelectionMode = false">
                         <label class="form-check-label" for="enableAi">启用 AI 分析</label>
                     </div>
 
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="aiSelectionMode"
+                               x-model="aiSelectionMode" :disabled="!enableAi">
+                        <label class="form-check-label" for="aiSelectionMode" :class="{'text-muted': !enableAi}">AI 智能选择模式</label>
+                        <i class="bi bi-exclamation-circle text-warning ms-1"
+                           style="cursor: help;"
+                           title="启用后AI会自动选择合适的插件和日志文件进行分析"></i>
+                        <small class="text-muted ms-2" x-show="!enableAi">(需先启用AI分析)</small>
+                    </div>
+                    <div x-show="aiSelectionMode && enableAi" class="alert alert-info py-2 mb-3">
+                        <small><i class="bi bi-lightbulb"></i> 启用后，AI 将自动选择插件和日志文件</small>
+                    </div>
+
                     <div x-show="enableAi" x-cloak>
+
+                        <div class="mb-3">
+                            <label class="form-label">日志描述规则</label>
+                            <select class="form-select" x-model="selectedLogRulesId">
+                                <option value="">使用默认规则</option>
+                                <template x-for="rules in logRulesList" :key="rules.rules_id">
+                                    <option :value="rules.rules_id" x-text="rules.name"></option>
+                                </template>
+                            </select>
+                            <small class="text-muted">选择日志类型描述规则，帮助 AI 更准确识别日志</small>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label">关联知识库</label>
                             <select class="form-select" x-model="selectedKbId">
@@ -102,6 +138,9 @@
                             <label class="form-label">自定义提示词（可选）</label>
                             <textarea class="form-control" x-model="userPrompt"
                                       rows="3" placeholder="输入额外的分析要求..."></textarea>
+                            <small class="text-muted" x-show="aiSelectionMode">
+                                <i class="bi bi-info-circle"></i> 提示词用于 AI 选择合适的插件和文件
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -128,7 +167,28 @@
                              :style="'width: ' + progress + '%'"></div>
                     </div>
                     <small class="text-muted" x-text="statusMessage"></small>
-                    <div x-show="analyzing" class="alert alert-info py-1 px-2 mt-2 mb-0">
+
+                    <!-- Selection Result Display -->
+                    <div x-show="selectionResult && !selectionResult.fallback" class="alert alert-success py-2 px-2 mt-2 mb-0">
+                        <small>
+                            <i class="bi bi-check-circle"></i>
+                            <strong>AI 选择：</strong>
+                            <span x-text="selectionResult.selected_plugins?.length || 0"></span> 个插件，
+                            <span x-text="selectionResult.selected_files?.length || 0"></span> 个文件
+                        </small>
+                    </div>
+                    <div x-show="selectionResult && selectionResult.fallback" class="alert alert-warning py-2 px-2 mt-2 mb-0">
+                        <small>
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>全量分析：</strong>
+                            <span x-text="selectionResult.reason"></span>
+                        </small>
+                    </div>
+
+                    <div x-show="analyzing && !selectionResult && aiSelectionMode" class="alert alert-info py-1 px-2 mt-2 mb-0">
+                        <small><i class="bi bi-hourglass-split"></i> AI 正在选择插件和文件...</small>
+                    </div>
+                    <div x-show="analyzing && !enableAi" class="alert alert-info py-1 px-2 mt-2 mb-0">
                         <small><i class="bi bi-info-circle"></i> 分析进行中，请勿切换页面</small>
                     </div>
                     <div x-show="wasInterrupted" class="alert alert-warning py-1 px-2 mt-2 mb-0">
@@ -301,7 +361,10 @@ function analyzerApp() {
         selectedPlugins: ['log_parser'],
         kbList: [],
         selectedKbId: '',
+        logRulesList: [],
+        selectedLogRulesId: '',
         enableAi: true,
+        aiSelectionMode: false,
         userPrompt: '',
         analyzing: false,
         completed: false,
@@ -311,11 +374,13 @@ function analyzerApp() {
         statusMessage: '',
         pluginResult: null,
         aiResult: '',
+        selectionResult: null,
         eventSource: null,
 
         init() {
             this.loadPlugins();
             this.loadKbList();
+            this.loadLogRulesList();
             this.restoreState();
         },
 
@@ -387,7 +452,9 @@ function analyzerApp() {
                 logFileName: this.logFileName,
                 selectedPlugins: this.selectedPlugins,
                 selectedKbId: this.selectedKbId,
+                selectedLogRulesId: this.selectedLogRulesId,
                 enableAi: this.enableAi,
+                aiSelectionMode: this.aiSelectionMode,
                 userPrompt: this.userPrompt,
                 completed: this.completed,
                 progress: this.progress,
@@ -395,6 +462,7 @@ function analyzerApp() {
                 statusMessage: this.statusMessage,
                 pluginResult: this.pluginResult,
                 aiResult: this.aiResult,
+                selectionResult: this.selectionResult,
                 analyzing: this.analyzing,
                 timestamp: Date.now()
             };
@@ -415,7 +483,9 @@ function analyzerApp() {
                     this.logFileName = state.logFileName || '';
                     this.selectedPlugins = state.selectedPlugins || ['log_parser'];
                     this.selectedKbId = state.selectedKbId || '';
+                    this.selectedLogRulesId = state.selectedLogRulesId || '';
                     this.enableAi = state.enableAi !== undefined ? state.enableAi : true;
+                    this.aiSelectionMode = state.aiSelectionMode !== undefined ? state.aiSelectionMode : false;
                     this.userPrompt = state.userPrompt || '';
 
                     // Check if analysis was interrupted
@@ -428,6 +498,7 @@ function analyzerApp() {
                         logFileName: this.logFileName,
                         selectedPlugins: this.selectedPlugins,
                         selectedKbId: this.selectedKbId,
+                        selectedLogRulesId: this.selectedLogRulesId,
                         enableAi: this.enableAi
                     });
                 } catch (e) {
@@ -447,6 +518,7 @@ function analyzerApp() {
             this.statusMessage = '';
             this.pluginResult = null;
             this.aiResult = '';
+            this.selectionResult = null;
         },
 
         getCategoryLabel(category) {
@@ -528,6 +600,18 @@ function analyzerApp() {
             }
         },
 
+        async loadLogRulesList() {
+            try {
+                const response = await fetch('/api/log-rules');
+                const data = await response.json();
+                if (data.success) {
+                    this.logRulesList = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load log rules:', error);
+            }
+        },
+
         handleFileChange(event) {
             if (event.target.files && event.target.files[0]) {
                 this.logFile = event.target.files[0];
@@ -548,12 +632,18 @@ function analyzerApp() {
             this.statusMessage = '正在处理...';
             this.pluginResult = null;
             this.aiResult = '';
+            this.selectionResult = null;
 
             const formData = new FormData();
             formData.append('file', this.logFile);
-            this.selectedPlugins.forEach(p => formData.append('plugins', p));
+            // AI mode: don't send plugins, let AI select
+            if (!this.aiSelectionMode) {
+                this.selectedPlugins.forEach(p => formData.append('plugins', p));
+            }
             formData.append('enable_ai', this.enableAi ? 'true' : 'false');
+            formData.append('ai_selection_mode', this.aiSelectionMode ? 'true' : 'false');
             if (this.selectedKbId) formData.append('kb_id', this.selectedKbId);
+            if (this.selectedLogRulesId) formData.append('log_rules_id', this.selectedLogRulesId);
             if (this.userPrompt) formData.append('user_prompt', this.userPrompt);
 
             // Use fetch with POST for SSE
@@ -603,9 +693,28 @@ function analyzerApp() {
 
         handleSSEEvent(data) {
             switch (data.stage) {
+                case 'selection':
+                    if (data.status === 'start') {
+                        this.progress = 5;
+                        this.statusMessage = data.message;
+                    } else if (data.status === 'complete') {
+                        this.progress = 10;
+                        this.selectionResult = data.result;
+                        this.statusMessage = data.result?.reason || 'AI 选择完成';
+                        // Update selected plugins from AI result
+                        if (data.result?.selected_plugins) {
+                            this.selectedPlugins = data.result.selected_plugins;
+                        }
+                        this.saveState();
+                    } else if (data.status === 'error') {
+                        this.statusMessage = data.message;
+                        this.saveState();
+                    }
+                    break;
+
                 case 'plugin':
                     if (data.status === 'start') {
-                        this.progress = 10;
+                        this.progress = 15;
                         this.statusMessage = data.message;
                     } else if (data.status === 'complete') {
                         this.progress = 40;

@@ -19,6 +19,12 @@ def knowledge_base():
     return render_template('knowledge_base.html', active_page='kb')
 
 
+@main_bp.route('/log-metadata')
+def log_metadata():
+    """Log metadata rules management page."""
+    return render_template('log_metadata.html', active_page='log_metadata')
+
+
 @main_bp.route('/history')
 def history():
     """History records page."""

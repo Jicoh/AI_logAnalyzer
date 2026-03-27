@@ -45,6 +45,15 @@ class LogStatisticsPlugin(BasePlugin):
     def tags(self) -> List[str]:
         return ["statistics", "analysis", "metrics", "patterns"]
 
+    @property
+    def capabilities(self) -> List[str]:
+        return ["statistics_analysis", "time_distribution", "pattern_detection", "component_activity"]
+
+    @property
+    def target_keywords(self) -> List[str]:
+        return ["statistics", "distribution", "pattern", "trend", "frequency",
+                "count", "metrics", "performance", "activity"]
+
     def analyze(self, log_file: str) -> AnalysisResult:
         """
         Analyze log file statistics.

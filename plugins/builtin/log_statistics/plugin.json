@@ -6,5 +6,7 @@
     "category": "analyzer",
     "author": "AI Log Analyzer Team",
     "tags": ["statistics", "analysis", "metrics", "patterns"],
+    "capabilities": ["statistics_analysis", "time_distribution", "pattern_detection", "component_activity"],
+    "target_keywords": ["statistics", "distribution", "pattern", "trend", "frequency", "count", "metrics", "performance", "activity"],
     "enabled": true
 }

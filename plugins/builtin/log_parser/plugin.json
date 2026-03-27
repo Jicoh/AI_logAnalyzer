@@ -6,5 +6,7 @@
     "category": "parser",
     "author": "AI Log Analyzer Team",
     "tags": ["log", "parser", "error", "warning", "bmc"],
+    "capabilities": ["error_detection", "warning_extraction", "log_parsing", "component_analysis"],
+    "target_keywords": ["error", "warning", "fail", "crash", "exception", "memory", "leak", "critical", "fatal", "timeout", "bmc", "sel", "sensor"],
     "enabled": true
 }

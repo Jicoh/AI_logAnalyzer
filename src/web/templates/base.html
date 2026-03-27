@@ -23,6 +23,9 @@
                 <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
                     <i class="bi bi-database"></i> 知识库
                 </a>
+                <a href="{{ url_for('main.log_metadata') }}" class="nav-link {% if active_page == 'log_metadata' %}active{% endif %}">
+                    <i class="bi bi-journal-text"></i> 日志规则
+                </a>
                 <a href="{{ url_for('main.history') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
                     <i class="bi bi-clock-history"></i> 历史记录
                 </a>

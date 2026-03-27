@@ -74,6 +74,15 @@ class LogParserPlugin(BasePlugin):
     def tags(self) -> List[str]:
         return ["log", "parser", "error", "warning", "bmc"]
 
+    @property
+    def capabilities(self) -> List[str]:
+        return ["error_detection", "warning_extraction", "log_parsing", "component_analysis"]
+
+    @property
+    def target_keywords(self) -> List[str]:
+        return ["error", "warning", "fail", "crash", "exception", "memory", "leak",
+                "critical", "fatal", "timeout", "bmc", "sel", "sensor"]
+
     def analyze(self, log_file: str) -> AnalysisResult:
         """
         Analyze a log file.

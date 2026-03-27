@@ -7,10 +7,12 @@ BMC服务器日志AI分析工具，自动识别日志中的问题并提供可能
 - **日志解析**：支持BMC日志格式，自动提取错误和警告信息
 - **插件系统**：可扩展的插件架构，支持自定义分析插件
 - **知识库管理**：支持多知识库创建、文档添加、版本管理
-- **BM25检索**：基于BM25算法的文档相似度检索
+- **日志规则管理**：自定义日志文件描述规则，帮助AI智能识别日志类型
+- **混合检索**：支持BM25检索、向量检索、混合检索三种模式
+- **AI智能选择**：根据日志规则自动选择合适的插件和文件进行分析
 - **AI分析**：整合日志分析结果和知识库内容，调用AI进行深度分析
 - **命令行界面**：简洁的CLI操作方式
-- **Web界面**：图形化操作界面，支持日志上传、知识库管理、在线分析
+- **Web界面**：图形化操作界面，支持日志上传、知识库管理、日志规则管理、在线分析
 
 ## 安装
 
@@ -51,7 +53,9 @@ python web_app.py
 Web界面功能：
 - **日志上传**：上传日志文件进行分析，支持 tar.gz、tar、zip、txt、log 格式
 - **知识库管理**：创建、查看、删除知识库，添加/删除文档
-- **在线分析**：选择知识库后分析上传的日志，结果流式输出
+- **日志规则管理**：创建规则集，添加日志文件路径的描述规则
+- **在线分析**：选择知识库和日志规则后分析上传的日志，结果流式输出
+- **AI智能选择**：开启后自动根据日志规则选择合适的插件和文件
 
 ### 3. 创建知识库（CLI）
 
@@ -146,7 +150,8 @@ AI_logAnalyzer/
 ├── requirements.txt           # 依赖文件
 ├── config/                    # 配置目录
 │   ├── ai_config.json        # AI配置
-│   └── default_prompt.txt    # 默认提示词
+│   ├── default_prompt.txt    # 默认提示词
+│   └── log_metadata_rules.json # 日志规则配置
 ├── data/                      # 数据目录
 │   ├── test_log.txt          # 测试日志
 │   ├── bmc_knowledge.md      # BMC知识文档
@@ -159,12 +164,15 @@ AI_logAnalyzer/
 │   ├── base.py               # 插件基类
 │   ├── manager.py            # 插件管理器
 │   ├── builtin/              # 内置插件
-│   │   └── log_parser/       # 日志解析插件
+│   │   ├── log_parser/       # 日志解析插件
+│   │   └── log_statistics/   # 日志统计插件
 │   └── custom/               # 自定义插件目录
 └── src/                       # 源代码
-    ├── plugin_analyzer/       # 插件分析模块
     ├── ai_analyzer/           # AI分析模块
+    │   ├── analyzer.py       # AI分析器
+    │   └── selection_agent.py # AI智能选择Agent
     ├── knowledge_base/        # 知识库模块
+    ├── log_metadata/          # 日志元数据管理模块
     ├── config_manager/        # 配置管理模块
     ├── web/                   # Web模块
     │   ├── routes/           # 路由定义
@@ -186,16 +194,55 @@ AI_logAnalyzer/
         "temperature": 0.7,
         "max_tokens": 4096
     },
-    "knowledge_base": {
-        "default_id": "",
-        "version": "1.0"
-    },
     "bm25": {
         "k1": 1.5,
         "b": 0.75
+    },
+    "embedding": {
+        "enabled": true,
+        "provider": "openai",
+        "base_url": "",
+        "api_key": "",
+        "model": "text-embedding-3-small",
+        "dimension": 1536,
+        "batch_size": 100
+    },
+    "retrieval": {
+        "mode": "hybrid",
+        "bm25_weight": 0.5,
+        "vector_weight": 0.5,
+        "rrf_k": 60
     }
 }
 ```
+
+### 检索模式说明
+
+| 模式 | 说明 |
+|------|------|
+| bm25 | 仅使用BM25关键词检索 |
+| vector | 仅使用向量语义检索 |
+| hybrid | 混合检索，结合BM25和向量检索结果 |
+
+## 日志规则管理
+
+日志规则用于描述特定日志文件的类型信息，帮助AI智能选择合适的分析插件。
+
+### 规则结构
+
+每条规则包含：
+- **file_path**：日志文件的完整路径（如 `/var/log/sel.log`）
+- **description**：日志类型描述
+- **keywords**：关键词列表，帮助AI识别日志内容
+- **suggested_plugins**：建议使用的分析插件
+
+### Web界面管理
+
+1. 访问"日志规则"页面
+2. 创建规则集或使用默认规则集
+3. 添加日志文件规则
+4. 在分析页面选择要使用的规则集
+5. 开启"AI智能选择"模式进行分析
 
 ## 插件系统
 
@@ -305,6 +352,7 @@ python main.py analyze --log data/test_log.txt --plugins my_plugin
 | 插件ID | 名称 | 分类 | 说明 |
 |--------|------|------|------|
 | log_parser | Log Parser | parser | 日志解析，提取错误、警告和统计信息 |
+| log_statistics | Log Statistics | analyzer | 日志统计，分析日志条数分布和趋势 |
 
 ## 支持的文件格式
 
@@ -331,8 +379,10 @@ python main.py analyze --log data/test_log.txt --plugins my_plugin
 - Python 3.10+
 - Flask Web框架
 - BM25 检索算法
+- 向量嵌入检索
 - jieba 中文分词
 - rank-bm25 文档检索
+- Alpine.js 前端交互
 
 ## 依赖
 
@@ -343,6 +393,7 @@ jieba>=0.42.1
 pypdf>=3.0.0
 python-docx>=0.8.11
 requests>=2.28.0
+numpy>=1.20.0
 ```
 
 ## License

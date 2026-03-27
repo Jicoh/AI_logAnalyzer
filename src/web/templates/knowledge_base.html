@@ -11,6 +11,17 @@
         </button>
     </div>
 
+    <!-- 检索模式状态栏 -->
+    <div class="alert alert-info mb-4 d-flex justify-content-between align-items-center">
+        <div>
+            <i class="bi bi-info-circle"></i>
+            当前检索模式：<strong x-text="getModeDisplayName()"></strong>
+            <span class="badge bg-success ms-2" x-show="systemStatus.embedding_enabled">Embedding 已启用</span>
+            <span class="badge bg-secondary ms-2" x-show="!systemStatus.embedding_enabled">Embedding 未启用</span>
+        </div>
+        <a href="/settings" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i> 配置</a>
+    </div>
+
     <!-- Knowledge Base List -->
     <div class="row" id="kb-list">
         <template x-if="kbList.length === 0 && !loading">
@@ -37,6 +48,12 @@
                     </div>
                     <div class="card-body">
                         <p class="card-text text-muted" x-text="kb.description || '无描述'"></p>
+                        <!-- 向量化警告 -->
+                        <div class="alert alert-warning py-2 mb-2" x-show="needVectorization(kb)">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <small>未向量化，检索可能不完整</small>
+                            <button class="btn btn-sm btn-link p-0 ms-2" @click="promptVectorize(kb)">立即处理</button>
+                        </div>
                         <div class="d-flex justify-content-between text-muted small">
                             <span><i class="bi bi-file-earmark"></i> <span x-text="kb.document_count || 0"></span> 文档</span>
                             <span x-text="formatDate(kb.created_at)"></span>
@@ -90,15 +107,25 @@
                     <template x-if="selectedKb">
                         <div>
                             <div class="row mb-3">
+                                <div class="col-md-4"><strong>名称：</strong> <span x-text="selectedKb.name"></span></div>
+                                <div class="col-md-4"><strong>ID：</strong> <code x-text="selectedKb.kb_id || selectedKb.id"></code></div>
+                                <div class="col-md-4"><strong>文档数：</strong> <span x-text="selectedKb.document_count || 0"></span></div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6"><strong>BM25索引：</strong> <span class="badge bg-success">已构建</span></div>
                                 <div class="col-md-6">
-                                    <strong>名称：</strong> <span x-text="selectedKb.name"></span>
-                                </div>
-                                <div class="col-md-6">
-                                    <strong>ID：</strong> <code x-text="selectedKb.kb_id || selectedKb.id"></code>
+                                    <strong>向量索引：</strong>
+                                    <span class="badge bg-success" x-show="selectedKb.vector_indexed">已构建</span>
+                                    <span class="badge bg-secondary" x-show="!selectedKb.vector_indexed">未构建</span>
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <strong>描述：</strong> <span x-text="selectedKb.description || '无'"></span>
+                            </div>
+                            <!-- 向量化提示 -->
+                            <div class="alert alert-warning mb-3" x-show="needVectorization(selectedKb)">
+                                <i class="bi bi-exclamation-triangle"></i> 当前检索模式需要向量索引
+                                <button class="btn btn-warning btn-sm ms-2" @click="promptVectorize(selectedKb)">立即向量化</button>
                             </div>
 
                             <hr>
@@ -203,9 +230,42 @@ function knowledgeBaseApp() {
         deleteTarget: null,
         docFile: null,
         toast: { show: false, type: 'success', title: '', message: '' },
+        systemStatus: { retrieval_mode: 'bm25', embedding_enabled: false },
 
         init() {
             this.loadKbList();
+            this.loadSystemStatus();
+        },
+
+        async loadSystemStatus() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    this.systemStatus.retrieval_mode = data.data.retrieval?.mode || 'bm25';
+                    this.systemStatus.embedding_enabled = data.data.embedding?.enabled || false;
+                }
+            } catch (error) {
+                console.error('Failed to load system status:', error);
+            }
+        },
+
+        needVectorization(kb) {
+            return this.systemStatus.embedding_enabled &&
+                   this.systemStatus.retrieval_mode !== 'bm25' &&
+                   !kb.vector_indexed && kb.document_count > 0;
+        },
+
+        getModeDisplayName() {
+            const modes = { 'bm25': 'BM25', 'vector': '向量检索', 'hybrid': '混合检索' };
+            return modes[this.systemStatus.retrieval_mode] || this.systemStatus.retrieval_mode;
+        },
+
+        promptVectorize(kb) {
+            if (confirm('确定要为此知识库构建向量索引吗？这可能需要一些时间。')) {
+                this.selectedKb = kb;
+                this.reindexKb();
+            }
         },
 
         async loadKbList() {

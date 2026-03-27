@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+
+{% block title %}日志规则管理 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="logMetadataApp()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-file-earmark-rule"></i> 日志规则管理</h2>
+        <button class="btn btn-primary" @click="showCreateModal = true">
+            <i class="bi bi-plus-circle"></i> 创建规则集
+        </button>
+    </div>
+
+    <!-- Active Rules Status -->
+    <div class="alert alert-info mb-4 d-flex justify-content-between align-items-center">
+        <div>
+            <i class="bi bi-info-circle"></i>
+            当前激活规则集：<strong x-text="getActiveRuleSetName()"></strong>
+            <span class="badge bg-success ms-2" x-show="activeRulesId">已启用</span>
+        </div>
+    </div>
+
+    <!-- Rule Sets List -->
+    <div class="row" id="rules-list">
+        <template x-if="ruleSets.length === 0 && !loading">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 暂无规则集，点击上方按钮创建
+                </div>
+            </div>
+        </template>
+
+        <template x-for="rules in ruleSets" :key="rules.rules_id">
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100" :class="{'border-success': rules.is_active}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <span x-text="rules.name"></span>
+                            <span class="badge bg-success ms-2" x-show="rules.is_active">激活</span>
+                        </h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-success" @click="activateRules(rules.rules_id)"
+                                    x-show="!rules.is_active" title="激活">
+                                <i class="bi bi-check-circle"></i>
+                            </button>
+                            <button class="btn btn-outline-primary" @click="showRulesDetail(rules)" title="查看详情">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" @click="confirmDelete(rules)"
+                                    x-show="rules.rules_id !== 'default'" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text text-muted" x-text="rules.description || '无描述'"></p>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-list-check"></i> <span x-text="rules.rule_count || 0"></span> 规则</span>
+                            <span class="badge bg-light text-dark" x-text="rules.rules_id"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create Rule Set Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showCreateModal }" tabindex="-1" x-show="showCreateModal"
+         @click.self="showCreateModal = false" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> 创建规则集</h5>
+                    <button type="button" class="btn-close" @click="showCreateModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称 *</label>
+                        <input type="text" class="form-control" x-model="newRules.name" placeholder="输入规则集名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="newRules.description" placeholder="输入描述（可选）"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showCreateModal = false">取消</button>
+                    <button type="button" class="btn btn-primary" @click="createRules()" :disabled="!newRules.name">
+                        <span x-show="creating" class="spinner-border spinner-border-sm"></span>
+                        创建
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Detail Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showDetailModal }" tabindex="-1" x-show="showDetailModal"
+         @click.self="showDetailModal = false" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-list-check"></i> 规则集详情
+                        <span class="badge bg-success ms-2" x-show="selectedRules?.is_active">激活</span>
+                    </h5>
+                    <button type="button" class="btn-close" @click="showDetailModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <template x-if="selectedRules">
+                        <div>
+                            <div class="row mb-3">
+                                <div class="col-md-4"><strong>名称：</strong> <span x-text="selectedRules.name"></span></div>
+                                <div class="col-md-4"><strong>ID：</strong> <code x-text="selectedRules.rules_id"></code></div>
+                                <div class="col-md-4"><strong>规则数：</strong> <span x-text="selectedRules.rules?.length || 0"></span></div>
+                            </div>
+                            <div class="mb-3">
+                                <strong>描述：</strong> <span x-text="selectedRules.description || '无'"></span>
+                            </div>
+
+                            <hr>
+                            <!-- Add Rule Form -->
+                            <div class="mb-3">
+                                <h6><i class="bi bi-plus-circle"></i> 添加规则</h6>
+                                <form @submit.prevent="addRule()" class="row g-2">
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.file_path"
+                                               placeholder="日志文件路径 *" required>
+                                        <small class="text-muted">如: /var/log/sel.log</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.description"
+                                               placeholder="描述">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.keywordsText"
+                                               placeholder="关键词">
+                                        <small class="text-muted">逗号分隔</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-primary w-100" type="submit" :disabled="!newRule.file_path || addingRule">
+                                            <span x-show="addingRule" class="spinner-border spinner-border-sm"></span>
+                                            添加
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Rules List -->
+                            <h6 class="mb-3"><i class="bi bi-file-earmark-text"></i> 规则列表</h6>
+                            <div class="list-group">
+                                <div x-show="!selectedRules.rules || selectedRules.rules.length === 0"
+                                     class="list-group-item text-muted">暂无规则</div>
+                                <template x-for="rule in selectedRules.rules" :key="rule.rule_id">
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <code x-text="rule.file_path"></code>
+                                                <div class="text-muted small mt-1" x-text="rule.description"></div>
+                                                <div class="mt-1" x-show="rule.keywords?.length > 0">
+                                                    <small class="text-info">
+                                                        <i class="bi bi-tags"></i>
+                                                        <span x-text="rule.keywords.join(', ')"></span>
+                                                    </small>
+                                                </div>
+                                                <div class="mt-1" x-show="rule.suggested_plugins?.length > 0">
+                                                    <small class="text-secondary">
+                                                        <i class="bi bi-plug"></i>
+                                                        建议插件: <span x-text="rule.suggested_plugins.join(', ')"></span>
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-primary" @click="showEditRuleModal(rule)" title="编辑">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger" @click="deleteRule(rule.rule_id)" title="删除">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" @click="activateRules(selectedRules?.rules_id)"
+                            x-show="selectedRules && !selectedRules.is_active">
+                        <i class="bi bi-check-circle"></i> 激活此规则集
+                    </button>
+                    <button type="button" class="btn btn-secondary" @click="showDetailModal = false">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Rule Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showEditModal }" tabindex="-1" x-show="showEditModal"
+         @click.self="showEditModal = false" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> 编辑规则</h5>
+                    <button type="button" class="btn-close" @click="showEditModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">日志文件路径 *</label>
+                        <input type="text" class="form-control" x-model="editingRule.file_path"
+                               placeholder="如 /var/log/sel.log">
+                        <small class="text-muted">规则的唯一标识，对应日志文件的完整路径</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="editingRule.description"
+                                  placeholder="规则描述，用于 AI 理解日志类型"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">关键词（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="editingRule.keywordsText"
+                               placeholder="SEL, IPMI, event">
+                        <small class="text-muted">帮助 AI 识别日志内容的关键词</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">建议插件（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="editingRule.pluginsText"
+                               placeholder="log_parser, log_statistics">
+                        <small class="text-muted">分析此类日志时建议使用的插件</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showEditModal = false">取消</button>
+                    <button type="button" class="btn btn-primary" @click="updateRule()" :disabled="!editingRule.file_path">
+                        <span x-show="updatingRule" class="spinner-border spinner-border-sm"></span>
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" :class="{ 'show d-block': showDeleteModal }" tabindex="-1" x-show="showDeleteModal"
+         style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger"></i> 确认删除</h5>
+                    <button type="button" class="btn-close" @click="showDeleteModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除规则集 "<strong x-text="deleteTarget?.name"></strong>" 吗？</p>
+                    <p class="text-danger"><small>此操作不可恢复！</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showDeleteModal = false">取消</button>
+                    <button type="button" class="btn btn-danger" @click="deleteRules()">
+                        <span x-show="deleting" class="spinner-border spinner-border-sm"></span>
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+        <div class="toast" :class="{ 'show': toast.show }" role="alert">
+            <div class="toast-header">
+                <i :class="toast.type === 'success' ? 'bi-check-circle text-success' : 'bi-exclamation-circle text-danger'"></i>
+                <strong class="me-auto ms-2" x-text="toast.title"></strong>
+                <button type="button" class="btn-close" @click="toast.show = false"></button>
+            </div>
+            <div class="toast-body" x-text="toast.message"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function logMetadataApp() {
+    return {
+        ruleSets: [],
+        activeRulesId: 'default',
+        loading: true,
+        showCreateModal: false,
+        showDetailModal: false,
+        showEditModal: false,
+        showDeleteModal: false,
+        creating: false,
+        deleting: false,
+        addingRule: false,
+        updatingRule: false,
+        newRules: { name: '', description: '' },
+        selectedRules: null,
+        deleteTarget: null,
+        newRule: { file_path: '', description: '', keywordsText: '' },
+        editingRule: { rule_id: '', file_path: '', description: '', keywordsText: '', pluginsText: '' },
+        toast: { show: false, type: 'success', title: '', message: '' },
+
+        init() {
+            this.loadRuleSets();
+            this.loadActiveRules();
+        },
+
+        getActiveRuleSetName() {
+            const active = this.ruleSets.find(r => r.rules_id === this.activeRulesId);
+            return active?.name || this.activeRulesId;
+        },
+
+        async loadActiveRules() {
+            try {
+                const response = await fetch('/api/log-rules/active');
+                const data = await response.json();
+                if (data.success) {
+                    this.activeRulesId = data.data.active_rules_id;
+                }
+            } catch (error) {
+                console.error('Failed to load active rules:', error);
+            }
+        },
+
+        async loadRuleSets() {
+            this.loading = true;
+            try {
+                const response = await fetch('/api/log-rules');
+                const data = await response.json();
+                if (data.success) {
+                    this.ruleSets = data.data;
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '加载规则集列表失败');
+            }
+            this.loading = false;
+        },
+
+        async createRules() {
+            this.creating = true;
+            try {
+                const response = await fetch('/api/log-rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newRules)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则集创建成功');
+                    this.showCreateModal = false;
+                    this.newRules = { name: '', description: '' };
+                    this.loadRuleSets();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '创建规则集失败');
+            }
+            this.creating = false;
+        },
+
+        async showRulesDetail(rules) {
+            try {
+                const response = await fetch(`/api/log-rules/${rules.rules_id}`);
+                const data = await response.json();
+                if (data.success) {
+                    this.selectedRules = data.data;
+                    this.showDetailModal = true;
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '获取规则集详情失败');
+            }
+        },
+
+        async activateRules(rulesId) {
+            try {
+                const response = await fetch('/api/log-rules/active', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rules_id: rulesId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则集已激活');
+                    this.activeRulesId = rulesId;
+                    this.loadRuleSets();
+                    if (this.selectedRules) {
+                        this.selectedRules.is_active = rulesId === this.selectedRules.rules_id;
+                    }
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '激活规则集失败');
+            }
+        },
+
+        confirmDelete(rules) {
+            this.deleteTarget = rules;
+            this.showDeleteModal = true;
+        },
+
+        async deleteRules() {
+            if (!this.deleteTarget) return;
+            this.deleting = true;
+            try {
+                const response = await fetch(`/api/log-rules/${this.deleteTarget.rules_id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则集已删除');
+                    this.showDeleteModal = false;
+                    this.deleteTarget = null;
+                    this.loadRuleSets();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '删除规则集失败');
+            }
+            this.deleting = false;
+        },
+
+        async addRule() {
+            if (!this.newRule.file_path || !this.selectedRules) return;
+            this.addingRule = true;
+            try {
+                const keywords = this.newRule.keywordsText
+                    .split(',')
+                    .map(k => k.trim())
+                    .filter(k => k);
+
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_path: this.newRule.file_path,
+                        description: this.newRule.description || '',
+                        keywords: keywords,
+                        suggested_plugins: []
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则添加成功');
+                    this.newRule = { file_path: '', description: '', keywordsText: '' };
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '添加规则失败');
+            }
+            this.addingRule = false;
+        },
+
+        showEditRuleModal(rule) {
+            this.editingRule = {
+                rule_id: rule.rule_id,
+                file_path: rule.file_path || '',
+                description: rule.description || '',
+                keywordsText: (rule.keywords || []).join(', '),
+                pluginsText: (rule.suggested_plugins || []).join(', ')
+            };
+            this.showEditModal = true;
+        },
+
+        async updateRule() {
+            if (!this.editingRule.file_path || !this.selectedRules) return;
+            this.updatingRule = true;
+            try {
+                const keywords = this.editingRule.keywordsText
+                    .split(',')
+                    .map(k => k.trim())
+                    .filter(k => k);
+                const plugins = this.editingRule.pluginsText
+                    .split(',')
+                    .map(p => p.trim())
+                    .filter(p => p);
+
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules/${this.editingRule.rule_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_path: this.editingRule.file_path,
+                        description: this.editingRule.description,
+                        keywords: keywords,
+                        suggested_plugins: plugins
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则更新成功');
+                    this.showEditModal = false;
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '更新规则失败');
+            }
+            this.updatingRule = false;
+        },
+
+        async deleteRule(ruleId) {
+            if (!confirm('确定要删除此规则吗？')) return;
+            try {
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules/${ruleId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则已删除');
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '错误', '删除规则失败');
+            }
+        },
+
+        showToast(type, title, message) {
+            this.toast = { show: true, type, title, message };
+            setTimeout(() => { this.toast.show = false; }, 3000);
+        }
+    };
+}
+</script>
+{% endblock %}

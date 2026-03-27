@@ -211,6 +211,18 @@ class PluginManager:
             categories[cat_value]['plugins'].append(plugin.get_info().to_dict())
         return categories
 
+    def get_plugins_ai_description(self) -> str:
+        """
+        Get AI-readable description for all plugins.
+
+        Returns:
+            str: AI-readable plugins description text
+        """
+        descriptions = []
+        for plugin in self._plugins.values():
+            descriptions.append(plugin.get_ai_description())
+        return "\n---\n".join(descriptions)
+
     def run_analysis(self, plugin_ids: List[str], log_file: str) -> MultiPluginAnalysisResult:
         """
         Run analysis using specified plugins.

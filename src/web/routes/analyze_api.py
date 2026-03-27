@@ -9,7 +9,9 @@ from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify
 
 from src.ai_analyzer.analyzer import AIAnalyzer
+from src.ai_analyzer.selection_agent import SelectionAgent
 from src.knowledge_base.manager import KnowledgeBaseManager
+from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, extract_archive,
@@ -22,6 +24,7 @@ analyze_bp = Blueprint('analyze_api', __name__)
 # Global instances
 config_manager = None
 kb_manager = None
+log_metadata_manager = None
 
 
 def get_config_manager():
@@ -40,6 +43,14 @@ def get_kb_manager():
     if kb_manager is None:
         kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
     return kb_manager
+
+
+def get_log_metadata_manager():
+    """Get or create LogMetadataManager instance."""
+    global log_metadata_manager
+    if log_metadata_manager is None:
+        log_metadata_manager = LogMetadataManager()
+    return log_metadata_manager
 
 
 def allowed_log_file(filename):
@@ -105,6 +116,8 @@ def analyze_stream():
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
             kb_id = request.form.get('kb_id', '').strip() or None
             user_prompt = request.form.get('user_prompt', '').strip() or None
+            ai_selection_mode = request.form.get('ai_selection_mode', 'false').lower() == 'true'
+            log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
             # 创建工作目录
             temp_base = get_temp_base_dir()
@@ -147,23 +160,72 @@ def analyze_stream():
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                     all_log_content += f.read() + "\n"
 
-            # Stage 1: Plugin Analysis
-            yield generate_sse_event({'stage': 'plugin', 'status': 'start', 'message': f'Analyzing {len(log_file_paths)} log file(s)...'})
-
-            # Get plugin manager and run analysis with selected plugins
+            # Get plugin manager
             plugin_manager = get_plugin_manager()
 
-            # Use all available plugins if none selected
-            selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+            # Initialize selection variables
+            selected_plugins = []
+            selected_log_files = log_file_paths
+            selection_result = None
+
+            # Stage 0: AI Selection (if enabled)
+            if ai_selection_mode and enable_ai:
+                yield generate_sse_event({
+                    'stage': 'selection',
+                    'status': 'start',
+                    'message': 'AI 正在智能选择插件...'
+                })
+
+                try:
+                    # 使用指定的日志规则
+                    if log_rules_id:
+                        get_log_metadata_manager().set_active_rules(log_rules_id)
+
+                    selection_agent = SelectionAgent(
+                        config_manager=get_config_manager(),
+                        log_metadata_manager=get_log_metadata_manager(),
+                        plugin_manager=plugin_manager
+                    )
+                    selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
+
+                    selected_plugins = selection_result['selected_plugins']
+                    selected_log_files = selection_result['selected_files']
+
+                    yield generate_sse_event({
+                        'stage': 'selection',
+                        'status': 'complete',
+                        'result': selection_result
+                    })
+
+                except Exception as e:
+                    yield generate_sse_event({
+                        'stage': 'selection',
+                        'status': 'error',
+                        'message': f'AI 选择失败: {str(e)}，将执行全量分析'
+                    })
+                    # Fallback to all plugins and files
+                    selected_plugins = [p.id for p in plugin_manager.get_all_plugins()]
+                    selected_log_files = log_file_paths
+            else:
+                # Use user-selected plugins or all plugins
+                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+                selected_log_files = log_file_paths
+
+            # Stage 1: Plugin Analysis
+            yield generate_sse_event({
+                'stage': 'plugin',
+                'status': 'start',
+                'message': f'Analyzing {len(selected_log_files)} log file(s) with {len(selected_plugins)} plugin(s)...'
+            })
 
             if not selected_plugins:
                 yield generate_sse_event({'stage': 'error', 'message': 'No plugins available for analysis'})
                 return
 
-            # Run analysis with selected plugins
+            # Run analysis with selected plugins on selected files
             try:
                 plugin_result = plugin_manager.run_analysis_multiple_files(
-                    selected_plugins, log_file_paths
+                    selected_plugins, selected_log_files
                 )
                 combined_result = plugin_result.to_dict()
             except Exception as e:

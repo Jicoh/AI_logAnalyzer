@@ -10,8 +10,10 @@ def register_routes(app):
     from src.web.routes.kb_api import kb_bp
     from src.web.routes.analyze_api import analyze_bp
     from src.web.routes.history_api import history_bp
+    from src.web.routes.log_metadata_api import log_metadata_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(kb_bp)
     app.register_blueprint(analyze_bp)
     app.register_blueprint(history_bp)
+    app.register_blueprint(log_metadata_bp)

@@ -32,6 +32,8 @@ class PluginInfo:
     author: str = ""
     enabled: bool = True
     tags: List[str] = field(default_factory=list)
+    capabilities: List[str] = field(default_factory=list)
+    target_keywords: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -43,7 +45,9 @@ class PluginInfo:
             'category': self.category.value,
             'author': self.author,
             'enabled': self.enabled,
-            'tags': self.tags
+            'tags': self.tags,
+            'capabilities': self.capabilities,
+            'target_keywords': self.target_keywords
         }
 
 
@@ -195,6 +199,33 @@ class BasePlugin(ABC):
         """Plugin tags for filtering/searching."""
         return []
 
+    @property
+    def capabilities(self) -> List[str]:
+        """Plugin capabilities for AI selection."""
+        return []
+
+    @property
+    def target_keywords(self) -> List[str]:
+        """Target keywords for AI selection."""
+        return []
+
+    def get_ai_description(self) -> str:
+        """
+        Generate AI-readable plugin description.
+
+        Returns:
+            str: AI-readable description text
+        """
+        desc = f"插件ID: {self.id}\n"
+        desc += f"名称: {self.name}\n"
+        desc += f"类别: {self.category.value}\n"
+        desc += f"描述: {self.description}\n"
+        if self.capabilities:
+            desc += f"能力: {', '.join(self.capabilities)}\n"
+        if self.target_keywords:
+            desc += f"目标关键词: {', '.join(self.target_keywords)}\n"
+        return desc
+
     def validate_config(self) -> bool:
         """
         Validate plugin configuration.
@@ -222,5 +253,7 @@ class BasePlugin(ABC):
             category=self.category,
             author=self.author,
             enabled=True,
-            tags=self.tags
+            tags=self.tags,
+            capabilities=self.capabilities,
+            target_keywords=self.target_keywords
         )

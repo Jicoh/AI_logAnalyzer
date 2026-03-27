@@ -43,6 +43,9 @@ def list_kb():
         for kb in kb_list:
             if 'kb_id' in kb and 'id' not in kb:
                 kb['id'] = kb['kb_id']
+            # Add vector_indexed status
+            kb_dir = os.path.join(manager.document_dir, kb.get('kb_id') or kb.get('id'))
+            kb['vector_indexed'] = os.path.exists(os.path.join(kb_dir, 'vector_index'))
         return jsonify({'success': True, 'data': kb_list})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -85,6 +88,10 @@ def get_kb(kb_id):
         # Add 'id' field as alias for 'kb_id' for frontend compatibility
         if 'kb_id' in kb_info and 'id' not in kb_info:
             kb_info['id'] = kb_info['kb_id']
+
+        # Add vector_indexed status
+        kb_dir = os.path.join(manager.document_dir, kb_id)
+        kb_info['vector_indexed'] = os.path.exists(os.path.join(kb_dir, 'vector_index'))
 
         return jsonify({'success': True, 'data': kb_info})
     except Exception as e:
