@@ -49,6 +49,11 @@ class ConfigManager:
             "nlist": 100,
             "nprobe": 10,
             "use_gpu": False
+        },
+        "web": {
+            "host": "127.0.0.1",
+            "port": 18888,
+            "debug": True
         }
     }
 
