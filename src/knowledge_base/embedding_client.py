@@ -69,7 +69,7 @@ class EmbeddingClient:
         # 分批处理
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i:i + self.batch_size]
-            embeddings = self._embed_batch(batch)
+            embeddings = self.embed_batch(batch)
             if embeddings is None:
                 return None
             all_embeddings.extend(embeddings)
@@ -89,12 +89,12 @@ class EmbeddingClient:
         if not self.is_enabled():
             return None
 
-        result = self._embed_batch([query])
+        result = self.embed_batch([query])
         if result is None or len(result) == 0:
             return None
         return result[0]
 
-    def _embed_batch(self, texts: List[str]) -> Optional[List[List[float]]]:
+    def embed_batch(self, texts: List[str]) -> Optional[List[List[float]]]:
         """
         调用 Embedding API 处理一批文本
 
@@ -167,7 +167,7 @@ class EmbeddingClient:
             return False, "Base URL not configured"
 
         # 发送测试请求
-        result = self._embed_batch(["test"])
+        result = self.embed_batch(["test"])
 
         if result is not None:
             return True, f"Connection successful, model: {self.model}, dimension: {len(result[0])}"

@@ -97,15 +97,15 @@ class LogParserPlugin(BasePlugin):
         log_filename = os.path.basename(log_file)
 
         # Read and parse log file
-        lines = self._read_log_file(log_file)
-        parsed_lines = self._parse_lines(lines)
+        lines = self.read_log_file(log_file)
+        parsed_lines = self.parse_lines(lines)
 
         # Extract errors and warnings
-        errors = self._extract_errors(parsed_lines)
-        warnings = self._extract_warnings(parsed_lines)
+        errors = self.extract_errors(parsed_lines)
+        warnings = self.extract_warnings(parsed_lines)
 
         # Calculate statistics
-        statistics = self._calculate_statistics(lines, parsed_lines, len(errors), len(warnings))
+        statistics = self.calculate_statistics(lines, parsed_lines, len(errors), len(warnings))
 
         return AnalysisResult(
             plugin_id=self.id,
@@ -119,21 +119,21 @@ class LogParserPlugin(BasePlugin):
             statistics=statistics
         )
 
-    def _read_log_file(self, log_file: str) -> List[str]:
+    def read_log_file(self, log_file: str) -> List[str]:
         """Read log file content."""
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
             return f.readlines()
 
-    def _parse_lines(self, lines: List[str]) -> List[Dict[str, Any]]:
+    def parse_lines(self, lines: List[str]) -> List[Dict[str, Any]]:
         """Parse log lines."""
         parsed = []
         for line_num, line in enumerate(lines, 1):
-            parsed_line = self._parse_line(line.strip(), line_num)
+            parsed_line = self.parse_line(line.strip(), line_num)
             if parsed_line:
                 parsed.append(parsed_line)
         return parsed
 
-    def _parse_line(self, line: str, line_num: int) -> Dict[str, Any]:
+    def parse_line(self, line: str, line_num: int) -> Dict[str, Any]:
         """Parse a single log line."""
         if not line:
             return None
@@ -180,37 +180,37 @@ class LogParserPlugin(BasePlugin):
 
         return result
 
-    def _extract_errors(self, parsed_lines: List[Dict]) -> List[Dict]:
+    def extract_errors(self, parsed_lines: List[Dict]) -> List[Dict]:
         """Extract error information."""
         errors = []
         error_pattern = re.compile('|'.join(self.ERROR_PATTERNS), re.IGNORECASE)
 
         for line_info in parsed_lines:
             if line_info['level'] in ['ERROR', 'CRITICAL', 'FATAL']:
-                errors.append(self._format_issue(line_info))
+                errors.append(self.format_issue(line_info))
             elif error_pattern.search(line_info['message']):
                 # Avoid duplicates
                 if line_info['level'] not in ['WARN', 'WARNING']:
-                    errors.append(self._format_issue(line_info))
+                    errors.append(self.format_issue(line_info))
 
         return errors
 
-    def _extract_warnings(self, parsed_lines: List[Dict]) -> List[Dict]:
+    def extract_warnings(self, parsed_lines: List[Dict]) -> List[Dict]:
         """Extract warning information."""
         warnings = []
         warning_pattern = re.compile('|'.join(self.WARNING_PATTERNS), re.IGNORECASE)
 
         for line_info in parsed_lines:
             if line_info['level'] in ['WARN', 'WARNING']:
-                warnings.append(self._format_issue(line_info))
+                warnings.append(self.format_issue(line_info))
             elif warning_pattern.search(line_info['message']):
                 # Avoid duplicates with errors
                 if line_info['level'] not in ['ERROR', 'CRITICAL', 'FATAL']:
-                    warnings.append(self._format_issue(line_info))
+                    warnings.append(self.format_issue(line_info))
 
         return warnings
 
-    def _format_issue(self, line_info: Dict) -> Dict:
+    def format_issue(self, line_info: Dict) -> Dict:
         """Format issue information."""
         return {
             'timestamp': line_info['timestamp'],
@@ -220,7 +220,7 @@ class LogParserPlugin(BasePlugin):
             'line_number': line_info['line_number']
         }
 
-    def _calculate_statistics(
+    def calculate_statistics(
         self,
         lines: List[str],
         parsed_lines: List[Dict],

@@ -66,30 +66,30 @@ class LogAnalyzer:
         self.results['analysis_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         self.results['log_file'] = os.path.basename(log_file)
 
-        lines = self._read_log_file(log_file)
-        parsed_lines = self._parse_lines(lines)
+        lines = self.read_log_file(log_file)
+        parsed_lines = self.parse_lines(lines)
 
-        self._extract_errors(parsed_lines)
-        self._extract_warnings(parsed_lines)
-        self._calculate_statistics(lines, parsed_lines)
+        self.extract_errors(parsed_lines)
+        self.extract_warnings(parsed_lines)
+        self.calculate_statistics(lines, parsed_lines)
 
         return self.results
 
-    def _read_log_file(self, log_file):
+    def read_log_file(self, log_file):
         """读取日志文件"""
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
             return f.readlines()
 
-    def _parse_lines(self, lines):
+    def parse_lines(self, lines):
         """解析日志行"""
         parsed = []
         for line_num, line in enumerate(lines, 1):
-            parsed_line = self._parse_line(line.strip(), line_num)
+            parsed_line = self.parse_line(line.strip(), line_num)
             if parsed_line:
                 parsed.append(parsed_line)
         return parsed
 
-    def _parse_line(self, line, line_num):
+    def parse_line(self, line, line_num):
         """解析单行日志"""
         if not line:
             return None
@@ -136,39 +136,39 @@ class LogAnalyzer:
 
         return result
 
-    def _extract_errors(self, parsed_lines):
+    def extract_errors(self, parsed_lines):
         """提取错误信息"""
         errors = []
         error_pattern = re.compile('|'.join(self.ERROR_PATTERNS), re.IGNORECASE)
 
         for line_info in parsed_lines:
             if line_info['level'] in ['ERROR', 'CRITICAL', 'FATAL']:
-                errors.append(self._format_issue(line_info))
+                errors.append(self.format_issue(line_info))
             elif error_pattern.search(line_info['message']):
                 # 避免重复添加
                 if line_info['level'] not in ['WARN', 'WARNING']:
-                    errors.append(self._format_issue(line_info))
+                    errors.append(self.format_issue(line_info))
 
         self.results['errors'] = errors
         self.results['error_count'] = len(errors)
 
-    def _extract_warnings(self, parsed_lines):
+    def extract_warnings(self, parsed_lines):
         """提取警告信息"""
         warnings = []
         warning_pattern = re.compile('|'.join(self.WARNING_PATTERNS), re.IGNORECASE)
 
         for line_info in parsed_lines:
             if line_info['level'] in ['WARN', 'WARNING']:
-                warnings.append(self._format_issue(line_info))
+                warnings.append(self.format_issue(line_info))
             elif warning_pattern.search(line_info['message']):
                 # 避免重复添加已标记为错误的
                 if line_info['level'] not in ['ERROR', 'CRITICAL', 'FATAL']:
-                    warnings.append(self._format_issue(line_info))
+                    warnings.append(self.format_issue(line_info))
 
         self.results['warnings'] = warnings
         self.results['warning_count'] = len(warnings)
 
-    def _format_issue(self, line_info):
+    def format_issue(self, line_info):
         """格式化问题信息"""
         return {
             'timestamp': line_info['timestamp'],
@@ -178,7 +178,7 @@ class LogAnalyzer:
             'line_number': line_info['line_number']
         }
 
-    def _calculate_statistics(self, lines, parsed_lines):
+    def calculate_statistics(self, lines, parsed_lines):
         """计算统计数据"""
         total_lines = len(lines)
         level_counter = Counter()

@@ -29,11 +29,11 @@ class KnowledgeBaseManager:
             config: 配置字典，包含bm25参数、embedding参数、检索参数和缓存参数
         """
         if document_dir is None:
-            document_dir = self._get_default_document_dir()
+            document_dir = self.get_default_document_dir()
         self.document_dir = document_dir
         self.config = config or {}
         self.kb_registry_path = os.path.join(self.document_dir, 'kb_registry.json')
-        self.kb_registry = self._load_registry()
+        self.kb_registry = self.load_registry()
 
         # 初始化 Embedding 客户端
         embedding_config = self.config.get('embedding', {})
@@ -47,20 +47,20 @@ class KnowledgeBaseManager:
             cache_dir=cache_config.get('cache_dir', None)
         )
 
-    def _get_default_document_dir(self):
+    def get_default_document_dir(self):
         """获取默认文档目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'document')
 
-    def _load_registry(self):
+    def load_registry(self):
         """加载知识库注册表"""
         if os.path.exists(self.kb_registry_path):
             with open(self.kb_registry_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return {'knowledge_bases': {}}
 
-    def _save_registry(self):
+    def save_registry(self):
         """保存知识库注册表"""
         os.makedirs(os.path.dirname(self.kb_registry_path), exist_ok=True)
         with open(self.kb_registry_path, 'w', encoding='utf-8') as f:
@@ -105,7 +105,7 @@ class KnowledgeBaseManager:
             'name': name,
             'path': kb_dir
         }
-        self._save_registry()
+        self.save_registry()
 
         return kb_id
 
@@ -128,7 +128,7 @@ class KnowledgeBaseManager:
             shutil.rmtree(kb_dir)
 
         del self.kb_registry['knowledge_bases'][kb_id]
-        self._save_registry()
+        self.save_registry()
 
         return True
 
@@ -224,7 +224,7 @@ class KnowledgeBaseManager:
             json.dump(kb_info, f, indent=4, ensure_ascii=False)
 
         # 更新索引
-        self._update_index(kb_id)
+        self.update_index(kb_id)
 
         return doc_id
 
@@ -262,11 +262,11 @@ class KnowledgeBaseManager:
             json.dump(kb_info, f, indent=4, ensure_ascii=False)
 
         # 更新索引
-        self._update_index(kb_id)
+        self.update_index(kb_id)
 
         return True
 
-    def _update_index(self, kb_id):
+    def update_index(self, kb_id):
         """更新知识库索引（BM25 + 向量索引）"""
         kb_info = self.get(kb_id)
         if not kb_info:
@@ -377,8 +377,8 @@ class KnowledgeBaseManager:
         if not kb_info['documents']:
             return {'status': 'error', 'message': '知识库无文档'}
 
-        # 调用 _update_index 重建索引
-        self._update_index(kb_id)
+        # 调用 update_index 重建索引
+        self.update_index(kb_id)
 
         # 检查向量索引是否成功构建
         kb_dir = os.path.join(self.document_dir, kb_id)

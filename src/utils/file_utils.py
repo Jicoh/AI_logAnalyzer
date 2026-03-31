@@ -132,7 +132,7 @@ def extract_archive(archive_path, extract_to):
         with tarfile.open(archive_path, 'r:*') as tar:
             members = tar.getmembers()
             # 检测是否有公共的顶层目录
-            common_prefix = _get_common_prefix([m.name for m in members if not m.isdir()])
+            common_prefix = get_common_prefix([m.name for m in members if not m.isdir()])
 
             for member in members:
                 if member.isdir():
@@ -154,7 +154,7 @@ def extract_archive(archive_path, extract_to):
         with zipfile.ZipFile(archive_path, 'r') as zf:
             names = [n for n in zf.namelist() if not n.endswith('/')]
             # 检测是否有公共的顶层目录
-            common_prefix = _get_common_prefix(names)
+            common_prefix = get_common_prefix(names)
 
             for name in names:
                 # 安全处理：避免路径穿越
@@ -180,7 +180,7 @@ def extract_archive(archive_path, extract_to):
     return extracted_files
 
 
-def _get_common_prefix(paths):
+def get_common_prefix(paths):
     """
     获取路径列表的公共前缀（以/结尾的目录前缀）
 

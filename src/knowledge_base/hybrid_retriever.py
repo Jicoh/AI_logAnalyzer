@@ -59,13 +59,13 @@ class HybridRetriever:
             list: 相关文档块列表
         """
         if self.mode == 'bm25':
-            return self._retrieve_bm25(query, top_n)
+            return self.retrieve_bm25(query, top_n)
         elif self.mode == 'vector':
-            return self._retrieve_vector(query, top_n)
+            return self.retrieve_vector(query, top_n)
         else:  # hybrid
-            return self._retrieve_hybrid(query, top_n)
+            return self.retrieve_hybrid(query, top_n)
 
-    def _retrieve_bm25(self, query: str, top_n: int) -> List[dict]:
+    def retrieve_bm25(self, query: str, top_n: int) -> List[dict]:
         """仅使用 BM25 检索"""
         if not self.bm25_retriever:
             return []
@@ -75,11 +75,11 @@ class HybridRetriever:
             r['bm25_score'] = r.get('score', 0)
         return results
 
-    def _retrieve_vector(self, query: str, top_n: int) -> List[dict]:
+    def retrieve_vector(self, query: str, top_n: int) -> List[dict]:
         """仅使用向量检索"""
         if not self.vector_retriever or not self.vector_retriever.is_indexed():
             logger.warning("Vector retriever not available, falling back to BM25")
-            return self._retrieve_bm25(query, top_n)
+            return self.retrieve_bm25(query, top_n)
 
         results = self.vector_retriever.retrieve(query, top_n)
         # 添加来源标记
@@ -87,18 +87,18 @@ class HybridRetriever:
             r['vector_score'] = r.get('score', 0)
         return results
 
-    def _retrieve_hybrid(self, query: str, top_n: int) -> List[dict]:
+    def retrieve_hybrid(self, query: str, top_n: int) -> List[dict]:
         """混合检索，使用 RRF 融合"""
         # 检查向量检索器是否可用
         vector_available = self.vector_retriever and self.vector_retriever.is_indexed()
 
         if not vector_available:
             logger.warning("Vector retriever not available, falling back to BM25 only")
-            return self._retrieve_bm25(query, top_n)
+            return self.retrieve_bm25(query, top_n)
 
         if not self.bm25_retriever:
             logger.warning("BM25 retriever not available, falling back to vector only")
-            return self._retrieve_vector(query, top_n)
+            return self.retrieve_vector(query, top_n)
 
         # 获取更多候选结果用于融合
         candidate_count = top_n * self.top_n_multiplier
@@ -108,11 +108,11 @@ class HybridRetriever:
         vector_results = self.vector_retriever.retrieve(query, candidate_count)
 
         # 使用 RRF 融合
-        fused_results = self._rrf_fuse(bm25_results, vector_results, top_n)
+        fused_results = self.rrf_fuse(bm25_results, vector_results, top_n)
 
         return fused_results
 
-    def _rrf_fuse(
+    def rrf_fuse(
         self,
         bm25_results: List[dict],
         vector_results: List[dict],
@@ -138,7 +138,7 @@ class HybridRetriever:
         # 处理 BM25 结果
         for rank, result in enumerate(bm25_results, 1):
             chunk = result.get('chunk', {})
-            chunk_id = self._get_chunk_id(chunk)
+            chunk_id = self.get_chunk_id(chunk)
 
             if chunk_id not in chunk_scores:
                 chunk_scores[chunk_id] = {
@@ -155,7 +155,7 @@ class HybridRetriever:
         # 处理向量结果
         for rank, result in enumerate(vector_results, 1):
             chunk = result.get('chunk', {})
-            chunk_id = self._get_chunk_id(chunk)
+            chunk_id = self.get_chunk_id(chunk)
 
             if chunk_id not in chunk_scores:
                 chunk_scores[chunk_id] = {
@@ -199,7 +199,7 @@ class HybridRetriever:
 
         return sorted_results
 
-    def _get_chunk_id(self, chunk: dict) -> str:
+    def get_chunk_id(self, chunk: dict) -> str:
         """
         获取文档块的唯一标识
 

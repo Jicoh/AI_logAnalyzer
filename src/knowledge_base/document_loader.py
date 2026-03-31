@@ -39,10 +39,10 @@ class DocumentLoader:
             raise ValueError(f"不支持的文件格式: {ext}")
 
         loader_map = {
-            '.txt': self._load_txt,
-            '.md': self._load_txt,
-            '.pdf': self._load_pdf,
-            '.docx': self._load_docx
+            '.txt': self.load_txt,
+            '.md': self.load_txt,
+            '.pdf': self.load_pdf,
+            '.docx': self.load_docx
         }
 
         content = loader_map[ext](file_path)
@@ -55,12 +55,12 @@ class DocumentLoader:
             'char_count': len(content)
         }
 
-    def _load_txt(self, file_path):
+    def load_txt(self, file_path):
         """加载txt/md文件"""
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
 
-    def _load_pdf(self, file_path):
+    def load_pdf(self, file_path):
         """加载PDF文件"""
         try:
             from pypdf import PdfReader
@@ -75,7 +75,7 @@ class DocumentLoader:
                 text_parts.append(text)
         return '\n'.join(text_parts)
 
-    def _load_docx(self, file_path):
+    def load_docx(self, file_path):
         """加载Word文档"""
         try:
             from docx import Document

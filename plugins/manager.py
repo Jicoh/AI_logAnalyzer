@@ -58,11 +58,11 @@ class PluginManager:
             if not os.path.exists(plugin_dir):
                 continue
 
-            loaded_count += self._scan_directory(plugin_dir)
+            loaded_count += self.scan_directory(plugin_dir)
 
         return loaded_count
 
-    def _scan_directory(self, directory: str) -> int:
+    def scan_directory(self, directory: str) -> int:
         """
         Scan a directory for plugins.
 
@@ -79,14 +79,14 @@ class PluginManager:
 
             # Check if it's a potential plugin directory
             if os.path.isdir(item_path):
-                plugin = self._load_plugin(item_path)
+                plugin = self.load_plugin(item_path)
                 if plugin:
                     self._plugins[plugin.id] = plugin
                     loaded_count += 1
 
         return loaded_count
 
-    def _load_plugin(self, plugin_path: str) -> Optional[BasePlugin]:
+    def load_plugin(self, plugin_path: str) -> Optional[BasePlugin]:
         """
         Load a plugin from a directory.
 
@@ -251,7 +251,7 @@ class PluginManager:
             raise RuntimeError("No plugins successfully executed")
 
         # Combine results into multi-plugin structure
-        return self._combine_results(results)
+        return self.combine_results(results)
 
     def run_analysis_multiple_files(
         self,
@@ -283,9 +283,9 @@ class PluginManager:
         if not all_results:
             raise RuntimeError("No plugins successfully executed")
 
-        return self._combine_results(all_results)
+        return self.combine_results(all_results)
 
-    def _combine_results(self, results: List[AnalysisResult]) -> MultiPluginAnalysisResult:
+    def combine_results(self, results: List[AnalysisResult]) -> MultiPluginAnalysisResult:
         """
         Combine multiple analysis results into MultiPluginAnalysisResult.
 

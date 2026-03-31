@@ -79,11 +79,11 @@ class SelectionAgent:
         """
         # 检查是否有用户提示词
         if not user_prompt or not user_prompt.strip():
-            return self._fallback_result(log_files, "无用户提示词，执行全量分析")
+            return self.fallback_result(log_files, "无用户提示词，执行全量分析")
 
         # 检查 API 配置
         if not self.ai_client.base_url or not self.ai_client.api_key:
-            return self._fallback_result(log_files, "API 配置不完整，执行全量分析")
+            return self.fallback_result(log_files, "API 配置不完整，执行全量分析")
 
         # 获取插件描述
         plugin_descriptions = self.plugin_manager.get_plugins_ai_description()
@@ -100,17 +100,17 @@ class SelectionAgent:
 
         try:
             # 调用 AI（非流式）
-            response_text = self._call_ai(prompt)
+            response_text = self.call_ai(prompt)
 
             # 解析 JSON 结果
-            result = self._parse_response(response_text, log_files)
+            result = self.parse_response(response_text, log_files)
 
             return result
 
         except Exception as e:
-            return self._fallback_result(log_files, f"AI 选择失败: {str(e)}，执行全量分析")
+            return self.fallback_result(log_files, f"AI 选择失败: {str(e)}，执行全量分析")
 
-    def _call_ai(self, prompt: str) -> str:
+    def call_ai(self, prompt: str) -> str:
         """
         调用 AI 获取完整响应
 
@@ -129,7 +129,7 @@ class SelectionAgent:
 
         return full_response
 
-    def _parse_response(self, response_text: str, log_files: List[str]) -> Dict[str, Any]:
+    def parse_response(self, response_text: str, log_files: List[str]) -> Dict[str, Any]:
         """
         解析 AI 响应
 
@@ -153,11 +153,11 @@ class SelectionAgent:
 
             # 验证结果格式
             if not isinstance(result, dict):
-                return self._fallback_result(log_files, "响应格式错误")
+                return self.fallback_result(log_files, "响应格式错误")
 
             # 检查 fallback
             if result.get('fallback', False):
-                return self._fallback_result(log_files, result.get('reason', '用户请求不明确'))
+                return self.fallback_result(log_files, result.get('reason', '用户请求不明确'))
 
             # 验证选择的插件
             selected_plugins = result.get('selected_plugins', [])
@@ -165,22 +165,22 @@ class SelectionAgent:
             valid_plugins = [p for p in selected_plugins if p in all_plugin_ids]
 
             if not valid_plugins:
-                return self._fallback_result(log_files, "未选择有效插件，执行全量分析")
+                return self.fallback_result(log_files, "未选择有效插件，执行全量分析")
 
             # 验证选择的文件
             selected_files = result.get('selected_files', [])
-            log_filenames = [self._get_filename(f) for f in log_files]
+            log_filenames = [self.get_filename(f) for f in log_files]
             valid_files = []
 
             for selected_file in selected_files:
                 # 匹配文件名（支持部分匹配）
                 for log_file in log_files:
-                    if selected_file in log_file or self._get_filename(log_file) == selected_file:
+                    if selected_file in log_file or self.get_filename(log_file) == selected_file:
                         valid_files.append(log_file)
                         break
 
             if not valid_files:
-                return self._fallback_result(log_files, "未选择有效文件，执行全量分析")
+                return self.fallback_result(log_files, "未选择有效文件，执行全量分析")
 
             return {
                 'selected_plugins': valid_plugins,
@@ -190,14 +190,14 @@ class SelectionAgent:
             }
 
         except json.JSONDecodeError:
-            return self._fallback_result(log_files, "JSON 解析失败，执行全量分析")
+            return self.fallback_result(log_files, "JSON 解析失败，执行全量分析")
 
-    def _get_filename(self, file_path: str) -> str:
+    def get_filename(self, file_path: str) -> str:
         """获取文件名"""
         import os
         return os.path.basename(file_path)
 
-    def _fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:
+    def fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:
         """
         生成 fallback 结果
 

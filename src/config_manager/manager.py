@@ -58,16 +58,16 @@ class ConfigManager:
             project_root = os.path.dirname(os.path.dirname(config_dir))
             config_path = os.path.join(project_root, "config", "ai_config.json")
         self.config_path = config_path
-        self.config = self._load_config()
+        self.config = self.load_config()
 
-    def _load_config(self):
+    def load_config(self):
         """加载配置文件"""
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        return self._create_default_config()
+        return self.create_default_config()
 
-    def _create_default_config(self):
+    def create_default_config(self):
         """创建默认配置"""
         config_dir = os.path.dirname(self.config_path)
         if not os.path.exists(config_dir):
@@ -115,7 +115,7 @@ class ConfigManager:
 
     def reload(self):
         """重新加载配置文件"""
-        self.config = self._load_config()
+        self.config = self.load_config()
 
     def get_all(self):
         """获取所有配置"""

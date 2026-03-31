@@ -68,12 +68,12 @@ class LogStatisticsPlugin(BasePlugin):
         log_filename = os.path.basename(log_file)
 
         # Read log file
-        lines = self._read_log_file(log_file)
+        lines = self.read_log_file(log_file)
 
         # Analyze statistics
-        time_distribution = self._analyze_time_distribution(lines)
-        component_activity = self._analyze_component_activity(lines)
-        log_size_info = self._analyze_log_size(lines, log_file)
+        time_distribution = self.analyze_time_distribution(lines)
+        component_activity = self.analyze_component_activity(lines)
+        log_size_info = self.analyze_log_size(lines, log_file)
 
         statistics = {
             'total_lines': len(lines),
@@ -97,12 +97,12 @@ class LogStatisticsPlugin(BasePlugin):
             statistics=statistics
         )
 
-    def _read_log_file(self, log_file: str) -> List[str]:
+    def read_log_file(self, log_file: str) -> List[str]:
         """Read log file content."""
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
             return f.readlines()
 
-    def _analyze_time_distribution(self, lines: List[str]) -> Dict[str, int]:
+    def analyze_time_distribution(self, lines: List[str]) -> Dict[str, int]:
         """Analyze time distribution of log entries."""
         hour_counter = Counter()
 
@@ -122,7 +122,7 @@ class LogStatisticsPlugin(BasePlugin):
 
         return dict(hour_counter.most_common(24))
 
-    def _analyze_component_activity(self, lines: List[str]) -> Dict[str, int]:
+    def analyze_component_activity(self, lines: List[str]) -> Dict[str, int]:
         """Analyze component activity."""
         component_counter = Counter()
 
@@ -136,7 +136,7 @@ class LogStatisticsPlugin(BasePlugin):
 
         return dict(component_counter.most_common(15))
 
-    def _analyze_log_size(self, lines: List[str], log_file: str) -> Dict[str, Any]:
+    def analyze_log_size(self, lines: List[str], log_file: str) -> Dict[str, Any]:
         """Analyze log file size."""
         size_bytes = os.path.getsize(log_file)
 

@@ -50,7 +50,7 @@ class VectorStore:
         # 旧 numpy 实现 (用于回退)
         self.vectors = None
 
-    def _create_index(self, n_vectors: int) -> bool:
+    def create_index(self, n_vectors: int) -> bool:
         """
         创建 Faiss 索引
 
@@ -109,9 +109,9 @@ class VectorStore:
 
             # 首次创建索引
             if self.index is None:
-                if not self._create_index(len(vectors_np)):
+                if not self.create_index(len(vectors_np)):
                     # 回退到 numpy
-                    self._add_vectors_numpy(vectors)
+                    self.add_vectors_numpy(vectors)
                     return
 
             # IVF 索引需要训练
@@ -124,9 +124,9 @@ class VectorStore:
             logger.info(f"Added {len(vectors)} vectors to Faiss index, total: {self.doc_count}")
         else:
             # 使用 numpy 回退
-            self._add_vectors_numpy(vectors)
+            self.add_vectors_numpy(vectors)
 
-    def _add_vectors_numpy(self, vectors: List[List[float]]):
+    def add_vectors_numpy(self, vectors: List[List[float]]):
         """使用 numpy 添加向量 (回退方案)"""
         new_vectors = np.array(vectors, dtype=np.float32)
 
@@ -154,11 +154,11 @@ class VectorStore:
 
         # 使用 Faiss
         if self.index is not None:
-            return self._search_faiss(query_vector, top_n)
+            return self.search_faiss(query_vector, top_n)
         else:
-            return self._search_numpy(query_vector, top_n)
+            return self.search_numpy(query_vector, top_n)
 
-    def _search_faiss(self, query_vector: List[float], top_n: int) -> List[tuple]:
+    def search_faiss(self, query_vector: List[float], top_n: int) -> List[tuple]:
         """使用 Faiss 搜索"""
         query = np.array([query_vector], dtype=np.float32)
         faiss.normalize_L2(query)
@@ -180,7 +180,7 @@ class VectorStore:
 
         return results
 
-    def _search_numpy(self, query_vector: List[float], top_n: int) -> List[tuple]:
+    def search_numpy(self, query_vector: List[float], top_n: int) -> List[tuple]:
         """使用 numpy 搜索 (回退方案)"""
         if self.vectors is None:
             return []
@@ -264,7 +264,7 @@ class VectorStore:
                 if old_vectors is not None and len(old_vectors) > 0:
                     # 迁移到 Faiss
                     if FAISS_AVAILABLE and self.faiss_config.get('enabled', True):
-                        self._create_index(len(old_vectors))
+                        self.create_index(len(old_vectors))
                         self.add_vectors(old_vectors.tolist())
                         # 保存为新格式
                         self.save(file_path)

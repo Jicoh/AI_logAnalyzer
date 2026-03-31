@@ -29,7 +29,7 @@ class LRUCache:
         self._timestamps: dict = {}
         self._lock = threading.RLock()
 
-    def _generate_key(self, key: str) -> str:
+    def generate_key(self, key: str) -> str:
         """生成缓存键"""
         return hashlib.md5(key.encode('utf-8')).hexdigest()
 
@@ -43,7 +43,7 @@ class LRUCache:
         Returns:
             缓存值，不存在或过期返回None
         """
-        cache_key = self._generate_key(key)
+        cache_key = self.generate_key(key)
 
         with self._lock:
             if cache_key not in self._cache:
@@ -51,7 +51,7 @@ class LRUCache:
 
             # 检查是否过期
             if time.time() - self._timestamps.get(cache_key, 0) > self.ttl:
-                self._remove(cache_key)
+                self.remove(cache_key)
                 return None
 
             # 移到末尾(LRU)
@@ -66,7 +66,7 @@ class LRUCache:
             key: 缓存键
             value: 缓存值
         """
-        cache_key = self._generate_key(key)
+        cache_key = self.generate_key(key)
 
         with self._lock:
             # 如果已存在，更新值并移到末尾
@@ -79,13 +79,13 @@ class LRUCache:
             # 检查是否需要淘汰
             while len(self._cache) >= self.max_size:
                 oldest_key = next(iter(self._cache))
-                self._remove(oldest_key)
+                self.remove(oldest_key)
 
             # 添加新条目
             self._cache[cache_key] = value
             self._timestamps[cache_key] = time.time()
 
-    def _remove(self, cache_key: str) -> None:
+    def remove(self, cache_key: str) -> None:
         """移除缓存条目"""
         if cache_key in self._cache:
             del self._cache[cache_key]
@@ -102,10 +102,10 @@ class LRUCache:
         Returns:
             是否成功删除
         """
-        cache_key = self._generate_key(key)
+        cache_key = self.generate_key(key)
         with self._lock:
             if cache_key in self._cache:
-                self._remove(cache_key)
+                self.remove(cache_key)
                 return True
             return False
 
@@ -137,24 +137,24 @@ class DiskCache:
             ttl: 缓存过期时间(秒)，默认24小时
         """
         if cache_dir is None:
-            cache_dir = self._get_default_cache_dir()
+            cache_dir = self.get_default_cache_dir()
         self.cache_dir = cache_dir
         self.ttl = ttl
         os.makedirs(cache_dir, exist_ok=True)
 
-    def _get_default_cache_dir(self) -> str:
+    def get_default_cache_dir(self) -> str:
         """获取默认缓存目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'data', 'cache')
 
-    def _generate_key(self, key: str) -> str:
+    def generate_key(self, key: str) -> str:
         """生成缓存文件名"""
         return hashlib.md5(key.encode('utf-8')).hexdigest() + '.json'
 
-    def _get_cache_path(self, key: str) -> str:
+    def get_cache_path(self, key: str) -> str:
         """获取缓存文件路径"""
-        return os.path.join(self.cache_dir, self._generate_key(key))
+        return os.path.join(self.cache_dir, self.generate_key(key))
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -166,7 +166,7 @@ class DiskCache:
         Returns:
             缓存值，不存在或过期返回None
         """
-        cache_path = self._get_cache_path(key)
+        cache_path = self.get_cache_path(key)
 
         if not os.path.exists(cache_path):
             return None
@@ -192,7 +192,7 @@ class DiskCache:
             key: 缓存键
             value: 缓存值
         """
-        cache_path = self._get_cache_path(key)
+        cache_path = self.get_cache_path(key)
 
         data = {
             'key': key,
@@ -216,7 +216,7 @@ class DiskCache:
         Returns:
             是否成功删除
         """
-        cache_path = self._get_cache_path(key)
+        cache_path = self.get_cache_path(key)
 
         if os.path.exists(cache_path):
             try:

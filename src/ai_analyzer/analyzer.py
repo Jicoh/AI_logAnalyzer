@@ -26,27 +26,27 @@ class AIAnalyzer:
         """
         self.config_manager = config_manager
         self.kb_manager = kb_manager
-        self.client = self._create_client()
-        self.default_prompt_path = self._get_default_prompt_path()
+        self.client = self.create_client()
+        self.default_prompt_path = self.get_default_prompt_path()
 
-    def _create_client(self):
+    def create_client(self):
         """创建AI客户端"""
         api_config = self.config_manager.get('api', {})
         return AIClient(api_config)
 
-    def _get_default_prompt_path(self):
+    def get_default_prompt_path(self):
         """获取默认提示词文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'default_prompt.txt')
 
-    def _get_prompt_template_path(self):
+    def get_prompt_template_path(self):
         """获取提示词模板文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'default_prompt_template.txt')
 
-    def _load_default_prompt(self):
+    def load_default_prompt(self):
         """加载默认提示词，优先使用用户自定义，否则使用模板"""
         # 先尝试加载用户自定义提示词
         if os.path.exists(self.default_prompt_path):
@@ -56,7 +56,7 @@ class AIAnalyzer:
                     return content
 
         # 回退到模板文件
-        template_path = self._get_prompt_template_path()
+        template_path = self.get_prompt_template_path()
         if os.path.exists(template_path):
             with open(template_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -82,10 +82,10 @@ class AIAnalyzer:
         # 并行获取知识库内容
         knowledge_content = ""
         if kb_id and self.kb_manager:
-            knowledge_content = self._get_knowledge_content(kb_id, plugin_result)
+            knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
 
         # 构建提示词
-        prompt = self._build_prompt(
+        prompt = self.build_prompt(
             plugin_result=plugin_result,
             log_content=log_content,
             knowledge_content=knowledge_content,
@@ -107,7 +107,7 @@ class AIAnalyzer:
         }
         return result
 
-    def _get_knowledge_content(self, kb_id, plugin_result) -> str:
+    def get_knowledge_content(self, kb_id, plugin_result) -> str:
         """
         并行从知识库获取相关内容
 
@@ -143,7 +143,7 @@ class AIAnalyzer:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有查询任务
             future_to_query = {
-                executor.submit(self._search_kb, kb_id, query, 2): query
+                executor.submit(self.search_kb, kb_id, query, 2): query
                 for query in queries
             }
 
@@ -167,7 +167,7 @@ class AIAnalyzer:
 
         return '\n\n'.join(content_parts)
 
-    def _search_kb(self, kb_id: str, query: str, top_n: int) -> list:
+    def search_kb(self, kb_id: str, query: str, top_n: int) -> list:
         """
         搜索单个知识库（用于并行调用）
 
@@ -183,13 +183,13 @@ class AIAnalyzer:
             return self.kb_manager.search(kb_id, query, top_n)
         return []
 
-    def _build_prompt(self, plugin_result, log_content, knowledge_content, user_prompt):
+    def build_prompt(self, plugin_result, log_content, knowledge_content, user_prompt):
         """构建分析提示词"""
         # 格式化插件分析结果
-        plugin_analysis = self._format_plugin_result(plugin_result)
+        plugin_analysis = self.format_plugin_result(plugin_result)
 
         # 加载提示词模板
-        prompt_template = self._load_default_prompt()
+        prompt_template = self.load_default_prompt()
 
         # 如果用户提供了提示词，使用用户的
         if user_prompt:
@@ -203,7 +203,7 @@ class AIAnalyzer:
 
         return prompt
 
-    def _format_plugin_result(self, result):
+    def format_plugin_result(self, result):
         """格式化插件分析结果"""
         lines = []
         lines.append(f"日志文件: {result.get('log_file', '未知')}")

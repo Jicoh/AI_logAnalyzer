@@ -20,27 +20,27 @@ class LogMetadataManager:
             config_path: 配置文件路径，默认为 config/log_metadata.json
         """
         if config_path is None:
-            config_path = self._get_default_config_path()
+            config_path = self.get_default_config_path()
         self.config_path = config_path
-        self.config = self._load_config()
+        self.config = self.load_config()
 
         # 规则集管理
-        self.rules_config_path = self._get_rules_config_path()
-        self.rules_config = self._load_rules_config()
+        self.rules_config_path = self.get_rules_config_path()
+        self.rules_config = self.load_rules_config()
 
-    def _get_default_config_path(self):
+    def get_default_config_path(self):
         """获取默认配置文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'log_metadata.json')
 
-    def _get_rules_config_path(self):
+    def get_rules_config_path(self):
         """获取规则集配置文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'log_metadata_rules.json')
 
-    def _load_config(self):
+    def load_config(self):
         """加载配置文件"""
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -50,7 +50,7 @@ class LogMetadataManager:
             'file_descriptions': {}
         }
 
-    def _load_rules_config(self):
+    def load_rules_config(self):
         """加载规则集配置文件"""
         if os.path.exists(self.rules_config_path):
             with open(self.rules_config_path, 'r', encoding='utf-8') as f:
@@ -66,16 +66,16 @@ class LogMetadataManager:
             },
             'active_rules_id': 'default'
         }
-        self._save_rules_config(default_config)
+        self.save_rules_config(default_config)
         return default_config
 
-    def _save_config(self):
+    def save_config(self):
         """保存配置文件"""
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
         with open(self.config_path, 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=4, ensure_ascii=False)
 
-    def _save_rules_config(self, config=None):
+    def save_rules_config(self, config=None):
         """保存规则集配置文件"""
         if config is None:
             config = self.rules_config
@@ -153,7 +153,7 @@ class LogMetadataManager:
             'description': description,
             'rules': {}
         }
-        self._save_rules_config()
+        self.save_rules_config()
         return rules_id
 
     def update_rule_set(self, rules_id: str, name: str = None, description: str = None) -> bool:
@@ -177,7 +177,7 @@ class LogMetadataManager:
         if description is not None:
             rule_set['description'] = description
 
-        self._save_rules_config()
+        self.save_rules_config()
         return True
 
     def delete_rule_set(self, rules_id: str) -> bool:
@@ -202,7 +202,7 @@ class LogMetadataManager:
             self.rules_config['active_rules_id'] = 'default'
 
         del self.rules_config['rule_sets'][rules_id]
-        self._save_rules_config()
+        self.save_rules_config()
         return True
 
     def set_active_rules(self, rules_id: str) -> bool:
@@ -219,7 +219,7 @@ class LogMetadataManager:
             return False
 
         self.rules_config['active_rules_id'] = rules_id
-        self._save_rules_config()
+        self.save_rules_config()
         return True
 
     def get_active_rules_id(self) -> str:
@@ -268,7 +268,7 @@ class LogMetadataManager:
             'keywords': rule.get('keywords', []),
             'suggested_plugins': rule.get('suggested_plugins', [])
         }
-        self._save_rules_config()
+        self.save_rules_config()
         return rule_id
 
     def update_rule_in_set(self, rules_id: str, rule_id: str, rule: Dict) -> bool:
@@ -297,7 +297,7 @@ class LogMetadataManager:
         existing_rule['keywords'] = rule.get('keywords', existing_rule.get('keywords', []))
         existing_rule['suggested_plugins'] = rule.get('suggested_plugins', existing_rule.get('suggested_plugins', []))
 
-        self._save_rules_config()
+        self.save_rules_config()
         return True
 
     def remove_rule_from_set(self, rules_id: str, rule_id: str) -> bool:
@@ -319,7 +319,7 @@ class LogMetadataManager:
             return False
 
         del rules[rule_id]
-        self._save_rules_config()
+        self.save_rules_config()
         return True
 
     def get_rule_from_set(self, rules_id: str, rule_id: str) -> Optional[Dict]:
@@ -426,7 +426,7 @@ class LogMetadataManager:
             description: 描述信息字典
         """
         self.config['file_descriptions'][file_path] = description
-        self._save_config()
+        self.save_config()
 
     def get_file_descriptions(self, file_paths: List[str], rules_id: str = None) -> str:
         """
@@ -456,7 +456,7 @@ class LogMetadataManager:
     def clear_file_descriptions(self) -> None:
         """清除所有自定义文件描述"""
         self.config['file_descriptions'] = {}
-        self._save_config()
+        self.save_config()
 
     # ==================== 兼容旧接口 ====================
 

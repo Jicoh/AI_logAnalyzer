@@ -48,7 +48,7 @@ class BM25:
 
         for doc in documents:
             if isinstance(doc, str):
-                terms = self._tokenize(doc)
+                terms = self.tokenize(doc)
             else:
                 terms = doc
 
@@ -65,9 +65,9 @@ class BM25:
 
         self.avgdl = total_len / self.doc_count if self.doc_count > 0 else 0
         self.doc_vecs = doc_terms_list
-        self._calculate_idf()
+        self.calculate_idf()
 
-    def _tokenize(self, text):
+    def tokenize(self, text):
         """简单分词"""
         # 使用jieba进行中文分词
         try:
@@ -77,7 +77,7 @@ class BM25:
             # 回退到简单分词
             return text.lower().split()
 
-    def _calculate_idf(self):
+    def calculate_idf(self):
         """计算IDF值"""
         import math
         for term, df in self.doc_freqs.items():
@@ -94,18 +94,18 @@ class BM25:
             list: 分数列表
         """
         if isinstance(query, str):
-            query_terms = self._tokenize(query)
+            query_terms = self.tokenize(query)
         else:
             query_terms = query
 
         scores = []
         for idx, doc_vec in enumerate(self.doc_vecs):
-            score = self._score_document(query_terms, doc_vec, self.doc_len[idx])
+            score = self.score_document(query_terms, doc_vec, self.doc_len[idx])
             scores.append(score)
 
         return scores
 
-    def _score_document(self, query_terms, doc_vec, doc_len):
+    def score_document(self, query_terms, doc_vec, doc_len):
         """计算单个文档的BM25分数"""
         score = 0.0
         for term in query_terms:
