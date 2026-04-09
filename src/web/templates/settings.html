@@ -25,13 +25,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">API Key</label>
-                        <div class="input-group">
-                            <input :type="showApiKey ? 'text' : 'password'" class="form-control"
-                                   x-model="config.api.api_key" placeholder="sk-...">
-                            <button class="btn btn-outline-secondary" type="button" @click="showApiKey = !showApiKey">
-                                <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
-                            </button>
-                        </div>
+                        <input type="text" class="form-control" x-model="config.api.api_key" placeholder="sk-...">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Model</label>
@@ -262,7 +256,6 @@ function settingsApp() {
             }
         },
         defaultPrompt: '',
-        showApiKey: false,
         saving: false,
         toast: {
             show: false,

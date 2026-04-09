@@ -343,15 +343,8 @@ def get_config():
     """Get current AI configuration."""
     try:
         manager = get_config_manager()
+        manager.reload()  # 每次请求都重新加载配置文件
         config = manager.get_all()
-
-        # Hide sensitive information (but show masked version for settings page)
-        if 'api' in config and 'api_key' in config['api']:
-            api_key = config['api']['api_key']
-            if api_key and api_key != '***':
-                # Show masked version: sk-****xxxx
-                config['api']['api_key'] = api_key[:6] + '****' + api_key[-4:] if len(api_key) > 10 else '****'
-
         return jsonify({'success': True, 'data': config})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -369,8 +362,7 @@ def update_config():
             api_config = data['api']
             if 'base_url' in api_config:
                 manager.set('api.base_url', api_config['base_url'])
-            if 'api_key' in api_config and api_config['api_key'] and not api_config['api_key'].startswith('sk-****'):
-                # Only update if not masked value
+            if 'api_key' in api_config and api_config['api_key']:
                 manager.set('api.api_key', api_config['api_key'])
             if 'model' in api_config:
                 manager.set('api.model', api_config['model'])

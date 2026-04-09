@@ -35,8 +35,10 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Module | Location | Purpose |
 |--------|----------|---------|
 | Config Manager | `src/config_manager/` | AI config (API, BM25 params, embedding settings) |
-| Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search |
+| Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
+| Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
+| Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
 | Plugin System | `plugins/` | Dynamic plugin discovery and execution |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
 
@@ -49,12 +51,11 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 ### Data Directories
 - `data/uploads/` - Web-uploaded files
 - `data/temp/` - Temporary processing (work directories with timestamp_filename format)
+- `data/plugin_output/` - Plugin analysis results
 - `data/ai_output/` - AI analysis results
 - `document/` - Knowledge base storage
 
 ## Development Guidelines
-
-From `ai_docs/development_guide.md`:
 
 ### Naming Conventions
 - Functions: `snake_case` (**不要在函数名前加下划线**)
@@ -134,3 +135,18 @@ Config file: `config/ai_config.json`
 - `bm25.*` - BM25 parameters (k1, b)
 - `embedding.*` - Vector embedding settings (enabled, provider, model, dimension)
 - `retrieval.*` - Search mode (bm25/vector/hybrid), weights, RRF parameters
+
+Prompt files:
+- `config/default_prompt_template.txt` - Read-only template
+- `config/default_prompt.txt` - User-customizable prompt (overrides template)
+- `config/log_metadata_rules.json` - Log file description rulesets for AI selection
+
+## Knowledge Base Retrieval
+
+Three retrieval modes supported via `retrieval.mode` config:
+
+1. **bm25**: Keyword-based search using jieba for Chinese text
+2. **vector**: Semantic search using embedding API (requires `embedding.enabled=true`)
+3. **hybrid**: Combines BM25 + vector using RRF (Reciprocal Rank Fusion) algorithm
+
+RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+rank_vector)`
