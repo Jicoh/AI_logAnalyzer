@@ -6,7 +6,7 @@ import os
 import json
 import tempfile
 from datetime import datetime
-from flask import Blueprint, request, Response, stream_with_context, jsonify
+from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
 
 from src.ai_analyzer.analyzer import AIAnalyzer
 from src.ai_analyzer.selection_agent import SelectionAgent
@@ -19,6 +19,7 @@ from src.utils.file_utils import (
     create_work_directory, ensure_dir
 )
 from plugins.manager import get_plugin_manager
+from plugins import render_html
 
 analyze_bp = Blueprint('analyze_api', __name__)
 
@@ -269,6 +270,9 @@ def analyze_stream():
             with open(plugin_output_file, 'w', encoding='utf-8') as f:
                 json.dump(combined_result, f, indent=4, ensure_ascii=False)
 
+            # 生成HTML文件
+            render_html(plugin_output_file)
+
             yield generate_sse_event({
                 'stage': 'plugin',
                 'status': 'complete',
@@ -325,10 +329,15 @@ def analyze_stream():
                     })
 
             # 第3阶段：完成
+            # 生成HTML相对路径（用于web访问）
+            root_dir = get_project_root()
+            html_relative_path = os.path.relpath(plugin_output_file.replace('.json', '.html'), root_dir)
+
             yield generate_sse_event({
                 'stage': 'complete',
                 'message': 'Analysis complete',
-                'work_dir': work_dir
+                'work_dir': work_dir,
+                'html_path': html_relative_path
             })
 
         except Exception as e:
@@ -342,6 +351,18 @@ def analyze_stream():
             'X-Accel-Buffering': 'no'
         }
     )
+
+
+@analyze_bp.route('/api/plugin-result/html/<path:html_path>')
+def get_plugin_result_html(html_path):
+    """获取插件分析结果的HTML文件。"""
+    root_dir = get_project_root()
+    full_path = os.path.join(root_dir, html_path)
+    if not os.path.exists(full_path):
+        return jsonify({'success': False, 'error': 'HTML file not found'}), 404
+    directory = os.path.dirname(full_path)
+    filename = os.path.basename(full_path)
+    return send_from_directory(directory, filename)
 
 
 @analyze_bp.route('/api/analyze/plugins', methods=['GET'])
