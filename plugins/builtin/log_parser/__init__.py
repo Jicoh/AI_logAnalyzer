@@ -1,3 +1,0 @@
-"""
-Log Parser Plugin Package
-"""

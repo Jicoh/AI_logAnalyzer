@@ -57,7 +57,8 @@ def create_app():
     # Preload plugins
     print("Preloading plugins...")
     from plugins.manager import get_plugin_manager
-    plugin_manager = get_plugin_manager()
+    custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
+    plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
     print(f"Available plugins: {[p.id for p in plugin_manager.get_all_plugins()]}")
 
     # Register routes

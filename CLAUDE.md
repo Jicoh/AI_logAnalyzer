@@ -39,14 +39,69 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
-| Plugin System | `plugins/` | Dynamic plugin discovery and execution |
+| Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
+| Custom Plugins | `custom_plugins/` | User-defined plugins |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
 
 ### Plugin System
 - Plugins extend log analysis capabilities
-- Located in `plugins/builtin/` (core) and `plugins/custom/` (user-defined)
+- **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
+- **Builtin plugins**: `plugins/builtin/` (core plugins in submodule)
+- **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
 - Each plugin implements `BasePlugin` with `analyze(log_file)` returning `AnalysisResult`
 - Plugin categories: PARSER, ANALYZER, DETECTOR, REPORTER, OTHER
+
+#### Plugin Development
+
+Create a new plugin in `custom_plugins/my_plugin/`:
+
+```
+custom_plugins/my_plugin/
+├── plugin.py      # Required: implements BasePlugin
+└── plugin.json    # Optional: metadata
+```
+
+```python
+# plugin.py
+from plugins.base import BasePlugin, PluginCategory, AnalysisResult
+
+class MyPlugin(BasePlugin):
+    @property
+    def id(self) -> str:
+        return "my_plugin"
+
+    @property
+    def name(self) -> str:
+        return "My Plugin"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def description(self) -> str:
+        return "Plugin description"
+
+    @property
+    def category(self) -> PluginCategory:
+        return PluginCategory.ANALYZER
+
+    def analyze(self, log_file: str) -> AnalysisResult:
+        # Implement analysis logic
+        return AnalysisResult(
+            plugin_id=self.id,
+            plugin_name=self.name,
+            analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            log_file=os.path.basename(log_file),
+            error_count=0,
+            warning_count=0,
+            errors=[],
+            warnings=[],
+            statistics={}
+        )
+```
+
+See `plugins/README.md` for full documentation.
 
 ### Data Directories
 - `data/uploads/` - Web-uploaded files
@@ -54,6 +109,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 - `data/plugin_output/` - Plugin analysis results
 - `data/ai_output/` - AI analysis results
 - `document/` - Knowledge base storage
+- `custom_plugins/` - User-defined plugins
 
 ## Development Guidelines
 

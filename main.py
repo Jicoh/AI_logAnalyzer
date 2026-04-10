@@ -34,7 +34,9 @@ def cmd_analyze(args):
     log_content = read_file(args.log)
 
     # 初始化插件管理器
-    plugin_manager = get_plugin_manager()
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
+    plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
 
     # 确定要使用的插件
     if args.plugins:
@@ -264,7 +266,9 @@ def cmd_config(args):
 
 def cmd_plugin(args):
     """插件管理命令"""
-    plugin_manager = get_plugin_manager()
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
+    plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
 
     if args.plugin_action == 'list':
         plugins = plugin_manager.get_all_plugins()

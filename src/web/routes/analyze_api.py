@@ -27,6 +27,18 @@ kb_manager = None
 log_metadata_manager = None
 
 
+def get_project_root():
+    """Get project root directory."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def get_plugin_manager_with_custom():
+    """Get plugin manager with custom plugins directory."""
+    root_dir = get_project_root()
+    custom_dir = os.path.join(root_dir, 'custom_plugins')
+    return get_plugin_manager(custom_dirs=[custom_dir])
+
+
 def get_config_manager():
     """Get or create ConfigManager instance."""
     global config_manager
@@ -161,7 +173,7 @@ def analyze_stream():
                     all_log_content += f.read() + "\n"
 
             # Get plugin manager
-            plugin_manager = get_plugin_manager()
+            plugin_manager = get_plugin_manager_with_custom()
 
             # Initialize selection variables
             selected_plugins = []
@@ -320,7 +332,7 @@ def analyze_stream():
 def get_plugins():
     """Get available analysis plugins."""
     try:
-        manager = get_plugin_manager()
+        manager = get_plugin_manager_with_custom()
         plugins = [info.to_dict() for info in manager.get_plugins_info()]
         return jsonify({'success': True, 'data': plugins})
     except Exception as e:
@@ -331,7 +343,7 @@ def get_plugins():
 def get_plugin_categories():
     """Get plugins grouped by category."""
     try:
-        manager = get_plugin_manager()
+        manager = get_plugin_manager_with_custom()
         categories = manager.get_plugins_by_category_dict()
         return jsonify({'success': True, 'data': categories})
     except Exception as e:
