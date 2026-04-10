@@ -112,16 +112,26 @@ AI_logAnalyzer/
 
 ## 插件开发
 
-在 `plugins/custom/` 下创建插件目录：
+在 `custom_plugins/` 下创建插件目录：
 
 ```
-plugins/custom/my_plugin/
-├── __init__.py
-├── plugin.py       # 继承 BasePlugin，实现 analyze() 方法
+custom_plugins/my_plugin/
+├── plugin.py       # 实现 analyze() 方法
 └── plugin.json     # 元数据文件
 ```
 
-插件必须导出 `plugin_class` 变量。详见 `plugins/base.py`。
+**plugin.json 示例：**
+```json
+{
+    "id": "my_plugin",
+    "name": "My Plugin",
+    "version": "1.0.0",
+    "description": "插件描述",
+    "plugin_type": "CloudBMC"
+}
+```
+
+详见 `plugins/README.md`。
 
 ## 内置插件
 

@@ -110,94 +110,72 @@
                         </div>
                     </div>
 
-                    <!-- Plugin Results -->
-                    <div x-show="detail?.plugin_result?.plugins">
+                    <!-- Plugin Results (New Structure) -->
+                    <div x-show="detail?.plugin_result?.sections?.length > 0">
                         <h6 class="mb-3"><i class="bi bi-puzzle"></i> 插件分析结果</h6>
-                        <template x-for="pluginId in getSortedPluginIds()" :key="pluginId">
-                            <div class="plugin-section mb-3 border rounded p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0">
-                                        <i class="bi bi-puzzle"></i>
-                                        <span x-text="detail.plugin_result.plugins[pluginId]?.plugin_name"></span>
-                                    </h6>
-                                    <div>
-                                        <span class="badge bg-danger me-1" x-show="detail.plugin_result.plugins[pluginId]?.error_count > 0">
-                                            <i class="bi bi-x-circle"></i>
-                                            <span x-text="detail.plugin_result.plugins[pluginId]?.error_count"></span>
-                                        </span>
-                                        <span class="badge bg-warning me-1" x-show="detail.plugin_result.plugins[pluginId]?.warning_count > 0">
-                                            <i class="bi bi-exclamation-triangle"></i>
-                                            <span x-text="detail.plugin_result.plugins[pluginId]?.warning_count"></span>
-                                        </span>
+                        <template x-for="section in detail.plugin_result.sections" :key="$index">
+                            <div class="mb-3">
+
+                                <!-- Stats Section -->
+                                <div x-show="section.type === 'stats'" class="stats-section">
+                                    <h6 class="text-muted mb-2" x-text="section.title"></h6>
+                                    <div class="row">
+                                        <template x-for="item in section.items" :key="item.label">
+                                            <div class="col-md-3 col-sm-6 mb-2">
+                                                <div class="stat-card p-2 rounded text-center border"
+                                                     :class="'border-' + getSeverityColor(item.severity)">
+                                                    <strong :class="'text-' + getSeverityColor(item.severity)" x-text="item.value"></strong>
+                                                    <div><small class="text-muted" x-text="item.label"></small></div>
+                                                </div>
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
 
-                                <!-- Plugin statistics -->
-                                <div x-show="Object.keys(detail.plugin_result.plugins[pluginId]?.statistics || {}).length > 0" class="mb-2">
-                                    <small class="text-muted">统计信息:</small>
-                                    <div class="d-flex flex-wrap gap-2 mt-1">
-                                        <template x-for="(value, key) in detail.plugin_result.plugins[pluginId]?.statistics" :key="key">
-                                            <span class="badge bg-light text-dark border">
-                                                <span x-text="formatStatKey(key)"></span>:
-                                                <span x-text="formatStatValue(value)"></span>
+                                <!-- Table Section -->
+                                <div x-show="section.type === 'table'" class="table-section">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">
+                                            <i class="bi" :class="'bi-' + (section.icon || 'table')"></i>
+                                            <span x-text="section.title"></span>
+                                        </h6>
+                                        <span class="badge" :class="'bg-' + getSeverityColor(section.severity)"
+                                              x-text="section.rows.length + ' 条'"></span>
+                                    </div>
+                                    <div class="table-responsive" style="max-height: 150px;">
+                                        <table class="table table-sm table-hover small">
+                                            <thead class="table-light sticky-top">
+                                                <tr>
+                                                    <template x-for="col in section.columns" :key="col.key">
+                                                        <th x-text="col.label"></th>
+                                                    </template>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="row in section.rows" :key="$index">
+                                                    <tr>
+                                                        <template x-for="col in section.columns" :key="col.key">
+                                                            <td><span x-text="truncateText(row[col.key], 40)"></span></td>
+                                                        </template>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Chart Section -->
+                                <div x-show="section.type === 'chart'" class="chart-section">
+                                    <h6 class="text-muted mb-2" x-text="section.title"></h6>
+                                    <div class="d-flex">
+                                        <template x-for="(label, i) in section.data.labels" :key="i">
+                                            <span class="badge me-1 mb-1" :class="'bg-' + getChartColor(i)">
+                                                <span x-text="label"></span>: <span x-text="section.data.values[i]"></span>
                                             </span>
                                         </template>
                                     </div>
                                 </div>
 
-                                <!-- Errors -->
-                                <div x-show="detail.plugin_result.plugins[pluginId]?.errors?.length > 0" class="mt-2">
-                                    <small class="text-danger"><i class="bi bi-x-circle"></i> 错误详情</small>
-                                    <div class="table-responsive" style="max-height: 150px; overflow-y: auto;">
-                                        <table class="table table-sm table-hover small">
-                                            <thead class="table-light sticky-top">
-                                                <tr>
-                                                    <th>行号</th>
-                                                    <th>时间</th>
-                                                    <th>组件</th>
-                                                    <th>消息</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <template x-for="err in detail.plugin_result.plugins[pluginId]?.errors" :key="err.line_number + '-' + $index">
-                                                    <tr>
-                                                        <td><code x-text="err.line_number"></code></td>
-                                                        <td x-text="err.timestamp || '-'"></td>
-                                                        <td x-text="err.component || '-'"></td>
-                                                        <td><small x-text="truncateText(err.message, 50)"></small></td>
-                                                    </tr>
-                                                </template>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Warnings -->
-                                <div x-show="detail.plugin_result.plugins[pluginId]?.warnings?.length > 0" class="mt-2">
-                                    <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> 警告详情</small>
-                                    <div class="table-responsive" style="max-height: 150px; overflow-y: auto;">
-                                        <table class="table table-sm table-hover small">
-                                            <thead class="table-light sticky-top">
-                                                <tr>
-                                                    <th>行号</th>
-                                                    <th>时间</th>
-                                                    <th>组件</th>
-                                                    <th>消息</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <template x-for="warn in detail.plugin_result.plugins[pluginId]?.warnings" :key="warn.line_number + '-' + $index">
-                                                    <tr>
-                                                        <td><code x-text="warn.line_number"></code></td>
-                                                        <td x-text="warn.timestamp || '-'"></td>
-                                                        <td x-text="warn.component || '-'"></td>
-                                                        <td><small x-text="truncateText(warn.message, 50)"></small></td>
-                                                    </tr>
-                                                </template>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
                             </div>
                         </template>
                     </div>
@@ -269,69 +247,58 @@ function historyApp() {
         },
 
         getTotalErrors() {
-            if (!this.detail?.plugin_result?.plugins) return 0;
-            return Object.values(this.detail.plugin_result.plugins).reduce((sum, p) => sum + (p.error_count || 0), 0);
+            if (!this.detail?.plugin_result?.sections) return 0;
+            let total = 0;
+            this.detail.plugin_result.sections.forEach(s => {
+                if (s.type === 'stats' && s.items) {
+                    s.items.forEach(item => {
+                        if (item.severity === 'error') total += (item.value || 0);
+                    });
+                }
+            });
+            return total;
         },
 
         getTotalWarnings() {
-            if (!this.detail?.plugin_result?.plugins) return 0;
-            return Object.values(this.detail.plugin_result.plugins).reduce((sum, p) => sum + (p.warning_count || 0), 0);
+            if (!this.detail?.plugin_result?.sections) return 0;
+            let total = 0;
+            this.detail.plugin_result.sections.forEach(s => {
+                if (s.type === 'stats' && s.items) {
+                    s.items.forEach(item => {
+                        if (item.severity === 'warning') total += (item.value || 0);
+                    });
+                }
+            });
+            return total;
         },
 
         getTotalLines() {
-            if (!this.detail?.plugin_result?.plugins) return 0;
-            let maxLines = 0;
-            Object.values(this.detail.plugin_result.plugins).forEach(p => {
-                if (p.statistics?.total_lines) {
-                    maxLines = Math.max(maxLines, p.statistics.total_lines);
+            if (!this.detail?.plugin_result?.sections) return 0;
+            let total = 0;
+            this.detail.plugin_result.sections.forEach(s => {
+                if (s.type === 'stats' && s.items) {
+                    s.items.forEach(item => {
+                        if (item.label && item.label.includes('行')) total = Math.max(total, item.value || 0);
+                    });
                 }
             });
-            return maxLines;
+            return total;
         },
 
-        getSortedPluginIds() {
-            if (!this.detail?.plugin_result?.plugins) return [];
-            return Object.keys(this.detail.plugin_result.plugins).sort((a, b) => {
-                const pA = this.detail.plugin_result.plugins[a];
-                const pB = this.detail.plugin_result.plugins[b];
-                const errDiff = (pB.error_count || 0) - (pA.error_count || 0);
-                if (errDiff !== 0) return errDiff;
-                return (pA.plugin_name || '').localeCompare(pB.plugin_name || '');
-            });
-        },
-
-        formatStatKey(key) {
-            const keyMap = {
-                'total_lines': '总行数',
-                'error_lines': '错误行数',
-                'warning_lines': '警告行数',
-                'info_lines': '信息行数',
-                'debug_lines': '调试行数',
-                'unique_components': '唯一组件数',
-                'time_range': '时间范围',
-                'file_size': '文件大小',
-                'total_size_bytes': '文件大小(字节)',
-                'total_size_human': '文件大小',
-                'avg_line_length': '平均行长',
-                'time_distribution': '时间分布',
-                'component_activity': '组件活动',
-                'analysis_type': '分析类型',
-                'error_rate': '错误率',
-                'warning_rate': '警告率',
-                'level_distribution': '日志级别分布',
-                'top_components': '主要组件'
+        getSeverityColor(severity) {
+            const colors = {
+                'info': 'secondary',
+                'warning': 'warning',
+                'error': 'danger',
+                'critical': 'danger',
+                'success': 'success'
             };
-            return keyMap[key] || key;
+            return colors[severity] || 'secondary';
         },
 
-        formatStatValue(value) {
-            if (typeof value === 'number') {
-                return value.toLocaleString();
-            }
-            if (typeof value === 'object') {
-                return JSON.stringify(value);
-            }
-            return String(value);
+        getChartColor(index) {
+            const colors = ['primary', 'success', 'warning', 'danger', 'info', 'secondary'];
+            return colors[index % colors.length];
         },
 
         truncateText(text, maxLength = 50) {

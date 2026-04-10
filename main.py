@@ -6,6 +6,7 @@ AI日志分析器主入口
 import argparse
 import os
 import sys
+from typing import Dict
 
 # 添加src到路径
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
@@ -19,6 +20,49 @@ from ai_analyzer import AIAnalyzer
 from utils import read_file, write_json, ensure_dir
 from plugins.manager import get_plugin_manager
 from plugin_selection import PluginSelectionManager
+
+
+def display_plugin_result(result: Dict):
+    """在 CLI 显示插件分析结果。"""
+    print("\n" + "="*50)
+    print("插件分析结果")
+    print("="*50)
+
+    for section in result.get('sections', []):
+        section_type = section.get('type')
+        title = section.get('title', '')
+
+        if section_type == 'stats':
+            print(f"\n【{title}】")
+            for item in section.get('items', []):
+                label = item.get('label')
+                value = item.get('value')
+                unit = item.get('unit', '')
+                print(f"  {label}: {value} {unit}")
+
+        elif section_type == 'table':
+            print(f"\n【{title}】")
+            columns = section.get('columns', [])
+            rows = section.get('rows', [])
+            if rows:
+                # 打印表头
+                headers = [c.get('label', c.get('key')) for c in columns]
+                print("  " + " | ".join(headers))
+                print("  " + "-" * (len(headers) * 10))
+                # 打印行
+                for row in rows[:10]:
+                    values = [str(row.get(c.get('key'), ''))[:20] for c in columns]
+                    print("  " + " | ".join(values))
+                if len(rows) > 10:
+                    print(f"  ... 共 {len(rows)} 行")
+
+        elif section_type == 'chart':
+            print(f"\n【{title}】({section.get('chart_type', 'bar')} 图)")
+            data = section.get('data', {})
+            labels = data.get('labels', [])
+            values = data.get('values', [])
+            for label, value in zip(labels, values):
+                print(f"  {label}: {value}")
 
 
 def cmd_analyze(args):
@@ -42,38 +86,56 @@ def cmd_analyze(args):
 
     # 确定要使用的插件
     if args.plugins:
-        # 用户指定的插件
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        # 从配置文件读取默认选择的插件
         plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
 
     if not plugin_ids:
         print("错误: 没有可用的插件")
         return 1
 
-    # 显示可用的插件
     print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 插件分析
     print(f"正在分析日志: {args.log}")
     try:
-        plugin_result = plugin_manager.run_analysis(plugin_ids, args.log)
-        result_dict = plugin_result.to_dict()
+        result_dict = plugin_manager.run_analysis(plugin_ids, args.log)
     except Exception as e:
         print(f"插件分析失败: {e}")
         return 1
 
-    print(f"发现 {result_dict['error_count']} 个错误, {result_dict['warning_count']} 个警告")
+    # 统计错误和警告数量
+    total_errors = 0
+    total_warnings = 0
+    for section in result_dict.get('sections', []):
+        if section['type'] == 'stats':
+            for item in section.get('items', []):
+                if item.get('severity') == 'error':
+                    total_errors += item.get('value', 0)
+                elif item.get('severity') == 'warning':
+                    total_warnings += item.get('value', 0)
+
+    print(f"发现 {total_errors} 个错误, {total_warnings} 个警告")
 
     # 保存插件分析结果
     from datetime import datetime
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    plugin_output_dir = os.path.join('data', 'plugin_output', timestamp)
+    # 使用日志文件名（去除扩展名）
+    log_filename = os.path.basename(args.log)
+    clean_name = log_filename
+    for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
+        if clean_name.lower().endswith(ext):
+            clean_name = clean_name[:-len(ext)]
+            break
+    dir_name = f"{timestamp}_{clean_name}"
+    plugin_output_dir = os.path.join('data', 'plugin_output', dir_name)
     ensure_dir(plugin_output_dir)
     plugin_output = os.path.join(plugin_output_dir, 'plugin_result.json')
     write_json(plugin_output, result_dict)
     print(f"插件分析结果已保存: {plugin_output}")
+
+    # 显示结果概览
+    display_plugin_result(result_dict)
 
     # AI分析
     if args.no_ai:
@@ -279,12 +341,8 @@ def cmd_plugin(args):
             return 0
         print("可用插件列表:")
         for plugin in plugins:
-            info = plugin.get_info()
-            print(f"  [{info.id}] {info.name} (v{info.version})")
-            print(f"      分类: {info.category.name}")
-            print(f"      描述: {info.description}")
-            if info.tags:
-                print(f"      标签: {', '.join(info.tags)}")
+            print(f"  [{plugin.id}] {plugin.name} (v{plugin.get_version()})")
+            print(f"      描述: {plugin.get_chinese_description()}")
         return 0
 
     if args.plugin_action == 'select':
@@ -295,7 +353,6 @@ def cmd_plugin(args):
             plugin_selection_manager.save()
             print(f"默认插件已设置: {', '.join(plugin_ids)}")
         else:
-            # 显示当前选择的插件
             selected = plugin_selection_manager.get('selected_plugins', [])
             if selected:
                 print(f"当前默认插件: {', '.join(selected)}")

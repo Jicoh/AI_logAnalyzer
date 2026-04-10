@@ -246,10 +246,9 @@ def analyze_stream():
 
             # 使用选定的插件分析选定的文件
             try:
-                plugin_result = plugin_manager.run_analysis_multiple_files(
+                combined_result = plugin_manager.run_analysis_multiple_files(
                     selected_plugins, selected_log_files
                 )
-                combined_result = plugin_result.to_dict()
             except Exception as e:
                 yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
                 return
@@ -257,7 +256,14 @@ def analyze_stream():
             # 保存插件分析结果
             plugin_output_base = os.path.join(get_temp_base_dir(), '..', 'plugin_output')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            plugin_output_dir = os.path.join(plugin_output_base, timestamp)
+            # 使用原始上传文件名（去除扩展名）
+            clean_name = filename
+            for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
+                if clean_name.lower().endswith(ext):
+                    clean_name = clean_name[:-len(ext)]
+                    break
+            dir_name = f"{timestamp}_{clean_name}"
+            plugin_output_dir = os.path.join(plugin_output_base, dir_name)
             ensure_dir(plugin_output_dir)
             plugin_output_file = os.path.join(plugin_output_dir, 'plugin_result.json')
             with open(plugin_output_file, 'w', encoding='utf-8') as f:
@@ -343,18 +349,18 @@ def get_plugins():
     """获取可用的分析插件。"""
     try:
         manager = get_plugin_manager_with_custom()
-        plugins = [info.to_dict() for info in manager.get_plugins_info()]
+        plugins = manager.get_plugins_info()
         return jsonify({'success': True, 'data': plugins})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @analyze_bp.route('/api/analyze/plugins/categories', methods=['GET'])
-def get_plugin_categories():
-    """获取按类别分组的插件。"""
+def get_plugins_categories():
+    """获取按分类组织的插件列表。"""
     try:
         manager = get_plugin_manager_with_custom()
-        categories = manager.get_plugins_by_category_dict()
+        categories = manager.get_plugins_categories()
         return jsonify({'success': True, 'data': categories})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

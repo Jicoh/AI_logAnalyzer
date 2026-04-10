@@ -57,48 +57,45 @@ Create a new plugin in `custom_plugins/my_plugin/`:
 
 ```
 custom_plugins/my_plugin/
-├── plugin.py      # Required: implements BasePlugin
-└── plugin.json    # Optional: metadata
+├── plugin.py        # Required: implements BasePlugin
+└── plugin.json      # Required: metadata
 ```
 
+**plugin.json:**
+```json
+{
+    "id": "my_plugin",
+    "name": "My Plugin",
+    "version": "1.0.0",
+    "description": "插件中文描述",
+    "plugin_type": "CloudBMC"
+}
+```
+
+**plugin.py:**
 ```python
-# plugin.py
-from plugins.base import BasePlugin, PluginCategory, AnalysisResult
+from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem
 
 class MyPlugin(BasePlugin):
-    @property
-    def id(self) -> str:
-        return "my_plugin"
-
-    @property
-    def name(self) -> str:
-        return "My Plugin"
-
-    @property
-    def version(self) -> str:
-        return "1.0.0"
-
-    @property
-    def description(self) -> str:
-        return "Plugin description"
-
-    @property
-    def category(self) -> PluginCategory:
-        return PluginCategory.ANALYZER
-
     def analyze(self, log_file: str) -> AnalysisResult:
-        # Implement analysis logic
-        return AnalysisResult(
+        import os
+        from datetime import datetime
+
+        meta = ResultMeta(
             plugin_id=self.id,
             plugin_name=self.name,
+            version=self.get_version(),
             analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             log_file=os.path.basename(log_file),
-            error_count=0,
-            warning_count=0,
-            errors=[],
-            warnings=[],
-            statistics={}
+            plugin_type=self.get_plugin_type()
         )
+        result = AnalysisResult(meta=meta)
+        result.add_stats("概览", [
+            StatsItem(label="行数", value=100, severity="info")
+        ])
+        return result
+
+plugin_class = MyPlugin
 ```
 
 See `plugins/README.md` for full documentation.
