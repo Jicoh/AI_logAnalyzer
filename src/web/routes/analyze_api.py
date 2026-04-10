@@ -1,5 +1,5 @@
 """
-Analysis API routes with streaming support.
+分析 API 路由，支持流式响应。
 """
 
 import os
@@ -22,7 +22,7 @@ from plugins.manager import get_plugin_manager
 
 analyze_bp = Blueprint('analyze_api', __name__)
 
-# Global instances
+# 全局实例
 config_manager = None
 kb_manager = None
 log_metadata_manager = None
@@ -30,19 +30,19 @@ plugin_selection_manager = None
 
 
 def get_project_root():
-    """Get project root directory."""
+    """获取项目根目录。"""
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def get_plugin_manager_with_custom():
-    """Get plugin manager with custom plugins directory."""
+    """获取包含自定义插件目录的插件管理器。"""
     root_dir = get_project_root()
     custom_dir = os.path.join(root_dir, 'custom_plugins')
     return get_plugin_manager(custom_dirs=[custom_dir])
 
 
 def get_config_manager():
-    """Get or create ConfigManager instance."""
+    """获取或创建 ConfigManager 实例。"""
     global config_manager
     if config_manager is None:
         config_manager = ConfigManager()
@@ -50,7 +50,7 @@ def get_config_manager():
 
 
 def get_kb_manager():
-    """Get or create KnowledgeBaseManager instance."""
+    """获取或创建 KnowledgeBaseManager 实例。"""
     global kb_manager
     if config_manager is None:
         get_config_manager()
@@ -60,7 +60,7 @@ def get_kb_manager():
 
 
 def get_log_metadata_manager():
-    """Get or create LogMetadataManager instance."""
+    """获取或创建 LogMetadataManager 实例。"""
     global log_metadata_manager
     if log_metadata_manager is None:
         log_metadata_manager = LogMetadataManager()
@@ -68,7 +68,7 @@ def get_log_metadata_manager():
 
 
 def get_plugin_selection_manager():
-    """Get or create PluginSelectionManager instance."""
+    """获取或创建 PluginSelectionManager 实例。"""
     global plugin_selection_manager
     if plugin_selection_manager is None:
         plugin_selection_manager = PluginSelectionManager()
@@ -76,7 +76,7 @@ def get_plugin_selection_manager():
 
 
 def allowed_log_file(filename):
-    """Check if file extension is allowed for log files."""
+    """检查文件扩展名是否为允许的日志文件。"""
     lower_name = filename.lower()
     # 支持的格式：tar.gz, tar, zip, txt, log
     ALLOWED_EXTENSIONS = ['.tar.gz', '.tgz', '.tar', '.zip', '.txt', '.log']
@@ -103,13 +103,13 @@ def get_temp_base_dir():
 
 
 def generate_sse_event(data):
-    """Format data as SSE event."""
+    """将数据格式化为 SSE 事件。"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @analyze_bp.route('/api/analyze/stream', methods=['POST'])
 def analyze_stream():
-    """Perform streaming analysis on uploaded log file."""
+    """对上传的日志文件执行流式分析。"""
     from werkzeug.utils import secure_filename
 
     def generate():
@@ -118,7 +118,7 @@ def analyze_stream():
         log_files = []
 
         try:
-            # Check if file is present
+            # 检查是否有文件
             if 'file' not in request.files:
                 yield generate_sse_event({'stage': 'error', 'message': 'No file provided'})
                 return
@@ -133,7 +133,7 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': 'Invalid file type. Allowed: tar.gz, tar, zip, txt, log'})
                 return
 
-            # Get form data
+            # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
             kb_id = request.form.get('kb_id', '').strip() or None
@@ -225,15 +225,15 @@ def analyze_stream():
                         'status': 'error',
                         'message': f'AI 选择失败: {str(e)}，将执行全量分析'
                     })
-                    # Fallback to all plugins and files
+                    # 回退到所有插件和文件
                     selected_plugins = [p.id for p in plugin_manager.get_all_plugins()]
                     selected_log_files = log_file_paths
             else:
-                # Use user-selected plugins or all plugins
+                # 使用用户选择的插件或所有插件
                 selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
                 selected_log_files = log_file_paths
 
-            # Stage 1: Plugin Analysis
+            # 第1阶段：插件分析
             yield generate_sse_event({
                 'stage': 'plugin',
                 'status': 'start',
@@ -244,7 +244,7 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': 'No plugins available for analysis'})
                 return
 
-            # Run analysis with selected plugins on selected files
+            # 使用选定的插件分析选定的文件
             try:
                 plugin_result = plugin_manager.run_analysis_multiple_files(
                     selected_plugins, selected_log_files
@@ -254,7 +254,7 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
                 return
 
-            # Save plugin analysis result
+            # 保存插件分析结果
             plugin_output_base = os.path.join(get_temp_base_dir(), '..', 'plugin_output')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             plugin_output_dir = os.path.join(plugin_output_base, timestamp)
@@ -269,7 +269,7 @@ def analyze_stream():
                 'result': combined_result
             })
 
-            # Stage 2: AI Analysis (if enabled)
+            # 第2阶段：AI分析（如果启用）
             ai_result_data = None
             if enable_ai:
                 yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'Starting AI analysis...'})
@@ -280,7 +280,7 @@ def analyze_stream():
                         kb_manager=get_kb_manager()
                     )
 
-                    # Stream AI analysis
+                    # 流式 AI 分析
                     full_analysis = ""
                     for chunk in ai_analyzer.analyze(
                         plugin_result=combined_result,
@@ -300,7 +300,7 @@ def analyze_stream():
                         'analysis': full_analysis
                     }
 
-                    # Save AI result
+                    # 保存 AI 结果
                     ai_output_file = os.path.join(plugin_output_dir, 'ai_result.json')
                     with open(ai_output_file, 'w', encoding='utf-8') as f:
                         json.dump(ai_result_data, f, indent=4, ensure_ascii=False)
@@ -318,7 +318,7 @@ def analyze_stream():
                         'message': f'AI analysis error: {str(e)}'
                     })
 
-            # Stage 3: Complete
+            # 第3阶段：完成
             yield generate_sse_event({
                 'stage': 'complete',
                 'message': 'Analysis complete',
@@ -340,7 +340,7 @@ def analyze_stream():
 
 @analyze_bp.route('/api/analyze/plugins', methods=['GET'])
 def get_plugins():
-    """Get available analysis plugins."""
+    """获取可用的分析插件。"""
     try:
         manager = get_plugin_manager_with_custom()
         plugins = [info.to_dict() for info in manager.get_plugins_info()]
@@ -351,7 +351,7 @@ def get_plugins():
 
 @analyze_bp.route('/api/analyze/plugins/categories', methods=['GET'])
 def get_plugin_categories():
-    """Get plugins grouped by category."""
+    """获取按类别分组的插件。"""
     try:
         manager = get_plugin_manager_with_custom()
         categories = manager.get_plugins_by_category_dict()
@@ -362,7 +362,7 @@ def get_plugin_categories():
 
 @analyze_bp.route('/api/config', methods=['GET'])
 def get_config():
-    """Get current AI configuration."""
+    """获取当前 AI 配置。"""
     try:
         manager = get_config_manager()
         manager.reload()  # 每次请求都重新加载配置文件
@@ -374,12 +374,12 @@ def get_config():
 
 @analyze_bp.route('/api/config', methods=['POST'])
 def update_config():
-    """Update AI configuration."""
+    """更新 AI 配置。"""
     try:
         data = request.get_json()
         manager = get_config_manager()
 
-        # Update API settings
+        # 更新 API 设置
         if 'api' in data:
             api_config = data['api']
             if 'base_url' in api_config:
@@ -393,7 +393,7 @@ def update_config():
             if 'max_tokens' in api_config:
                 manager.set('api.max_tokens', int(api_config['max_tokens']))
 
-        # Update BM25 settings
+        # 更新 BM25 设置
         if 'bm25' in data:
             bm25_config = data['bm25']
             if 'k1' in bm25_config:
@@ -401,7 +401,7 @@ def update_config():
             if 'b' in bm25_config:
                 manager.set('bm25.b', float(bm25_config['b']))
 
-        # Update Embedding settings
+        # 更新 Embedding 设置
         if 'embedding' in data:
             emb_config = data['embedding']
             if 'enabled' in emb_config:
@@ -419,7 +419,7 @@ def update_config():
             if 'batch_size' in emb_config:
                 manager.set('embedding.batch_size', int(emb_config['batch_size']))
 
-        # Update Retrieval settings
+        # 更新 Retrieval 设置
         if 'retrieval' in data:
             ret_config = data['retrieval']
             if 'mode' in ret_config:
@@ -438,23 +438,23 @@ def update_config():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# Config directory
+# 配置目录
 CONFIG_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
     'config'
 )
-# User's custom prompt file
+# 用户自定义提示词文件
 DEFAULT_PROMPT_FILE = os.path.join(CONFIG_DIR, 'default_prompt.txt')
-# Default prompt template (read-only)
+# 默认提示词模板（只读）
 DEFAULT_PROMPT_TEMPLATE = os.path.join(CONFIG_DIR, 'default_prompt_template.txt')
 
 
 def get_default_prompt_template():
-    """Get the default prompt template content."""
+    """获取默认提示词模板内容。"""
     if os.path.exists(DEFAULT_PROMPT_TEMPLATE):
         with open(DEFAULT_PROMPT_TEMPLATE, 'r', encoding='utf-8') as f:
             return f.read()
-    # Fallback template if file is missing
+    # 文件缺失时的回退模板
     return """你是一名专业的服务器BMC日志分析专家。请根据以下信息分析日志中存在的问题，并提供可能的原因和解决方案。
 
 ## 日志分析结果
@@ -490,7 +490,7 @@ def get_default_prompt_template():
 
 @analyze_bp.route('/api/config/prompt', methods=['GET'])
 def get_prompt():
-    """Get default prompt content."""
+    """获取默认提示词内容。"""
     try:
         if os.path.exists(DEFAULT_PROMPT_FILE):
             with open(DEFAULT_PROMPT_FILE, 'r', encoding='utf-8') as f:
@@ -505,12 +505,12 @@ def get_prompt():
 
 @analyze_bp.route('/api/config/prompt', methods=['POST'])
 def update_prompt():
-    """Update default prompt content."""
+    """更新默认提示词内容。"""
     try:
         data = request.get_json()
         content = data.get('content', '')
 
-        # Ensure config directory exists
+        # 确保配置目录存在
         config_dir = os.path.dirname(DEFAULT_PROMPT_FILE)
         os.makedirs(config_dir, exist_ok=True)
 
@@ -524,7 +524,7 @@ def update_prompt():
 
 @analyze_bp.route('/api/config/prompt/reset', methods=['POST'])
 def reset_prompt():
-    """Reset default prompt to original content."""
+    """重置默认提示词为原始内容。"""
     try:
         default_content = get_default_prompt_template()
 
@@ -541,7 +541,7 @@ def reset_prompt():
 
 @analyze_bp.route('/api/plugin-selection', methods=['GET'])
 def get_plugin_selection():
-    """Get plugin selection and AI settings."""
+    """获取插件选择和 AI 设置。"""
     try:
         manager = get_plugin_selection_manager()
         manager.reload()
@@ -553,7 +553,7 @@ def get_plugin_selection():
 
 @analyze_bp.route('/api/plugin-selection', methods=['POST'])
 def update_plugin_selection():
-    """Update plugin selection and AI settings."""
+    """更新插件选择和 AI 设置。"""
     try:
         data = request.get_json()
         manager = get_plugin_selection_manager()

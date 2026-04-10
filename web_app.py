@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-AI Log Analyzer - Web Application Entry Point
+AI 日志分析器 - Web 应用入口
 
-Usage:
-    python web_app.py                           # Use config file settings
-    python web_app.py --port 9000               # Override port
-    python web_app.py --host 0.0.0.0 --port 80  # Override host and port
-    python web_app.py --no-debug                # Disable debug mode
+用法：
+    python web_app.py                           # 使用配置文件设置
+    python web_app.py --port 9000               # 覆盖端口
+    python web_app.py --host 0.0.0.0 --port 80  # 覆盖主机和端口
+    python web_app.py --no-debug                # 禁用调试模式
 
-Access the web interface at: http://127.0.0.1:18888 (default)
+访问 Web 界面: http://127.0.0.1:18888（默认）
 """
 
 import argparse
 import os
 import sys
 
-# Add project root to path
+# 将项目根目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask
@@ -25,7 +25,7 @@ from src.config_manager.manager import ConfigManager
 
 
 def get_web_config():
-    """Read web configuration from config file."""
+    """从配置文件读取 Web 配置。"""
     config_manager = ConfigManager()
     return {
         "host": config_manager.get("web.host", "127.0.0.1"),
@@ -35,44 +35,44 @@ def get_web_config():
 
 
 def create_app():
-    """Create and configure the Flask application."""
-    # Get the project root directory
+    """创建并配置 Flask 应用。"""
+    # 获取项目根目录
     root_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Create Flask app with template and static folders
+    # 创建 Flask 应用，设置模板和静态文件夹
     app = Flask(
         __name__,
         template_folder=os.path.join(root_dir, 'src', 'web', 'templates'),
         static_folder=os.path.join(root_dir, 'src', 'web', 'static')
     )
 
-    # Configuration
+    # 配置
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ai-log-analyzer-secret-key-change-in-production')
-    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 最大文件大小 50MB
 
-    # Ensure upload directory exists
+    # 确保上传目录存在
     uploads_dir = os.path.join(root_dir, 'data', 'uploads')
     os.makedirs(uploads_dir, exist_ok=True)
 
-    # Preload plugins
-    print("Preloading plugins...")
+    # 预加载插件
+    print("正在预加载插件...")
     from plugins.manager import get_plugin_manager
     custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
-    print(f"Available plugins: {[p.id for p in plugin_manager.get_all_plugins()]}")
+    print(f"可用插件: {[p.id for p in plugin_manager.get_all_plugins()]}")
 
-    # Register routes
+    # 注册路由
     register_routes(app)
 
     return app
 
 
-# Create app instance
+# 创建应用实例
 app = create_app()
 
 
 def parse_args():
-    """Parse command line arguments."""
+    """解析命令行参数。"""
     parser = argparse.ArgumentParser(description='AI Log Analyzer Web Application')
     parser.add_argument('--host', type=str, help='Host to bind to (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, help='Port to bind to (default: 18888)')

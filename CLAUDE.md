@@ -171,6 +171,7 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 ```
 
 ### Comment Guidelines
+- 代码注释必须使用中文
 - 只在必要时添加注释
 - 代码应尽量自解释
 - 不写显而易见的注释
