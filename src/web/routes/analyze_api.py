@@ -13,6 +13,7 @@ from src.ai_analyzer.selection_agent import SelectionAgent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
+from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, extract_archive,
     create_work_directory, ensure_dir
@@ -25,6 +26,7 @@ analyze_bp = Blueprint('analyze_api', __name__)
 config_manager = None
 kb_manager = None
 log_metadata_manager = None
+plugin_selection_manager = None
 
 
 def get_project_root():
@@ -63,6 +65,14 @@ def get_log_metadata_manager():
     if log_metadata_manager is None:
         log_metadata_manager = LogMetadataManager()
     return log_metadata_manager
+
+
+def get_plugin_selection_manager():
+    """Get or create PluginSelectionManager instance."""
+    global plugin_selection_manager
+    if plugin_selection_manager is None:
+        plugin_selection_manager = PluginSelectionManager()
+    return plugin_selection_manager
 
 
 def allowed_log_file(filename):
@@ -525,5 +535,42 @@ def reset_prompt():
             f.write(default_content)
 
         return jsonify({'success': True, 'data': {'content': default_content}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/plugin-selection', methods=['GET'])
+def get_plugin_selection():
+    """Get plugin selection and AI settings."""
+    try:
+        manager = get_plugin_selection_manager()
+        manager.reload()
+        config = manager.get_all()
+        return jsonify({'success': True, 'data': config})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/plugin-selection', methods=['POST'])
+def update_plugin_selection():
+    """Update plugin selection and AI settings."""
+    try:
+        data = request.get_json()
+        manager = get_plugin_selection_manager()
+
+        if 'selected_plugins' in data:
+            manager.set('selected_plugins', data['selected_plugins'])
+        if 'selected_kb_id' in data:
+            manager.set('selected_kb_id', data['selected_kb_id'])
+        if 'selected_log_rules_id' in data:
+            manager.set('selected_log_rules_id', data['selected_log_rules_id'])
+        if 'enable_ai' in data:
+            manager.set('enable_ai', data['enable_ai'])
+        if 'ai_selection_mode' in data:
+            manager.set('ai_selection_mode', data['ai_selection_mode'])
+
+        manager.save()
+
+        return jsonify({'success': True, 'message': 'Plugin selection updated'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

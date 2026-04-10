@@ -18,12 +18,14 @@ from knowledge_base import KnowledgeBaseManager
 from ai_analyzer import AIAnalyzer
 from utils import read_file, write_json, ensure_dir
 from plugins.manager import get_plugin_manager
+from plugin_selection import PluginSelectionManager
 
 
 def cmd_analyze(args):
     """分析日志命令"""
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
+    plugin_selection_manager = PluginSelectionManager()
 
     # 检查日志文件
     if not os.path.exists(args.log):
@@ -43,8 +45,8 @@ def cmd_analyze(args):
         # 用户指定的插件
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        # 使用所有可用插件
-        plugin_ids = [p.id for p in plugin_manager.get_all_plugins()]
+        # 从配置文件读取默认选择的插件
+        plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
 
     if not plugin_ids:
         print("错误: 没有可用的插件")
@@ -285,6 +287,22 @@ def cmd_plugin(args):
                 print(f"      标签: {', '.join(info.tags)}")
         return 0
 
+    if args.plugin_action == 'select':
+        plugin_selection_manager = PluginSelectionManager()
+        if args.plugins:
+            plugin_ids = [p.strip() for p in args.plugins.split(',')]
+            plugin_selection_manager.set('selected_plugins', plugin_ids)
+            plugin_selection_manager.save()
+            print(f"默认插件已设置: {', '.join(plugin_ids)}")
+        else:
+            # 显示当前选择的插件
+            selected = plugin_selection_manager.get('selected_plugins', [])
+            if selected:
+                print(f"当前默认插件: {', '.join(selected)}")
+            else:
+                print("未设置默认插件")
+        return 0
+
     return 1
 
 
@@ -307,6 +325,10 @@ def main():
 
     # plugin list
     plugin_list = plugin_subparsers.add_parser('list', help='列出可用插件')
+
+    # plugin select
+    plugin_select = plugin_subparsers.add_parser('select', help='设置默认插件')
+    plugin_select.add_argument('plugins', nargs='?', help='插件ID列表，逗号分隔，不指定则显示当前设置')
 
     # kb 命令
     kb_parser = subparsers.add_parser('kb', help='知识库管理')

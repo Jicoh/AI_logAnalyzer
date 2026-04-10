@@ -381,7 +381,47 @@ function analyzerApp() {
             this.loadPlugins();
             this.loadKbList();
             this.loadLogRulesList();
+            this.loadPluginSelection();
             this.restoreState();
+        },
+
+        async loadPluginSelection() {
+            try {
+                const response = await fetch('/api/plugin-selection');
+                const data = await response.json();
+                if (data.success) {
+                    const config = data.data;
+                    this.selectedPlugins = config.selected_plugins || ['log_parser'];
+                    this.selectedKbId = config.selected_kb_id || '';
+                    this.selectedLogRulesId = config.selected_log_rules_id || '';
+                    this.enableAi = config.enable_ai !== undefined ? config.enable_ai : true;
+                    this.aiSelectionMode = config.ai_selection_mode !== undefined ? config.ai_selection_mode : false;
+                }
+            } catch (error) {
+                console.error('Failed to load plugin selection:', error);
+            }
+        },
+
+        async savePluginSelection() {
+            try {
+                const response = await fetch('/api/plugin-selection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        selected_plugins: this.selectedPlugins,
+                        selected_kb_id: this.selectedKbId,
+                        selected_log_rules_id: this.selectedLogRulesId,
+                        enable_ai: this.enableAi,
+                        ai_selection_mode: this.aiSelectionMode
+                    })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('Failed to save plugin selection:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to save plugin selection:', error);
+            }
         },
 
         // Helper functions for new plugin result structure
@@ -450,11 +490,6 @@ function analyzerApp() {
         saveState() {
             const state = {
                 logFileName: this.logFileName,
-                selectedPlugins: this.selectedPlugins,
-                selectedKbId: this.selectedKbId,
-                selectedLogRulesId: this.selectedLogRulesId,
-                enableAi: this.enableAi,
-                aiSelectionMode: this.aiSelectionMode,
                 userPrompt: this.userPrompt,
                 completed: this.completed,
                 progress: this.progress,
@@ -468,10 +503,11 @@ function analyzerApp() {
             };
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-                console.log('State saved:', state);
             } catch (e) {
                 console.error('Failed to save state:', e);
             }
+            // Save plugin selection to server
+            this.savePluginSelection();
         },
 
         restoreState() {
@@ -479,13 +515,8 @@ function analyzerApp() {
             if (saved) {
                 try {
                     const state = JSON.parse(saved);
-                    // Only restore configuration settings, not results
+                    // Restore session state only
                     this.logFileName = state.logFileName || '';
-                    this.selectedPlugins = state.selectedPlugins || ['log_parser'];
-                    this.selectedKbId = state.selectedKbId || '';
-                    this.selectedLogRulesId = state.selectedLogRulesId || '';
-                    this.enableAi = state.enableAi !== undefined ? state.enableAi : true;
-                    this.aiSelectionMode = state.aiSelectionMode !== undefined ? state.aiSelectionMode : false;
                     this.userPrompt = state.userPrompt || '';
 
                     // Check if analysis was interrupted
@@ -494,13 +525,6 @@ function analyzerApp() {
                         this.statusText = '已中断';
                         this.statusMessage = '分析过程中断，请重新上传文件分析';
                     }
-                    console.log('State restored (config only):', {
-                        logFileName: this.logFileName,
-                        selectedPlugins: this.selectedPlugins,
-                        selectedKbId: this.selectedKbId,
-                        selectedLogRulesId: this.selectedLogRulesId,
-                        enableAi: this.enableAi
-                    });
                 } catch (e) {
                     console.error('Failed to restore state:', e);
                 }

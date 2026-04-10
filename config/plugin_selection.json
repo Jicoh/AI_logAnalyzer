@@ -1,0 +1,9 @@
+{
+    "selected_plugins": [
+        "log_parser"
+    ],
+    "selected_kb_id": "",
+    "selected_log_rules_id": "",
+    "enable_ai": true,
+    "ai_selection_mode": false
+}
