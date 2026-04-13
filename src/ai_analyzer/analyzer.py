@@ -232,25 +232,3 @@ class AIAnalyzer:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=4)
-
-
-def analyze_with_ai(config_manager, kb_manager, plugin_result, log_content, kb_id=None, user_prompt=None) -> Generator[str, None, Dict[str, Any]]:
-    """
-    使用AI分析日志的便捷函数（流式）
-
-    Args:
-        config_manager: 配置管理器
-        kb_manager: 知识库管理器
-        plugin_result: 插件分析结果
-        log_content: 日志内容
-        kb_id: 知识库ID
-        user_prompt: 用户提示词
-
-    Yields:
-        str: AI分析结果的文本片段
-
-    Returns:
-        dict: 完整分析结果
-    """
-    analyzer = AIAnalyzer(config_manager, kb_manager)
-    return analyzer.analyze(plugin_result, log_content, kb_id, user_prompt)

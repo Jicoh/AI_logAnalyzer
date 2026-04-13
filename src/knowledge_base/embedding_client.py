@@ -149,27 +149,3 @@ class EmbeddingClient:
         except Exception as e:
             logger.error(f"Embedding API unexpected error: {e}")
             return None
-
-    def test_connection(self) -> tuple:
-        """
-        测试 API 连接
-
-        Returns:
-            (success: bool, message: str)
-        """
-        if not self.enabled:
-            return False, "Embedding is disabled"
-
-        if not self.api_key:
-            return False, "API key not configured"
-
-        if not self.base_url:
-            return False, "Base URL not configured"
-
-        # 发送测试请求
-        result = self.embed_batch(["test"])
-
-        if result is not None:
-            return True, f"Connection successful, model: {self.model}, dimension: {len(result[0])}"
-        else:
-            return False, "Failed to connect to Embedding API"

@@ -221,11 +221,3 @@ class HybridRetriever:
         else:
             # 使用内容哈希
             return str(hash(content))
-
-    def is_hybrid_mode(self) -> bool:
-        """检查是否为混合模式"""
-        return self.mode == 'hybrid'
-
-    def is_vector_available(self) -> bool:
-        """检查向量检索是否可用"""
-        return self.vector_retriever is not None and self.vector_retriever.is_indexed()

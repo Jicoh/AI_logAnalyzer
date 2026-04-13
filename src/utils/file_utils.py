@@ -43,45 +43,11 @@ def ensure_dir(dir_path):
         os.makedirs(dir_path)
 
 
-def get_file_extension(file_path):
-    """获取文件扩展名"""
-    _, ext = os.path.splitext(file_path)
-    return ext.lower()
-
-
-def list_files(dir_path, extension=None):
-    """列出目录下的文件"""
-    if not os.path.exists(dir_path):
-        return []
-    files = []
-    for item in os.listdir(dir_path):
-        item_path = os.path.join(dir_path, item)
-        if os.path.isfile(item_path):
-            if extension is None or get_file_extension(item_path) == extension:
-                files.append(item_path)
-    return files
-
-
-def file_exists(file_path):
-    """检查文件是否存在"""
-    return os.path.isfile(file_path)
-
-
-def dir_exists(dir_path):
-    """检查目录是否存在"""
-    return os.path.isdir(dir_path)
-
-
 def get_filename(file_path):
     """获取文件名（不含扩展名）"""
     basename = os.path.basename(file_path)
     name, _ = os.path.splitext(basename)
     return name
-
-
-def join_path(*args):
-    """拼接路径"""
-    return os.path.join(*args)
 
 
 def get_archive_type(file_path):

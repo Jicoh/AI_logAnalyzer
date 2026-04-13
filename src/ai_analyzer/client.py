@@ -110,16 +110,3 @@ class AIClient:
         messages = [{"role": "user", "content": prompt}]
         for chunk in self.chat(messages):
             yield chunk
-
-
-def create_client(config):
-    """
-    创建AI客户端的便捷函数
-
-    Args:
-        config: 配置字典
-
-    Returns:
-        AIClient: AI客户端实例
-    """
-    return AIClient(config)

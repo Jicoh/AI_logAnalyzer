@@ -164,22 +164,6 @@ class DocumentLoader:
         return result
 
 
-def load_document(file_path, chunk_size=500, chunk_overlap=50):
-    """
-    加载文档的便捷函数
-
-    Args:
-        file_path: 文档路径
-        chunk_size: 分块大小
-        chunk_overlap: 分块重叠
-
-    Returns:
-        dict: 文档内容
-    """
-    loader = DocumentLoader(chunk_size, chunk_overlap)
-    return loader.load(file_path)
-
-
 def load_document_chunks(file_path, chunk_size=500, chunk_overlap=50):
     """
     加载文档并分块的便捷函数
