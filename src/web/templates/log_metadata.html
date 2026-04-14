@@ -11,15 +11,6 @@
         </button>
     </div>
 
-    <!-- Active Rules Status -->
-    <div class="alert alert-info mb-4 d-flex justify-content-between align-items-center">
-        <div>
-            <i class="bi bi-info-circle"></i>
-            当前激活规则集：<strong x-text="getActiveRuleSetName()"></strong>
-            <span class="badge bg-success ms-2" x-show="activeRulesId">已启用</span>
-        </div>
-    </div>
-
     <!-- Rule Sets List -->
     <div class="row" id="rules-list">
         <template x-if="ruleSets.length === 0 && !loading">
@@ -32,22 +23,16 @@
 
         <template x-for="rules in ruleSets" :key="rules.rules_id">
             <div class="col-md-6 col-lg-4 mb-4">
-                <div class="card h-100" :class="{'border-success': rules.is_active}">
+                <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <span x-text="rules.name"></span>
-                            <span class="badge bg-success ms-2" x-show="rules.is_active">激活</span>
                         </h5>
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-success" @click="activateRules(rules.rules_id)"
-                                    x-show="!rules.is_active" title="激活">
-                                <i class="bi bi-check-circle"></i>
-                            </button>
                             <button class="btn btn-outline-primary" @click="showRulesDetail(rules)" title="查看详情">
                                 <i class="bi bi-eye"></i>
                             </button>
-                            <button class="btn btn-outline-danger" @click="confirmDelete(rules)"
-                                    x-show="rules.rules_id !== 'default'" title="删除">
+                            <button class="btn btn-outline-danger" @click="confirmDelete(rules)" title="删除">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -102,7 +87,6 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-list-check"></i> 规则集详情
-                        <span class="badge bg-success ms-2" x-show="selectedRules?.is_active">激活</span>
                     </h5>
                     <button type="button" class="btn-close" @click="showDetailModal = false"></button>
                 </div>
@@ -186,10 +170,6 @@
                     </template>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-success" @click="activateRules(selectedRules?.rules_id)"
-                            x-show="selectedRules && !selectedRules.is_active">
-                        <i class="bi bi-check-circle"></i> 激活此规则集
-                    </button>
                     <button type="button" class="btn btn-secondary" @click="showDetailModal = false">关闭</button>
                 </div>
             </div>
@@ -284,7 +264,6 @@
 function logMetadataApp() {
     return {
         ruleSets: [],
-        activeRulesId: 'default',
         loading: true,
         showCreateModal: false,
         showDetailModal: false,
@@ -303,24 +282,6 @@ function logMetadataApp() {
 
         init() {
             this.loadRuleSets();
-            this.loadActiveRules();
-        },
-
-        getActiveRuleSetName() {
-            const active = this.ruleSets.find(r => r.rules_id === this.activeRulesId);
-            return active?.name || this.activeRulesId;
-        },
-
-        async loadActiveRules() {
-            try {
-                const response = await fetch('/api/log-rules/active');
-                const data = await response.json();
-                if (data.success) {
-                    this.activeRulesId = data.data.active_rules_id;
-                }
-            } catch (error) {
-                console.error('Failed to load active rules:', error);
-            }
         },
 
         async loadRuleSets() {
@@ -370,29 +331,6 @@ function logMetadataApp() {
                 }
             } catch (error) {
                 this.showToast('error', '错误', '获取规则集详情失败');
-            }
-        },
-
-        async activateRules(rulesId) {
-            try {
-                const response = await fetch('/api/log-rules/active', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rules_id: rulesId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', '规则集已激活');
-                    this.activeRulesId = rulesId;
-                    this.loadRuleSets();
-                    if (this.selectedRules) {
-                        this.selectedRules.is_active = rulesId === this.selectedRules.rules_id;
-                    }
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (error) {
-                this.showToast('error', '错误', '激活规则集失败');
             }
         },
 

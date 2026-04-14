@@ -55,16 +55,9 @@ class LogMetadataManager:
         if os.path.exists(self.rules_config_path):
             with open(self.rules_config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        # 创建默认规则集配置
+        # 创建空规则集配置（不再创建默认规则集）
         default_config = {
-            'rule_sets': {
-                'default': {
-                    'name': '默认规则集',
-                    'description': 'BMC服务器常见日志类型',
-                    'rules': self.config.get('log_rules', {})
-                }
-            },
-            'active_rules_id': 'default'
+            'rule_sets': {}
         }
         self.save_rules_config(default_config)
         return default_config
@@ -98,8 +91,7 @@ class LogMetadataManager:
                 'rules_id': rules_id,
                 'name': rules_set.get('name', rules_id),
                 'description': rules_set.get('description', ''),
-                'rule_count': len(rules_set.get('rules', {})),
-                'is_active': rules_id == self.rules_config.get('active_rules_id')
+                'rule_count': len(rules_set.get('rules', {}))
             })
         return result
 
@@ -132,8 +124,7 @@ class LogMetadataManager:
             'rules_id': rules_id,
             'name': rules_set.get('name', rules_id),
             'description': rules_set.get('description', ''),
-            'rules': rules_list,
-            'is_active': rules_id == self.rules_config.get('active_rules_id')
+            'rules': rules_list
         }
 
     def create_rule_set(self, name: str, description: str = '') -> str:
@@ -190,56 +181,12 @@ class LogMetadataManager:
         Returns:
             bool: 是否成功
         """
-        # 不能删除默认规则集
-        if rules_id == 'default':
-            return False
-
         if rules_id not in self.rules_config.get('rule_sets', {}):
             return False
-
-        # 如果删除的是当前激活的规则集，切换回默认
-        if self.rules_config.get('active_rules_id') == rules_id:
-            self.rules_config['active_rules_id'] = 'default'
 
         del self.rules_config['rule_sets'][rules_id]
         self.save_rules_config()
         return True
-
-    def set_active_rules(self, rules_id: str) -> bool:
-        """
-        设置当前激活的规则集
-
-        Args:
-            rules_id: 规则集ID
-
-        Returns:
-            bool: 是否成功
-        """
-        if rules_id not in self.rules_config.get('rule_sets', {}):
-            return False
-
-        self.rules_config['active_rules_id'] = rules_id
-        self.save_rules_config()
-        return True
-
-    def get_active_rules_id(self) -> str:
-        """
-        获取当前激活的规则集ID
-
-        Returns:
-            str: 规则集ID
-        """
-        return self.rules_config.get('active_rules_id', 'default')
-
-    def get_active_rules(self) -> Dict:
-        """
-        获取当前激活的规则集
-
-        Returns:
-            dict: 规则集内容
-        """
-        active_id = self.get_active_rules_id()
-        return self.rules_config.get('rule_sets', {}).get(active_id, {})
 
     # ==================== 规则管理 ====================
 
@@ -357,13 +304,13 @@ class LogMetadataManager:
 
         Args:
             file_path: 文件路径
-            rules_id: 规则集ID，默认使用激活的规则集
+            rules_id: 规则集ID（必须指定）
 
         Returns:
             dict: 匹配的规则信息，若无匹配则返回 None
         """
         if rules_id is None:
-            rules_id = self.get_active_rules_id()
+            return None
 
         rule_set = self.rules_config.get('rule_sets', {}).get(rules_id, {})
         rules = rule_set.get('rules', {})
@@ -388,7 +335,7 @@ class LogMetadataManager:
 
         Args:
             file_path: 文件路径
-            rules_id: 规则集ID，默认使用激活的规则集
+            rules_id: 规则集ID（可选）
 
         Returns:
             dict: 文件描述信息
@@ -434,7 +381,7 @@ class LogMetadataManager:
 
         Args:
             file_paths: 文件路径列表
-            rules_id: 规则集ID，默认使用激活的规则集
+            rules_id: 规则集ID（可选）
 
         Returns:
             str: AI 可读的文件描述文本
@@ -457,61 +404,3 @@ class LogMetadataManager:
         """清除所有自定义文件描述"""
         self.config['file_descriptions'] = {}
         self.save_config()
-
-    # ==================== 兼容旧接口 ====================
-
-    def add_rule(self, rule_id: str, file_path: str, description: str,
-                 keywords: List[str], suggested_plugins: List[str]) -> str:
-        """
-        添加日志规则（兼容旧接口，添加到激活规则集）
-
-        Args:
-            rule_id: 规则ID（已废弃，自动生成）
-            file_path: 文件路径
-            description: 规则描述
-            keywords: 关键词列表
-            suggested_plugins: 建议的插件ID列表
-
-        Returns:
-            str: 规则ID
-        """
-        return self.add_rule_to_set(self.get_active_rules_id(), {
-            'file_path': file_path,
-            'description': description,
-            'keywords': keywords,
-            'suggested_plugins': suggested_plugins
-        })
-
-    def remove_rule(self, rule_id: str) -> bool:
-        """
-        移除日志规则（兼容旧接口，从激活规则集移除）
-
-        Args:
-            rule_id: 规则ID
-
-        Returns:
-            bool: 是否成功
-        """
-        return self.remove_rule_from_set(self.get_active_rules_id(), rule_id)
-
-    def get_rule(self, rule_id: str) -> Optional[Dict]:
-        """
-        获取规则信息（兼容旧接口，从激活规则集获取）
-
-        Args:
-            rule_id: 规则ID
-
-        Returns:
-            dict: 规则信息
-        """
-        return self.get_rule_from_set(self.get_active_rules_id(), rule_id)
-
-    def list_rules(self) -> Dict[str, Dict]:
-        """
-        列出所有规则（兼容旧接口，返回激活规则集的规则）
-
-        Returns:
-            dict: 规则字典
-        """
-        rule_set = self.get_active_rules()
-        return rule_set.get('rules', {})

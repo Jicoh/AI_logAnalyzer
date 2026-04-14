@@ -24,14 +24,14 @@
 
     <!-- History List -->
     <div x-show="!loading && historyList.length > 0">
-        <template x-for="record in historyList" :key="record.timestamp">
+        <template x-for="record in historyList" :key="record.folder_name">
             <div class="card mb-3">
                 <div class="card-body">
                     <div class="row align-items-center">
                         <div class="col-md-4">
                             <h6 class="mb-1">
-                                <i class="bi bi-file-earmark-text"></i>
-                                <span x-text="record.log_file"></span>
+                                <i class="bi bi-folder"></i>
+                                <span x-text="record.folder_name"></span>
                             </h6>
                             <small class="text-muted" x-text="record.formatted_time"></small>
                         </div>
@@ -61,7 +61,7 @@
                             </div>
                         </div>
                         <div class="col-md-4 text-end">
-                            <button class="btn btn-outline-primary btn-sm" @click="viewDetail(record.timestamp)">
+                            <button class="btn btn-outline-primary btn-sm" @click="viewDetail(record.folder_name)">
                                 <i class="bi bi-eye"></i> 查看详情
                             </button>
                         </div>
@@ -77,8 +77,8 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bi bi-file-earmark-text"></i>
-                        分析详情 - <span x-text="detail?.formatted_time || ''"></span>
+                        <i class="bi bi-folder"></i>
+                        分析详情 - <span x-text="detail?.folder_name || ''"></span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -87,101 +87,15 @@
                         <div class="spinner-border text-primary"></div>
                     </div>
                 </div>
-                <div class="modal-body" x-show="!detailLoading && detail">
-                    <!-- Statistics Overview -->
-                    <div class="row mb-4">
-                        <div class="col-md-4">
-                            <div class="text-center p-3 bg-light rounded">
-                                <h3 class="text-danger" x-text="getTotalErrors()"></h3>
-                                <small class="text-muted">错误总数</small>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="text-center p-3 bg-light rounded">
-                                <h3 class="text-warning" x-text="getTotalWarnings()"></h3>
-                                <small class="text-muted">警告总数</small>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="text-center p-3 bg-light rounded">
-                                <h3 class="text-info" x-text="getTotalLines()"></h3>
-                                <small class="text-muted">总行数</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Plugin Results (New Structure) -->
-                    <div x-show="detail?.plugin_result?.sections?.length > 0">
-                        <h6 class="mb-3"><i class="bi bi-puzzle"></i> 插件分析结果</h6>
-                        <template x-for="section in detail.plugin_result.sections" :key="$index">
-                            <div class="mb-3">
-
-                                <!-- Stats Section -->
-                                <div x-show="section.type === 'stats'" class="stats-section">
-                                    <h6 class="text-muted mb-2" x-text="section.title"></h6>
-                                    <div class="row">
-                                        <template x-for="item in section.items" :key="item.label">
-                                            <div class="col-md-3 col-sm-6 mb-2">
-                                                <div class="stat-card p-2 rounded text-center border"
-                                                     :class="'border-' + getSeverityColor(item.severity)">
-                                                    <strong :class="'text-' + getSeverityColor(item.severity)" x-text="item.value"></strong>
-                                                    <div><small class="text-muted" x-text="item.label"></small></div>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-
-                                <!-- Table Section -->
-                                <div x-show="section.type === 'table'" class="table-section">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h6 class="mb-0">
-                                            <i class="bi" :class="'bi-' + (section.icon || 'table')"></i>
-                                            <span x-text="section.title"></span>
-                                        </h6>
-                                        <span class="badge" :class="'bg-' + getSeverityColor(section.severity)"
-                                              x-text="section.rows.length + ' 条'"></span>
-                                    </div>
-                                    <div class="table-responsive" style="max-height: 150px;">
-                                        <table class="table table-sm table-hover small">
-                                            <thead class="table-light sticky-top">
-                                                <tr>
-                                                    <template x-for="col in section.columns" :key="col.key">
-                                                        <th x-text="col.label"></th>
-                                                    </template>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <template x-for="row in section.rows" :key="$index">
-                                                    <tr>
-                                                        <template x-for="col in section.columns" :key="col.key">
-                                                            <td><span x-text="truncateText(row[col.key], 40)"></span></td>
-                                                        </template>
-                                                    </tr>
-                                                </template>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Chart Section -->
-                                <div x-show="section.type === 'chart'" class="chart-section">
-                                    <h6 class="text-muted mb-2" x-text="section.title"></h6>
-                                    <div class="d-flex">
-                                        <template x-for="(label, i) in section.data.labels" :key="i">
-                                            <span class="badge me-1 mb-1" :class="'bg-' + getChartColor(i)">
-                                                <span x-text="label"></span>: <span x-text="section.data.values[i]"></span>
-                                            </span>
-                                        </template>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </template>
+                <div class="modal-body" x-show="!detailLoading && detail" style="padding: 0;">
+                    <!-- Plugin Results iframe -->
+                    <div x-show="detail?.html_path" class="plugin-result-container">
+                        <iframe :src="'/api/plugin-result/html/' + detail?.html_path"
+                                style="width: 100%; height: 600px; border: none;"></iframe>
                     </div>
 
                     <!-- AI Result -->
-                    <div x-show="detail?.ai_result" class="mt-4">
+                    <div x-show="detail?.ai_result" class="mt-3 p-3">
                         <h6 class="mb-3"><i class="bi bi-robot"></i> AI 分析结果</h6>
                         <div class="card bg-light">
                             <div class="card-body">
@@ -228,13 +142,13 @@ function historyApp() {
             }
         },
 
-        async viewDetail(timestamp) {
+        async viewDetail(folderName) {
             this.detail = null;
             this.detailLoading = true;
             this.modal.show();
 
             try {
-                const response = await fetch(`/api/history/${timestamp}`);
+                const response = await fetch(`/api/history/${folderName}`);
                 const data = await response.json();
                 if (data.success) {
                     this.detail = data.data;
@@ -244,67 +158,6 @@ function historyApp() {
             } finally {
                 this.detailLoading = false;
             }
-        },
-
-        getTotalErrors() {
-            if (!this.detail?.plugin_result?.sections) return 0;
-            let total = 0;
-            this.detail.plugin_result.sections.forEach(s => {
-                if (s.type === 'stats' && s.items) {
-                    s.items.forEach(item => {
-                        if (item.severity === 'error') total += (item.value || 0);
-                    });
-                }
-            });
-            return total;
-        },
-
-        getTotalWarnings() {
-            if (!this.detail?.plugin_result?.sections) return 0;
-            let total = 0;
-            this.detail.plugin_result.sections.forEach(s => {
-                if (s.type === 'stats' && s.items) {
-                    s.items.forEach(item => {
-                        if (item.severity === 'warning') total += (item.value || 0);
-                    });
-                }
-            });
-            return total;
-        },
-
-        getTotalLines() {
-            if (!this.detail?.plugin_result?.sections) return 0;
-            let total = 0;
-            this.detail.plugin_result.sections.forEach(s => {
-                if (s.type === 'stats' && s.items) {
-                    s.items.forEach(item => {
-                        if (item.label && item.label.includes('行')) total = Math.max(total, item.value || 0);
-                    });
-                }
-            });
-            return total;
-        },
-
-        getSeverityColor(severity) {
-            const colors = {
-                'info': 'secondary',
-                'warning': 'warning',
-                'error': 'danger',
-                'critical': 'danger',
-                'success': 'success'
-            };
-            return colors[severity] || 'secondary';
-        },
-
-        getChartColor(index) {
-            const colors = ['primary', 'success', 'warning', 'danger', 'info', 'secondary'];
-            return colors[index % colors.length];
-        },
-
-        truncateText(text, maxLength = 50) {
-            if (!text) return '';
-            if (text.length <= maxLength) return text;
-            return text.substring(0, maxLength) + '...';
         },
 
         formatAiResult(text) {
@@ -339,15 +192,8 @@ function historyApp() {
     padding: 0.2rem 0.4rem;
     border-radius: 0.25rem;
 }
-.plugin-section {
-    background-color: #fafafa;
-    transition: box-shadow 0.2s ease;
-}
-.plugin-section:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.plugin-section .table-responsive {
-    font-size: 0.85rem;
+.plugin-result-container {
+    border-bottom: 1px solid #dee2e6;
 }
 </style>
 {% endblock %}

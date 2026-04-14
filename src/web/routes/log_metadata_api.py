@@ -99,43 +99,9 @@ def delete_rule_set(rules_id):
         success = manager.delete_rule_set(rules_id)
 
         if not success:
-            if rules_id == 'default':
-                return jsonify({'success': False, 'error': '默认规则集不能删除'}), 400
             return jsonify({'success': False, 'error': '规则集不存在'}), 404
 
         return jsonify({'success': True, 'message': '删除成功'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@log_metadata_bp.route('/api/log-rules/active', methods=['GET'])
-def get_active_rules():
-    """获取当前激活的规则集ID"""
-    try:
-        manager = get_log_metadata_manager()
-        active_id = manager.get_active_rules_id()
-        return jsonify({'success': True, 'data': {'active_rules_id': active_id}})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@log_metadata_bp.route('/api/log-rules/active', methods=['POST'])
-def set_active_rules():
-    """设置激活的规则集"""
-    try:
-        data = request.get_json()
-        rules_id = data.get('rules_id', '').strip()
-
-        if not rules_id:
-            return jsonify({'success': False, 'error': '规则集ID不能为空'}), 400
-
-        manager = get_log_metadata_manager()
-        success = manager.set_active_rules(rules_id)
-
-        if not success:
-            return jsonify({'success': False, 'error': '规则集不存在'}), 404
-
-        return jsonify({'success': True, 'message': '设置成功', 'data': {'active_rules_id': rules_id}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

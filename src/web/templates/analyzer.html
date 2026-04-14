@@ -116,7 +116,7 @@
                         <div class="mb-3">
                             <label class="form-label">日志描述规则</label>
                             <select class="form-select" x-model="selectedLogRulesId">
-                                <option value="">使用默认规则</option>
+                                <option value="">不使用日志描述规则</option>
                                 <template x-for="rules in logRulesList" :key="rules.rules_id">
                                     <option :value="rules.rules_id" x-text="rules.name"></option>
                                 </template>
