@@ -10,6 +10,37 @@ body {
     width: 220px;
     min-height: 100vh;
     flex-shrink: 0;
+    transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar.collapsed .sidebar-header span,
+.sidebar.collapsed .nav-link span {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+    justify-content: center;
+    gap: 0;
+}
+
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 0.75rem;
+}
+
+.sidebar-toggle {
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    transition: background 0.2s;
+}
+
+.sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-header {

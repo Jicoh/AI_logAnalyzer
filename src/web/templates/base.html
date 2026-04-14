@@ -14,25 +14,26 @@
         <!-- Sidebar -->
         <div class="sidebar bg-dark text-white d-flex flex-column">
             <div class="sidebar-header">
-                <i class="bi bi-terminal"></i> AI Log Analyzer
+                <span>AI Log Analyzer</span>
+                <i class="bi bi-chevron-left sidebar-toggle ms-auto" onclick="toggleSidebar()"></i>
             </div>
             <nav class="sidebar-nav flex-grow-1">
                 <a href="{{ url_for('main.index') }}" class="nav-link {% if active_page == 'analyzer' %}active{% endif %}">
-                    <i class="bi bi-search"></i> 日志分析
+                    <i class="bi bi-search"></i> <span>日志分析</span>
                 </a>
                 <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
-                    <i class="bi bi-database"></i> 知识库
+                    <i class="bi bi-database"></i> <span>知识库</span>
                 </a>
                 <a href="{{ url_for('main.log_metadata') }}" class="nav-link {% if active_page == 'log_metadata' %}active{% endif %}">
-                    <i class="bi bi-journal-text"></i> 日志规则
+                    <i class="bi bi-journal-text"></i> <span>日志规则</span>
                 </a>
                 <a href="{{ url_for('main.history') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
-                    <i class="bi bi-clock-history"></i> 历史记录
+                    <i class="bi bi-clock-history"></i> <span>历史记录</span>
                 </a>
             </nav>
             <nav class="sidebar-nav border-top border-secondary">
                 <a href="{{ url_for('main.settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
-                    <i class="bi bi-gear"></i> 设置
+                    <i class="bi bi-gear"></i> <span>设置</span>
                 </a>
             </nav>
         </div>

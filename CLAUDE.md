@@ -8,8 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
-# Run web interface (http://127.0.0.1:18888)
-python web_app.py
+# Run web interface
+python web_app.py                    # Default: http://127.0.0.1:18888
+python web_app.py --port 9000 --host 0.0.0.0  # Custom port/host
+python web_app.py --no-debug         # Disable debug mode
+
+# Run tests
+pytest tests/
 
 # CLI usage
 python main.py config set api.base_url <url>
@@ -39,6 +44,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
+| Plugin Selection | `src/plugin_selection/` | Web UI state: selected plugins, KB, AI settings |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
 | Custom Plugins | `custom_plugins/` | User-defined plugins |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
@@ -50,6 +56,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
 - Each plugin implements `BasePlugin` with `analyze(log_file)` returning `AnalysisResult`
 - Plugin categories: PARSER, ANALYZER, DETECTOR, REPORTER, OTHER
+- **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 
 #### Plugin Development
 
@@ -103,7 +110,7 @@ See `plugins/README.md` for full documentation.
 ### Data Directories
 - `data/uploads/` - Web-uploaded files
 - `data/temp/` - Temporary processing (work directories with timestamp_filename format)
-- `data/plugin_output/` - Plugin analysis results
+- `data/plugin_output/` - Plugin analysis results (JSON + HTML)
 - `data/ai_output/` - AI analysis results
 - `document/` - Knowledge base storage
 - `custom_plugins/` - User-defined plugins

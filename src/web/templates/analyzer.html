@@ -203,7 +203,7 @@
                     <span><i class="bi bi-list-check"></i> 插件分析结果</span>
                 </div>
                 <div class="card-body">
-                    <iframe :src="'/api/plugin-result/html/' + htmlPath"
+                    <iframe :src="htmlPath ? '/api/plugin-result/html/' + htmlPath : ''"
                             style="width: 100%; height: 600px; border: none;"></iframe>
                 </div>
             </div>

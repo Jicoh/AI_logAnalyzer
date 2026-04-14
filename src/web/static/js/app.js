@@ -187,8 +187,38 @@ class SSEClient {
     }
 }
 
+// Sidebar toggle function
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const toggleIcon = document.querySelector('.sidebar-toggle');
+    if (!sidebar || !toggleIcon) return;
+
+    sidebar.classList.toggle('collapsed');
+
+    if (sidebar.classList.contains('collapsed')) {
+        toggleIcon.classList.remove('bi-chevron-left');
+        toggleIcon.classList.add('bi-chevron-right');
+        localStorage.setItem('sidebar_collapsed', 'true');
+    } else {
+        toggleIcon.classList.remove('bi-chevron-right');
+        toggleIcon.classList.add('bi-chevron-left');
+        localStorage.setItem('sidebar_collapsed', 'false');
+    }
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
+    // Restore sidebar state
+    if (localStorage.getItem('sidebar_collapsed') === 'true') {
+        const sidebar = document.querySelector('.sidebar');
+        const toggleIcon = document.querySelector('.sidebar-toggle');
+        if (sidebar && toggleIcon) {
+            sidebar.classList.add('collapsed');
+            toggleIcon.classList.remove('bi-chevron-left');
+            toggleIcon.classList.add('bi-chevron-right');
+        }
+    }
+
     // Enable Bootstrap tooltips
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(el => new bootstrap.Tooltip(el));

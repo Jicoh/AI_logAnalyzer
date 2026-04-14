@@ -90,7 +90,7 @@
                 <div class="modal-body" x-show="!detailLoading && detail" style="padding: 0;">
                     <!-- Plugin Results iframe -->
                     <div x-show="detail?.html_path" class="plugin-result-container">
-                        <iframe :src="'/api/plugin-result/html/' + detail?.html_path"
+                        <iframe :src="detail?.html_path ? '/api/plugin-result/html/' + detail.html_path : ''"
                                 style="width: 100%; height: 600px; border: none;"></iframe>
                     </div>
 
