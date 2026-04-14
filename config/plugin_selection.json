@@ -5,6 +5,6 @@
     ],
     "selected_kb_id": "",
     "selected_log_rules_id": "",
-    "enable_ai": true,
+    "enable_ai": false,
     "ai_selection_mode": false
 }

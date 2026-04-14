@@ -78,6 +78,26 @@ def is_log_file(file_path):
     return lower_path.endswith('.txt') or lower_path.endswith('.log')
 
 
+def is_valid_log_file(file_path):
+    """检查是否为有效的日志文件（txt或log），排除压缩文件"""
+    lower_path = file_path.lower()
+    if is_archive_file(file_path):
+        return False
+    return lower_path.endswith('.txt') or lower_path.endswith('.log')
+
+
+def get_files_in_directory(dir_path):
+    """获取目录下一级文件列表（仅一级目录，不递归）"""
+    if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+        return []
+    files = []
+    for item in os.listdir(dir_path):
+        item_path = os.path.join(dir_path, item)
+        if os.path.isfile(item_path):
+            files.append(item_path)
+    return files
+
+
 def extract_archive(archive_path, extract_to):
     """
     解压压缩文件
@@ -197,3 +217,58 @@ def create_work_directory(base_dir, filename):
 
     ensure_dir(work_dir)
     return work_dir
+
+
+def create_batch_work_directory(base_dir, folder_name):
+    """
+    创建批量分析工作目录，格式为 时间戳_文件夹名
+
+    Args:
+        base_dir: 基础目录（data/temp）
+        folder_name: 上传的文件夹名
+
+    Returns:
+        str: 创建的工作目录路径
+    """
+    # 移除可能的扩展名，获取干净的文件夹名
+    clean_name = folder_name
+    for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
+        if clean_name.lower().endswith(ext):
+            clean_name = clean_name[:-len(ext)]
+            break
+
+    # 生成时间戳
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # 创建目录名
+    dir_name = f"{timestamp}_{clean_name}"
+    work_dir = os.path.join(base_dir, dir_name)
+
+    ensure_dir(work_dir)
+    return work_dir
+
+
+def create_single_log_output_dir(base_output_dir, log_filename):
+    """
+    创建单个日志文件的输出目录，格式为 时间戳_日志文件名
+
+    Args:
+        base_output_dir: 批量输出基础目录
+        log_filename: 日志文件名
+
+    Returns:
+        str: 创建的输出目录路径
+    """
+    # 移除扩展名
+    clean_name = log_filename
+    for ext in ['.log', '.txt']:
+        if clean_name.lower().endswith(ext):
+            clean_name = clean_name[:-len(ext)]
+            break
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    dir_name = f"{timestamp}_{clean_name}"
+    output_dir = os.path.join(base_output_dir, dir_name)
+
+    ensure_dir(output_dir)
+    return output_dir

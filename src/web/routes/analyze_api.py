@@ -15,8 +15,9 @@ from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
 from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
-    is_archive_file, is_log_file, extract_archive,
-    create_work_directory, ensure_dir
+    is_archive_file, is_log_file, is_valid_log_file, extract_archive,
+    create_work_directory, create_batch_work_directory, create_single_log_output_dir,
+    ensure_dir, get_files_in_directory
 )
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -601,3 +602,292 @@ def update_plugin_selection():
         return jsonify({'success': True, 'message': 'Plugin selection updated'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/analyze/batch/stream', methods=['POST'])
+def analyze_batch_stream():
+    """批量分析多个日志文件（文件夹上传模式）。"""
+    from werkzeug.utils import secure_filename
+
+    def generate():
+        work_dir = None
+        batch_output_dir = None
+
+        try:
+            # 检查是否有文件
+            files = request.files.getlist('files')
+            if not files or len(files) == 0:
+                yield generate_sse_event({'stage': 'error', 'message': 'No files provided'})
+                return
+
+            # 获取文件夹名（从第一个文件的相对路径提取）
+            first_file = files[0]
+            folder_name = request.form.get('folder_name', 'uploaded_folder')
+
+            # 获取表单数据
+            plugins = request.form.getlist('plugins')
+            enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
+            kb_id = request.form.get('kb_id', '').strip() or None
+            user_prompt = request.form.get('user_prompt', '').strip() or None
+
+            # 创建批量工作目录
+            temp_base = get_temp_base_dir()
+            work_dir = create_batch_work_directory(temp_base, folder_name)
+
+            # 创建批量输出目录
+            plugin_output_base = os.path.join(temp_base, '..', 'plugin_output')
+            batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            clean_folder_name = folder_name
+            for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
+                if clean_folder_name.lower().endswith(ext):
+                    clean_folder_name = clean_folder_name[:-len(ext)]
+                    break
+            batch_dir_name = f"{batch_timestamp}_{clean_folder_name}"
+            batch_output_dir = os.path.join(plugin_output_base, batch_dir_name)
+            ensure_dir(batch_output_dir)
+
+            yield generate_sse_event({
+                'stage': 'batch',
+                'status': 'start',
+                'message': f'开始批量分析...',
+                'work_dir': work_dir
+            })
+
+            # 处理上传的文件
+            all_log_files = []
+            for file in files:
+                filename = secure_filename(file.filename)
+                if not filename:
+                    continue
+
+                # 检查文件类型
+                lower_name = filename.lower()
+                is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
+                              lower_name.endswith('.tar') or lower_name.endswith('.zip'))
+
+                if is_archive:
+                    # 压缩文件：先保存到临时位置，解压后删除压缩包
+                    temp_archive_path = os.path.join(work_dir, f"_temp_{filename}")
+                    file.save(temp_archive_path)
+
+                    try:
+                        # 解压到工作目录
+                        extract_dir_name = os.path.splitext(filename)[0]
+                        extract_dir = os.path.join(work_dir, extract_dir_name)
+                        ensure_dir(extract_dir)
+                        extracted_files = extract_archive(temp_archive_path, extract_dir)
+                        # 从解压后的文件中筛选日志文件
+                        for ef in extracted_files:
+                            if is_valid_log_file(ef):
+                                all_log_files.append(ef)
+                    finally:
+                        # 删除临时压缩包
+                        if os.path.exists(temp_archive_path):
+                            os.remove(temp_archive_path)
+                elif is_valid_log_file(filename):
+                    # 普通日志文件：直接保存到工作目录
+                    file_path = os.path.join(work_dir, filename)
+                    file.save(file_path)
+                    all_log_files.append(file_path)
+                # 其他文件类型跳过
+
+            if not all_log_files:
+                yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
+                return
+
+            total_files = len(all_log_files)
+            yield generate_sse_event({
+                'stage': 'batch',
+                'status': 'files_found',
+                'total': total_files,
+                'message': f'发现 {total_files} 个日志文件'
+            })
+
+            # 获取插件管理器
+            plugin_manager = get_plugin_manager_with_custom()
+            selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+
+            if not selected_plugins:
+                yield generate_sse_event({'stage': 'error', 'message': '没有可用的插件'})
+                return
+
+            # 分析每个日志文件
+            batch_results = {}
+            for idx, log_file in enumerate(all_log_files):
+                log_filename = os.path.basename(log_file)
+
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'start_file',
+                    'current': idx + 1,
+                    'total': total_files,
+                    'file': log_filename,
+                    'message': f'开始分析: {log_filename} ({idx + 1}/{total_files})'
+                })
+
+                # 创建单个日志的输出目录
+                single_output_dir = create_single_log_output_dir(batch_output_dir, log_filename)
+
+                # 插件分析
+                try:
+                    plugin_result = plugin_manager.run_analysis(selected_plugins, log_file)
+                except Exception as e:
+                    yield generate_sse_event({
+                        'stage': 'batch',
+                        'status': 'file_error',
+                        'file': log_filename,
+                        'message': f'插件分析失败: {str(e)}'
+                    })
+                    continue
+
+                # 保存插件结果
+                plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
+                with open(plugin_output_file, 'w', encoding='utf-8') as f:
+                    json.dump(plugin_result, f, indent=4, ensure_ascii=False)
+
+                # 生成HTML
+                render_html(plugin_output_file)
+
+                # 计算相对路径
+                root_dir = get_project_root()
+                html_relative_path = os.path.relpath(
+                    plugin_output_file.replace('.json', '.html'), root_dir
+                )
+
+                # AI分析（如果启用）
+                ai_result = None
+                if enable_ai:
+                    yield generate_sse_event({
+                        'stage': 'batch',
+                        'status': 'ai_start',
+                        'file': log_filename,
+                        'message': f'AI分析: {log_filename}'
+                    })
+
+                    try:
+                        ai_analyzer = AIAnalyzer(
+                            config_manager=get_config_manager(),
+                            kb_manager=get_kb_manager()
+                        )
+
+                        # 读取日志内容
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            log_content = f.read()
+
+                        full_analysis = ""
+                        for chunk in ai_analyzer.analyze(
+                            plugin_result=plugin_result,
+                            log_content=log_content,
+                            kb_id=kb_id,
+                            user_prompt=user_prompt
+                        ):
+                            full_analysis += chunk
+
+                        ai_result = {
+                            'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'kb_id': kb_id,
+                            'analysis': full_analysis
+                        }
+
+                        # 保存AI结果
+                        ai_output_file = os.path.join(single_output_dir, 'ai_result.json')
+                        with open(ai_output_file, 'w', encoding='utf-8') as f:
+                            json.dump(ai_result, f, indent=4, ensure_ascii=False)
+
+                        yield generate_sse_event({
+                            'stage': 'batch',
+                            'status': 'ai_complete',
+                            'file': log_filename
+                        })
+
+                    except Exception as e:
+                        yield generate_sse_event({
+                            'stage': 'batch',
+                            'status': 'ai_error',
+                            'file': log_filename,
+                            'message': f'AI分析失败: {str(e)}'
+                        })
+
+                # 记录结果
+                batch_results[log_filename] = {
+                    'output_dir': os.path.basename(single_output_dir),
+                    'plugin_result': plugin_result,
+                    'html_path': html_relative_path,
+                    'ai_result': ai_result
+                }
+
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'file_complete',
+                    'current': idx + 1,
+                    'total': total_files,
+                    'file': log_filename,
+                    'html_path': html_relative_path,
+                    'message': f'完成: {log_filename}'
+                })
+
+            # 生成汇总JSON
+            batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
+            summary_data = {
+                'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'folder_name': folder_name,
+                'total_files': total_files,
+                'files': batch_results
+            }
+            with open(batch_summary_file, 'w', encoding='utf-8') as f:
+                json.dump(summary_data, f, indent=4, ensure_ascii=False)
+
+            # 生成汇总HTML
+            from plugins.renderer.html_renderer import render_batch_html
+            batch_html_path = render_batch_html(batch_summary_file)
+
+            batch_html_relative = os.path.relpath(batch_html_path, get_project_root())
+
+            # 构建前端需要的文件列表
+            frontend_files = []
+            for filename, file_data in batch_results.items():
+                # 计算错误和警告数
+                total_errors = 0
+                total_warnings = 0
+                plugin_result = file_data.get('plugin_result', {})
+                for plugin_id, plugin_data in plugin_result.items():
+                    if isinstance(plugin_data, dict):
+                        sections = plugin_data.get('sections', [])
+                        for section in sections:
+                            if section.get('type') == 'stats' and section.get('items'):
+                                for item in section.get('items', []):
+                                    severity = item.get('severity', '')
+                                    value = item.get('value', 0)
+                                    if isinstance(value, (int, float)):
+                                        if severity == 'error':
+                                            total_errors += int(value)
+                                        elif severity == 'warning':
+                                            total_warnings += int(value)
+
+                frontend_files.append({
+                    'filename': filename,
+                    'html_path': file_data.get('html_path', ''),
+                    'errors': total_errors,
+                    'warnings': total_warnings,
+                    'has_ai': file_data.get('ai_result') is not None
+                })
+
+            yield generate_sse_event({
+                'stage': 'batch',
+                'status': 'complete',
+                'html_path': batch_html_relative,
+                'files': frontend_files,
+                'message': f'批量分析完成，共 {total_files} 个文件'
+            })
+
+        except Exception as e:
+            yield generate_sse_event({'stage': 'error', 'message': str(e)})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )

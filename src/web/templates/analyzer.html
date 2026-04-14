@@ -12,7 +12,23 @@
                     <i class="bi bi-upload"></i> 上传日志文件
                 </div>
                 <div class="card-body">
+                    <!-- 上传模式选择 -->
                     <div class="mb-3">
+                        <label class="form-label">上传模式</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" id="singleMode"
+                                   value="single" x-model="uploadMode" @change="clearFiles()">
+                            <label class="form-check-label" for="singleMode">单文件</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" id="folderMode"
+                                   value="folder" x-model="uploadMode" @change="clearFiles()">
+                            <label class="form-check-label" for="folderMode">文件夹</label>
+                        </div>
+                    </div>
+
+                    <!-- 单文件上传 -->
+                    <div class="mb-3" x-show="uploadMode === 'single'">
                         <label class="form-label">日志文件</label>
                         <input type="file" class="form-control" id="logFile"
                                accept=".log,.txt,.tar.gz,.tgz,.tar,.zip"
@@ -23,6 +39,23 @@
                         </small>
                         <small class="text-muted" x-show="!logFile && !logFileName">支持格式：log, txt, tar.gz, tgz, tar, zip</small>
                     </div>
+
+                    <!-- 文件夹上传 -->
+                    <div class="mb-3" x-show="uploadMode === 'folder'">
+                        <label class="form-label">日志文件夹</label>
+                        <input type="file" class="form-control" id="folderFiles"
+                               webkitdirectory directory multiple
+                               @change="handleFolderChange($event)">
+                        <small class="text-muted" x-show="folderFiles.length > 0" x-text="'已选择 ' + folderFiles.length + ' 个文件'"></small>
+                        <small class="text-muted" x-show="folderFiles.length === 0">选择包含日志文件的文件夹</small>
+                        <div x-show="folderFiles.length > 0" class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                文件夹内的 .log/.txt 文件将被分析，压缩文件会解压处理
+                            </small>
+                        </div>
+                    </div>
+
                     <button class="btn btn-outline-secondary btn-sm" x-show="completed || wasInterrupted" @click="clearState()">
                         <i class="bi bi-x-circle"></i> 清除结果
                     </button>
@@ -147,7 +180,7 @@
             </div>
 
             <button class="btn btn-primary w-100" @click="startAnalysis()"
-                    :disabled="!logFile || analyzing">
+                    :disabled="(uploadMode === 'single' && !logFile) || (uploadMode === 'folder' && folderFiles.length === 0) || analyzing">
                 <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
                 <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
             </button>
@@ -167,6 +200,15 @@
                              :style="'width: ' + progress + '%'"></div>
                     </div>
                     <small class="text-muted" x-text="statusMessage"></small>
+
+                    <!-- Batch Progress Display -->
+                    <div x-show="uploadMode === 'folder' && batchProgress.total > 0" class="mt-2 mb-0">
+                        <small class="text-muted">
+                            <i class="bi bi-files"></i>
+                            文件进度: <span x-text="batchProgress.current"></span>/<span x-text="batchProgress.total"></span>
+                            <span x-show="batchProgress.file" x-text="' - ' + batchProgress.file"></span>
+                        </small>
+                    </div>
 
                     <!-- Selection Result Display -->
                     <div x-show="selectionResult && !selectionResult.fallback" class="alert alert-success py-2 px-2 mt-2 mb-0">
@@ -197,14 +239,81 @@
                 </div>
             </div>
 
-            <!-- Plugin Results -->
-            <div class="card mb-4" x-show="htmlPath" x-cloak>
+            <!-- Plugin Results (单文件模式) -->
+            <div class="card mb-4" x-show="htmlPath && uploadMode === 'single'" x-cloak>
                 <div class="card-header">
                     <span><i class="bi bi-list-check"></i> 插件分析结果</span>
                 </div>
                 <div class="card-body">
                     <iframe :src="htmlPath ? '/api/plugin-result/html/' + htmlPath : ''"
                             style="width: 100%; height: 600px; border: none;"></iframe>
+                </div>
+            </div>
+
+            <!-- Batch Results (批量模式) -->
+            <div class="card mb-4" x-show="completed && uploadMode === 'folder'" x-cloak>
+                <div class="card-header">
+                    <span><i class="bi bi-folder2-open"></i> 批量分析结果</span>
+                    <span class="badge bg-secondary ms-2" x-text="batchFiles.length"></span>
+                </div>
+                <div class="card-body">
+                    <div x-show="batchFiles.length === 0" class="text-center py-3 text-muted">
+                        <i class="bi bi-exclamation-circle"></i> 未获取到分析结果数据
+                    </div>
+                    <table x-show="batchFiles.length > 0" class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">文件名</th>
+                                <th style="width: 15%; text-align: center;">错误</th>
+                                <th style="width: 15%; text-align: center;">警告</th>
+                                <th style="width: 15%; text-align: center;">AI分析</th>
+                                <th style="width: 15%; text-align: center;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="file in batchFiles" :key="file.filename">
+                                <tr style="cursor: pointer;" @click="showBatchFileDetail(file)">
+                                    <td>
+                                        <i class="bi bi-file-earmark-text text-primary"></i>
+                                        <span x-text="file.filename"></span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="badge" :class="file.errors > 0 ? 'bg-danger' : 'bg-success'" x-text="file.errors"></span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="badge" :class="file.warnings > 0 ? 'bg-warning' : 'bg-success'" x-text="file.warnings"></span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span x-show="file.has_ai" class="badge bg-info"><i class="bi bi-robot"></i> 已分析</span>
+                                        <span x-show="!file.has_ai" class="badge bg-light text-dark">未分析</span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <button class="btn btn-sm btn-outline-primary" @click.stop="showBatchFileDetail(file)">
+                                            <i class="bi bi-eye"></i> 查看
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Batch File Detail Modal -->
+            <div class="modal fade" id="batchDetailModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-file-earmark-text"></i>
+                                <span id="batchModalFilename"></span>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <iframe id="batchModalIframe" src="" style="width: 100%; height: 500px; border: none;"></iframe>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -242,6 +351,11 @@ const STORAGE_KEY = 'analyzer_state';
 
 function analyzerApp() {
     return {
+        // 上传模式
+        uploadMode: 'single',
+        folderFiles: [],
+        folderName: '',
+        // 单文件
         logFile: null,
         logFileName: '',
         pluginCategories: {},
@@ -264,6 +378,9 @@ function analyzerApp() {
         htmlPath: '',
         selectionResult: null,
         eventSource: null,
+        // 批量分析状态
+        batchProgress: { current: 0, total: 0, file: '' },
+        batchFiles: [],
 
         init() {
             this.loadPlugins();
@@ -314,7 +431,9 @@ function analyzerApp() {
 
         saveState() {
             const state = {
+                uploadMode: this.uploadMode,
                 logFileName: this.logFileName,
+                folderName: this.folderName,
                 userPrompt: this.userPrompt,
                 completed: this.completed,
                 progress: this.progress,
@@ -324,6 +443,8 @@ function analyzerApp() {
                 htmlPath: this.htmlPath,
                 selectionResult: this.selectionResult,
                 analyzing: this.analyzing,
+                batchFiles: this.batchFiles,
+                batchProgress: this.batchProgress,
                 timestamp: Date.now()
             };
             try {
@@ -341,7 +462,9 @@ function analyzerApp() {
                 try {
                     const state = JSON.parse(saved);
                     // Restore session state
+                    this.uploadMode = state.uploadMode || 'single';
                     this.logFileName = state.logFileName || '';
+                    this.folderName = state.folderName || '';
                     this.userPrompt = state.userPrompt || '';
                     this.aiResult = state.aiResult || '';
                     this.htmlPath = state.htmlPath || '';
@@ -350,6 +473,8 @@ function analyzerApp() {
                     this.statusText = state.statusText || '准备中';
                     this.statusMessage = state.statusMessage || '';
                     this.selectionResult = state.selectionResult || null;
+                    this.batchFiles = state.batchFiles || [];
+                    this.batchProgress = state.batchProgress || { current: 0, total: 0, file: '' };
 
                     // Check if analysis was interrupted
                     if (state.analyzing && !state.completed) {
@@ -367,6 +492,8 @@ function analyzerApp() {
             localStorage.removeItem(STORAGE_KEY);
             this.logFile = null;
             this.logFileName = '';
+            this.folderFiles = [];
+            this.folderName = '';
             this.completed = false;
             this.wasInterrupted = false;
             this.progress = 0;
@@ -375,6 +502,8 @@ function analyzerApp() {
             this.aiResult = '';
             this.htmlPath = '';
             this.selectionResult = null;
+            this.batchFiles = [];
+            this.batchProgress = { current: 0, total: 0, file: '' };
         },
 
         toggleCategory(category) {
@@ -466,7 +595,37 @@ function analyzerApp() {
             }
         },
 
+        handleFolderChange(event) {
+            if (event.target.files && event.target.files.length > 0) {
+                this.folderFiles = Array.from(event.target.files);
+                // 提取文件夹名（从第一个文件的webkitRelativePath）
+                if (event.target.files[0].webkitRelativePath) {
+                    this.folderName = event.target.files[0].webkitRelativePath.split('/')[0];
+                } else {
+                    this.folderName = 'uploaded_folder';
+                }
+                this.wasInterrupted = false;
+                this.saveState();
+            }
+        },
+
+        clearFiles() {
+            this.logFile = null;
+            this.logFileName = '';
+            this.folderFiles = [];
+            this.folderName = '';
+        },
+
         startAnalysis() {
+            // 根据上传模式选择不同的分析流程
+            if (this.uploadMode === 'folder') {
+                this.startBatchAnalysis();
+            } else {
+                this.startSingleAnalysis();
+            }
+        },
+
+        startSingleAnalysis() {
             if (!this.logFile) return;
 
             this.analyzing = true;
@@ -534,6 +693,150 @@ function analyzerApp() {
                 this.analyzing = false;
                 this.saveState();
             });
+        },
+
+        startBatchAnalysis() {
+            if (!this.folderFiles || this.folderFiles.length === 0) return;
+
+            this.analyzing = true;
+            this.completed = false;
+            this.wasInterrupted = false;
+            this.progress = 0;
+            this.statusText = '批量分析';
+            this.statusMessage = '正在处理...';
+            this.aiResult = '';
+            this.htmlPath = '';
+            this.selectionResult = null;
+            this.batchProgress = { current: 0, total: 0, file: '' };
+            this.batchFiles = [];  // 清空批量文件列表
+
+            const formData = new FormData();
+            // 添加所有文件
+            this.folderFiles.forEach(file => formData.append('files', file));
+            formData.append('folder_name', this.folderName);
+            // 添加插件选择
+            if (!this.aiSelectionMode) {
+                this.selectedPlugins.forEach(p => formData.append('plugins', p));
+            }
+            formData.append('enable_ai', this.enableAi ? 'true' : 'false');
+            if (this.selectedKbId) formData.append('kb_id', this.selectedKbId);
+            if (this.selectedLogRulesId) formData.append('log_rules_id', this.selectedLogRulesId);
+            if (this.userPrompt) formData.append('user_prompt', this.userPrompt);
+
+            fetch('/api/analyze/batch/stream', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                const processLine = (line) => {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            this.handleBatchSSEEvent(data);
+                        } catch (e) {
+                            console.error('Failed to parse SSE:', e);
+                        }
+                    }
+                };
+
+                const readChunk = () => {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            this.analyzing = false;
+                            this.completed = true;
+                            this.saveState();
+                            return;
+                        }
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+                        lines.forEach(processLine);
+                        readChunk();
+                    });
+                };
+
+                readChunk();
+            }).catch(error => {
+                console.error('Batch analysis error:', error);
+                this.statusText = '错误';
+                this.statusMessage = error.message;
+                this.analyzing = false;
+                this.saveState();
+            });
+        },
+
+        handleBatchSSEEvent(data) {
+            console.log('Batch SSE Event:', data);  // 调试日志
+            switch (data.stage) {
+                case 'batch':
+                    if (data.status === 'start') {
+                        this.progress = 5;
+                        this.statusMessage = data.message || '开始批量分析...';
+                    } else if (data.status === 'files_found') {
+                        this.progress = 10;
+                        this.batchProgress.total = data.total;
+                        this.statusMessage = data.message || `发现 ${data.total} 个日志文件`;
+                    } else if (data.status === 'start_file') {
+                        // 开始分析某个文件，更新当前处理的文件名
+                        this.batchProgress.current = data.current;
+                        this.batchProgress.total = data.total;
+                        this.batchProgress.file = data.file;
+                        this.statusMessage = data.message || `正在分析: ${data.file}`;
+                    } else if (data.status === 'file_complete') {
+                        // 文件分析完成，更新进度
+                        this.batchProgress.current = data.current;
+                        this.batchProgress.total = data.total;
+                        this.batchProgress.file = data.file;
+                        this.progress = 10 + Math.round((data.current / data.total) * 80);
+                        this.statusMessage = data.message || `完成: ${data.file}`;
+                    } else if (data.status === 'ai_start') {
+                        this.statusMessage = data.message || `AI分析: ${data.file}`;
+                    } else if (data.status === 'ai_complete' || data.status === 'ai_error') {
+                        // AI事件处理
+                    } else if (data.status === 'file_error') {
+                        this.statusMessage = data.message || `分析失败: ${data.file}`;
+                    } else if (data.status === 'complete') {
+                        console.log('Batch complete, files:', data.files);  // 调试日志
+                        this.analyzing = false;
+                        this.completed = true;
+                        this.progress = 100;
+                        this.statusText = '完成';
+                        this.statusMessage = data.message || '批量分析完成';
+                        if (data.files && data.files.length > 0) {
+                            this.batchFiles = data.files;
+                            console.log('batchFiles set:', this.batchFiles);  // 调试日志
+                        } else {
+                            console.warn('No files in complete event');
+                        }
+                        this.saveState();
+                    }
+                    break;
+
+                case 'error':
+                    this.statusText = '错误';
+                    this.statusMessage = data.message;
+                    this.analyzing = false;
+                    this.saveState();
+                    break;
+            }
+        },
+
+        showBatchFileDetail(file) {
+            // 使用原生DOM操作设置Modal内容
+            document.getElementById('batchModalFilename').textContent = file.filename;
+            document.getElementById('batchModalIframe').src = '/api/plugin-result/html/' + file.html_path;
+            // 使用Bootstrap Modal API显示
+            const modal = new bootstrap.Modal(document.getElementById('batchDetailModal'));
+            modal.show();
+        },
+
+        closeBatchModal() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('batchDetailModal'));
+            if (modal) {
+                modal.hide();
+            }
         },
 
         handleSSEEvent(data) {
