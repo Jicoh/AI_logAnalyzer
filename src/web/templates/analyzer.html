@@ -148,7 +148,7 @@
                         <label class="form-check-label" for="aiSelectionMode" :class="{'text-muted': !enableAi}">AI 智能选择模式</label>
                         <i class="bi bi-exclamation-circle text-warning ms-1"
                            style="cursor: help;"
-                           title="启用后AI会自动选择合适的插件和日志文件进行分析"></i>
+                           title="启用后会根据用户提示词自动选择合适的插件进行分析"></i>
                         <small class="text-muted ms-2" x-show="!enableAi">(需先启用AI分析)</small>
                     </div>
                     <div x-show="aiSelectionMode && enableAi" class="alert alert-info py-2 mb-3">
@@ -182,9 +182,6 @@
                             <label class="form-label">自定义提示词（可选）</label>
                             <textarea class="form-control" x-model="userPrompt"
                                       rows="3" placeholder="输入额外的分析要求..."></textarea>
-                            <small class="text-muted" x-show="aiSelectionMode">
-                                <i class="bi bi-info-circle"></i> 提示词用于 AI 选择合适的插件和文件
-                            </small>
                         </div>
                     </div>
                 </div>
@@ -341,7 +338,7 @@
             </div>
 
             <!-- AI Results -->
-            <div class="card" x-show="aiResult" x-cloak
+            <div class="card" x-show="aiHtmlPath && aiHtmlPath.length > 0" x-cloak
                  :class="{ 'fullscreen-card': aiResultFullscreen }">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-robot"></i> AI 分析结果</span>
@@ -350,14 +347,9 @@
                         <span x-text="aiResultFullscreen ? '退出全屏' : '全屏'"></span>
                     </button>
                 </div>
-                <div class="card-body" :style="aiResultFullscreen ? 'height: calc(100vh - 60px); overflow-y: auto;' : ''">
-                    <div class="ai-result" x-html="formatAiResult(aiResult)"></div>
-                    <div x-show="analyzing && enableAi && !aiResult" class="text-center py-4">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2 text-muted">等待 AI 分析...</p>
-                    </div>
+                <div class="card-body">
+                    <iframe x-bind:src="aiHtmlPath ? '/api/plugin-result/html/' + aiHtmlPath : ''"
+                            style="width: 100%; height: 600px; border: none;"></iframe>
                 </div>
             </div>
 
@@ -404,6 +396,7 @@ function analyzerApp() {
         statusText: '准备中',
         statusMessage: '',
         aiResult: '',
+        aiHtmlPath: '',
         htmlPath: '',
         selectionResult: null,
         eventSource: null,
@@ -473,6 +466,7 @@ function analyzerApp() {
                 statusText: this.statusText,
                 statusMessage: this.statusMessage,
                 aiResult: this.aiResult,
+                aiHtmlPath: this.aiHtmlPath,
                 htmlPath: this.htmlPath,
                 selectionResult: this.selectionResult,
                 analyzing: this.analyzing,
@@ -500,6 +494,7 @@ function analyzerApp() {
                     this.folderName = state.folderName || '';
                     this.userPrompt = state.userPrompt || '';
                     this.aiResult = state.aiResult || '';
+                    this.aiHtmlPath = state.aiHtmlPath || '';
                     this.htmlPath = state.htmlPath || '';
                     this.completed = state.completed || false;
                     this.progress = state.progress || 0;
@@ -533,6 +528,7 @@ function analyzerApp() {
             this.statusText = '准备中';
             this.statusMessage = '';
             this.aiResult = '';
+            this.aiHtmlPath = '';
             this.htmlPath = '';
             this.selectionResult = null;
             this.batchFiles = [];
@@ -724,6 +720,7 @@ function analyzerApp() {
             this.statusText = '分析中';
             this.statusMessage = '正在处理...';
             this.aiResult = '';
+            this.aiHtmlPath = '';
             this.htmlPath = '';
             this.selectionResult = null;
 
@@ -794,6 +791,7 @@ function analyzerApp() {
             this.statusText = '批量分析';
             this.statusMessage = '正在处理...';
             this.aiResult = '';
+            this.aiHtmlPath = '';
             this.htmlPath = '';
             this.selectionResult = null;
             this.batchProgress = { current: 0, total: 0, file: '' };
@@ -857,7 +855,6 @@ function analyzerApp() {
         },
 
         handleBatchSSEEvent(data) {
-            console.log('Batch SSE Event:', data);  // 调试日志
             switch (data.stage) {
                 case 'batch':
                     if (data.status === 'start') {
@@ -887,7 +884,6 @@ function analyzerApp() {
                     } else if (data.status === 'file_error') {
                         this.statusMessage = data.message || `分析失败: ${data.file}`;
                     } else if (data.status === 'complete') {
-                        console.log('Batch complete, files:', data.files);  // 调试日志
                         this.analyzing = false;
                         this.completed = true;
                         this.progress = 100;
@@ -895,9 +891,6 @@ function analyzerApp() {
                         this.statusMessage = data.message || '批量分析完成';
                         if (data.files && data.files.length > 0) {
                             this.batchFiles = data.files;
-                            console.log('batchFiles set:', this.batchFiles);  // 调试日志
-                        } else {
-                            console.warn('No files in complete event');
                         }
                         this.saveState();
                     }
@@ -966,17 +959,15 @@ function analyzerApp() {
                         this.statusMessage = data.message;
                     } else if (data.status === 'complete') {
                         this.progress = 100;
-                        // Use accumulated result if data.result is empty
-                        if (data.result) {
+                        if (data.html_path) {
+                            this.aiHtmlPath = data.html_path;
+                        } else if (data.result) {
                             this.aiResult = data.result;
                         }
                         this.saveState();
                     } else if (data.status === 'error') {
                         this.statusMessage = data.message;
                         this.saveState();
-                    } else if (data.chunk) {
-                        this.aiResult += data.chunk;
-                        this.progress = Math.min(90, this.progress + 0.5);
                     }
                     break;
 
@@ -988,6 +979,9 @@ function analyzerApp() {
                     this.statusMessage = data.message;
                     if (data.html_path) {
                         this.htmlPath = data.html_path;
+                    }
+                    if (data.ai_html_path) {
+                        this.aiHtmlPath = data.ai_html_path;
                     }
                     this.saveState();
                     break;

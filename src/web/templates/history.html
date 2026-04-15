@@ -162,7 +162,13 @@
                     </div>
 
                     <!-- AI Result -->
-                    <div x-show="detail?.ai_result" :class="detailFullscreen ? 'p-3 h-40 overflow-auto' : 'mt-3 p-3'">
+                    <div x-show="detail?.ai_html_path" :class="detailFullscreen ? 'p-3 h-40 overflow-auto' : 'mt-3 p-3'">
+                        <h6 class="mb-3"><i class="bi bi-robot"></i> AI 分析结果</h6>
+                        <iframe :src="detail?.ai_html_path ? '/api/plugin-result/html/' + detail.ai_html_path : ''"
+                                style="width: 100%; height: 400px; border: none; border-radius: 8px;"></iframe>
+                    </div>
+                    <!-- Legacy AI Result (text format) -->
+                    <div x-show="detail?.ai_result && !detail?.ai_html_path" :class="detailFullscreen ? 'p-3 h-40 overflow-auto' : 'mt-3 p-3'">
                         <h6 class="mb-3"><i class="bi bi-robot"></i> AI 分析结果</h6>
                         <div class="card bg-light">
                             <div class="card-body">

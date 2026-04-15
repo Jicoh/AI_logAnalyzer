@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
 
-from src.ai_analyzer.analyzer import AIAnalyzer
+from src.ai_analyzer.agent_coordinator import AgentCoordinator
 from src.ai_analyzer.selection_agent import SelectionAgent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
@@ -138,9 +138,9 @@ def analyze_stream():
             # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
+            ai_selection_mode = request.form.get('ai_selection_mode', 'false').lower() == 'true'
             kb_id = request.form.get('kb_id', '').strip() or None
             user_prompt = request.form.get('user_prompt', '').strip() or None
-            ai_selection_mode = request.form.get('ai_selection_mode', 'false').lower() == 'true'
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
             # 创建工作目录
@@ -283,46 +283,48 @@ def analyze_stream():
             # 第2阶段：AI分析（如果启用）
             ai_result_data = None
             if enable_ai:
-                yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'Starting AI analysis...'})
+                yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
 
                 try:
-                    ai_analyzer = AIAnalyzer(
+                    coordinator = AgentCoordinator(
                         config_manager=get_config_manager(),
-                        kb_manager=get_kb_manager()
+                        kb_manager=get_kb_manager(),
+                        log_metadata_manager=get_log_metadata_manager()
                     )
 
-                    # 流式 AI 分析
-                    full_analysis = ""
-                    for chunk in ai_analyzer.analyze(
+                    html_result = coordinator.run_analysis(
                         plugin_result=combined_result,
-                        log_content=all_log_content,
+                        log_files=selected_log_files,
                         kb_id=kb_id,
-                        user_prompt=user_prompt
-                    ):
-                        full_analysis += chunk
-                        yield generate_sse_event({
-                            'stage': 'ai',
-                            'chunk': chunk
-                        })
+                        user_prompt=user_prompt,
+                        log_rules_id=log_rules_id,
+                        actual_log_paths=log_file_paths
+                    )
+
+                    # 保存 HTML 结果
+                    ai_html_file = os.path.join(plugin_output_dir, 'ai_analysis.html')
+                    with open(ai_html_file, 'w', encoding='utf-8') as f:
+                        f.write(html_result)
+
+                    # 生成相对路径（用于web访问）
+                    root_dir = get_project_root()
+                    ai_html_relative = os.path.relpath(ai_html_file, root_dir)
 
                     ai_result_data = {
                         'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'kb_id': kb_id,
-                        'analysis': full_analysis
+                        'html_path': ai_html_relative
                     }
-
-                    # 保存 AI 结果
-                    ai_output_file = os.path.join(plugin_output_dir, 'ai_result.json')
-                    with open(ai_output_file, 'w', encoding='utf-8') as f:
-                        json.dump(ai_result_data, f, indent=4, ensure_ascii=False)
 
                     yield generate_sse_event({
                         'stage': 'ai',
                         'status': 'complete',
-                        'result': full_analysis
+                        'html_path': ai_html_relative
                     })
 
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     yield generate_sse_event({
                         'stage': 'ai',
                         'status': 'error',
@@ -334,12 +336,18 @@ def analyze_stream():
             root_dir = get_project_root()
             html_relative_path = os.path.relpath(plugin_output_file.replace('.json', '.html'), root_dir)
 
-            yield generate_sse_event({
+            # 构建完成事件数据
+            complete_data = {
                 'stage': 'complete',
                 'message': 'Analysis complete',
                 'work_dir': work_dir,
                 'html_path': html_relative_path
-            })
+            }
+            # 如果有 AI 分析结果，也传递 ai_html_path
+            if ai_result_data and ai_result_data.get('html_path'):
+                complete_data['ai_html_path'] = ai_result_data['html_path']
+
+            yield generate_sse_event(complete_data)
 
         except Exception as e:
             yield generate_sse_event({'stage': 'error', 'message': str(e)})
@@ -466,107 +474,6 @@ def update_config():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# 配置目录
-CONFIG_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-    'config'
-)
-# 用户自定义提示词文件
-DEFAULT_PROMPT_FILE = os.path.join(CONFIG_DIR, 'default_prompt.txt')
-# 默认提示词模板（只读）
-DEFAULT_PROMPT_TEMPLATE = os.path.join(CONFIG_DIR, 'default_prompt_template.txt')
-
-
-def get_default_prompt_template():
-    """获取默认提示词模板内容。"""
-    if os.path.exists(DEFAULT_PROMPT_TEMPLATE):
-        with open(DEFAULT_PROMPT_TEMPLATE, 'r', encoding='utf-8') as f:
-            return f.read()
-    # 文件缺失时的回退模板
-    return """你是一名专业的服务器BMC日志分析专家。请根据以下信息分析日志中存在的问题，并提供可能的原因和解决方案。
-
-## 日志分析结果
-{plugin_analysis}
-
-## 相关知识库内容
-{knowledge_content}
-
-## 日志原文
-{log_content}
-
-## 用户补充说明
-{user_prompt}
-
-请按照以下格式输出分析报告：
-
-### 问题总结
-简要总结日志中发现的主要问题。
-
-### 问题详情
-列出每个问题的详细信息：
-1. 问题类型
-2. 发生时间
-3. 影响范围
-4. 可能原因
-
-### 解决方案建议
-针对每个问题提供具体的解决方案建议。
-
-### 风险评估
-评估当前问题的严重程度和潜在风险。"""
-
-
-@analyze_bp.route('/api/config/prompt', methods=['GET'])
-def get_prompt():
-    """获取默认提示词内容。"""
-    try:
-        if os.path.exists(DEFAULT_PROMPT_FILE):
-            with open(DEFAULT_PROMPT_FILE, 'r', encoding='utf-8') as f:
-                content = f.read()
-        else:
-            content = ''
-
-        return jsonify({'success': True, 'data': {'content': content}})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/config/prompt', methods=['POST'])
-def update_prompt():
-    """更新默认提示词内容。"""
-    try:
-        data = request.get_json()
-        content = data.get('content', '')
-
-        # 确保配置目录存在
-        config_dir = os.path.dirname(DEFAULT_PROMPT_FILE)
-        os.makedirs(config_dir, exist_ok=True)
-
-        with open(DEFAULT_PROMPT_FILE, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        return jsonify({'success': True, 'message': 'Prompt updated'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/config/prompt/reset', methods=['POST'])
-def reset_prompt():
-    """重置默认提示词为原始内容。"""
-    try:
-        default_content = get_default_prompt_template()
-
-        # Ensure config directory exists
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-
-        with open(DEFAULT_PROMPT_FILE, 'w', encoding='utf-8') as f:
-            f.write(default_content)
-
-        return jsonify({'success': True, 'data': {'content': default_content}})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
 @analyze_bp.route('/api/plugin-selection', methods=['GET'])
 def get_plugin_selection():
     """获取插件选择和 AI 设置。"""
@@ -629,6 +536,7 @@ def analyze_batch_stream():
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
             kb_id = request.form.get('kb_id', '').strip() or None
             user_prompt = request.form.get('user_prompt', '').strip() or None
+            log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
             # 创建批量工作目录
             temp_base = get_temp_base_dir()
@@ -765,34 +673,35 @@ def analyze_batch_stream():
                     })
 
                     try:
-                        ai_analyzer = AIAnalyzer(
+                        coordinator = AgentCoordinator(
                             config_manager=get_config_manager(),
-                            kb_manager=get_kb_manager()
+                            kb_manager=get_kb_manager(),
+                            log_metadata_manager=get_log_metadata_manager()
                         )
 
-                        # 读取日志内容
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            log_content = f.read()
-
-                        full_analysis = ""
-                        for chunk in ai_analyzer.analyze(
+                        html_result = coordinator.run_analysis(
                             plugin_result=plugin_result,
-                            log_content=log_content,
+                            log_files=[log_file],
                             kb_id=kb_id,
-                            user_prompt=user_prompt
-                        ):
-                            full_analysis += chunk
+                            user_prompt=user_prompt,
+                            log_rules_id=log_rules_id,
+                            actual_log_paths=[log_file]
+                        )
+
+                        # 保存HTML结果
+                        ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
+                        with open(ai_html_file, 'w', encoding='utf-8') as f:
+                            f.write(html_result)
+
+                        # 生成相对路径
+                        root_dir = get_project_root()
+                        ai_html_relative = os.path.relpath(ai_html_file, root_dir)
 
                         ai_result = {
                             'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'kb_id': kb_id,
-                            'analysis': full_analysis
+                            'html_path': ai_html_relative
                         }
-
-                        # 保存AI结果
-                        ai_output_file = os.path.join(single_output_dir, 'ai_result.json')
-                        with open(ai_output_file, 'w', encoding='utf-8') as f:
-                            json.dump(ai_result, f, indent=4, ensure_ascii=False)
 
                         yield generate_sse_event({
                             'stage': 'batch',

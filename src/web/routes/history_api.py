@@ -158,9 +158,10 @@ def get_history_list():
         html_path = os.path.join(folder_path, 'plugin_result.html')
         has_html_result = os.path.exists(html_path)
 
-        # 检查是否有 AI 结果
-        ai_result_path = os.path.join(folder_path, 'ai_result.json')
-        has_ai_result = os.path.exists(ai_result_path)
+        # 检查是否有 AI 结果（新版：ai_analysis.html，旧版：ai_result.json）
+        ai_html_path = os.path.join(folder_path, 'ai_analysis.html')
+        ai_json_path = os.path.join(folder_path, 'ai_result.json')
+        has_ai_result = os.path.exists(ai_html_path) or os.path.exists(ai_json_path)
 
         history_records.append({
             'folder_name': folder_name,
@@ -204,6 +205,15 @@ def get_history_detail(timestamp):
         result['html_path'] = html_relative_path
 
     # 如果存在 AI 结果则读取
+    # 新版：ai_analysis.html（HTML 格式）
+    ai_html_path = os.path.join(folder_path, 'ai_analysis.html')
+    if os.path.exists(ai_html_path):
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        ai_html_relative = os.path.relpath(ai_html_path, root_dir)
+        result['ai_html_path'] = ai_html_relative
+        result['has_ai_html'] = True
+
+    # 旧版：ai_result.json（JSON 格式）
     ai_result_path = os.path.join(folder_path, 'ai_result.json')
     if os.path.exists(ai_result_path):
         try:
@@ -237,6 +247,15 @@ def get_batch_file_detail(batch_folder, file_output_dir):
         result['html_path'] = html_relative_path
 
     # 检查 AI 结果
+    # 新版：ai_analysis.html（HTML 格式）
+    ai_html_path = os.path.join(folder_path, 'ai_analysis.html')
+    if os.path.exists(ai_html_path):
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        ai_html_relative = os.path.relpath(ai_html_path, root_dir)
+        result['ai_html_path'] = ai_html_relative
+        result['has_ai_html'] = True
+
+    # 旧版：ai_result.json（JSON 格式）
     ai_result_path = os.path.join(folder_path, 'ai_result.json')
     if os.path.exists(ai_result_path):
         try:
