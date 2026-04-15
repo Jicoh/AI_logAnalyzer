@@ -260,3 +260,73 @@ body {
 [x-cloak] {
     display: none !important;
 }
+
+/* 拖拽上传区域 */
+.drop-zone {
+    border: 2px dashed #dee2e6;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    text-align: center;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.drop-zone:hover {
+    border-color: #0d6efd;
+    background-color: #f1f3f5;
+}
+
+.drop-zone.drag-over {
+    border-color: #0d6efd;
+    background-color: #e7f1ff;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+.drop-zone i {
+    color: #6c757d;
+    font-size: 1.5rem;
+}
+
+.drop-zone.drag-over i {
+    color: #0d6efd;
+}
+
+.drop-zone p {
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+}
+
+/* 全屏卡片样式 */
+.fullscreen-card {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1050;
+    margin: 0;
+    border-radius: 0;
+    background: #fff;
+}
+
+.fullscreen-card .card-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8f9fa;
+}
+
+/* Modal全屏样式 */
+.modal-fullscreen {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+}
+
+.modal-fullscreen .modal-content {
+    height: 100vh;
+    border-radius: 0;
+}

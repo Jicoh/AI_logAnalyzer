@@ -27,6 +27,17 @@
                         </div>
                     </div>
 
+                    <!-- 拖拽上传区域 -->
+                    <div class="drop-zone mb-3"
+                         @dragover.prevent="handleDragOver($event)"
+                         @dragleave.prevent="handleDragLeave($event)"
+                         @drop.prevent="handleDrop($event)"
+                         :class="{ 'drag-over': isDragging }">
+                        <i class="bi bi-cloud-arrow-up"></i>
+                        <p class="mb-0 mt-2">拖拽文件或文件夹到此处上传</p>
+                        <small class="text-muted" x-show="uploadMode === 'single'">支持: log, txt, tar.gz, tgz, tar, zip</small>
+                    </div>
+
                     <!-- 单文件上传 -->
                     <div class="mb-3" x-show="uploadMode === 'single'">
                         <label class="form-label">日志文件</label>
@@ -240,13 +251,18 @@
             </div>
 
             <!-- Plugin Results (单文件模式) -->
-            <div class="card mb-4" x-show="htmlPath && uploadMode === 'single'" x-cloak>
-                <div class="card-header">
+            <div class="card mb-4" x-show="htmlPath && uploadMode === 'single'" x-cloak
+                 :class="{ 'fullscreen-card': pluginResultFullscreen }">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-list-check"></i> 插件分析结果</span>
+                    <button class="btn btn-sm btn-outline-secondary" @click="togglePluginResultFullscreen()">
+                        <i class="bi" :class="pluginResultFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+                        <span x-text="pluginResultFullscreen ? '退出全屏' : '全屏'"></span>
+                    </button>
                 </div>
                 <div class="card-body">
                     <iframe :src="htmlPath ? '/api/plugin-result/html/' + htmlPath : ''"
-                            style="width: 100%; height: 600px; border: none;"></iframe>
+                            :style="'width: 100%; height: ' + (pluginResultFullscreen ? 'calc(100vh - 60px)' : '600px') + '; border: none;'"></iframe>
                 </div>
             </div>
 
@@ -301,28 +317,40 @@
 
             <!-- Batch File Detail Modal -->
             <div class="modal fade" id="batchDetailModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-xl modal-dialog-centered">
+                <div class="modal-dialog modal-xl modal-dialog-centered" :class="{ 'modal-fullscreen': batchModalFullscreen }">
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <i class="bi bi-file-earmark-text"></i>
                                 <span id="batchModalFilename"></span>
                             </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleBatchModalFullscreen()">
+                                    <i class="bi" :class="batchModalFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+                                    <span x-text="batchModalFullscreen ? '退出' : '全屏'"></span>
+                                </button>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
                         </div>
                         <div class="modal-body">
-                            <iframe id="batchModalIframe" src="" style="width: 100%; height: 500px; border: none;"></iframe>
+                            <iframe id="batchModalIframe" src=""
+                                    :style="'width: 100%; height: ' + (batchModalFullscreen ? 'calc(100vh - 56px)' : '500px') + '; border: none;'"></iframe>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- AI Results -->
-            <div class="card" x-show="aiResult" x-cloak>
-                <div class="card-header">
-                    <i class="bi bi-robot"></i> AI 分析结果
+            <div class="card" x-show="aiResult" x-cloak
+                 :class="{ 'fullscreen-card': aiResultFullscreen }">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-robot"></i> AI 分析结果</span>
+                    <button class="btn btn-sm btn-outline-secondary" @click="toggleAiResultFullscreen()">
+                        <i class="bi" :class="aiResultFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+                        <span x-text="aiResultFullscreen ? '退出全屏' : '全屏'"></span>
+                    </button>
                 </div>
-                <div class="card-body">
+                <div class="card-body" :style="aiResultFullscreen ? 'height: calc(100vh - 60px); overflow-y: auto;' : ''">
                     <div class="ai-result" x-html="formatAiResult(aiResult)"></div>
                     <div x-show="analyzing && enableAi && !aiResult" class="text-center py-4">
                         <div class="spinner-border text-primary" role="status">
@@ -353,6 +381,7 @@ function analyzerApp() {
     return {
         // 上传模式
         uploadMode: 'single',
+        isDragging: false,
         folderFiles: [],
         folderName: '',
         // 单文件
@@ -381,6 +410,10 @@ function analyzerApp() {
         // 批量分析状态
         batchProgress: { current: 0, total: 0, file: '' },
         batchFiles: [],
+        // 全屏状态
+        pluginResultFullscreen: false,
+        aiResultFullscreen: false,
+        batchModalFullscreen: false,
 
         init() {
             this.loadPlugins();
@@ -614,6 +647,62 @@ function analyzerApp() {
             this.logFileName = '';
             this.folderFiles = [];
             this.folderName = '';
+        },
+
+        handleDragOver(event) {
+            event.preventDefault();
+            this.isDragging = true;
+        },
+
+        handleDragLeave(event) {
+            event.preventDefault();
+            this.isDragging = false;
+        },
+
+        handleDrop(event) {
+            event.preventDefault();
+            this.isDragging = false;
+
+            const items = event.dataTransfer.items;
+            if (!items) {
+                const files = Array.from(event.dataTransfer.files);
+                if (files.length > 0) {
+                    if (this.uploadMode === 'single') {
+                        this.logFile = files[0];
+                        this.logFileName = files[0].name;
+                    } else {
+                        this.folderFiles = files;
+                        this.folderName = 'dropped_files';
+                    }
+                    this.wasInterrupted = false;
+                    this.saveState();
+                }
+                return;
+            }
+
+            if (this.uploadMode === 'single') {
+                const file = items[0].getAsFile();
+                if (file) {
+                    this.logFile = file;
+                    this.logFileName = file.name;
+                    this.wasInterrupted = false;
+                    this.saveState();
+                }
+            } else {
+                const files = [];
+                for (const item of items) {
+                    if (item.kind === 'file') {
+                        const file = item.getAsFile();
+                        if (file) files.push(file);
+                    }
+                }
+                if (files.length > 0) {
+                    this.folderFiles = files;
+                    this.folderName = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : 'dropped_files';
+                    this.wasInterrupted = false;
+                    this.saveState();
+                }
+            }
         },
 
         startAnalysis() {
@@ -923,6 +1012,18 @@ function analyzerApp() {
                 .replace(/`([^`]+)`/g, '<code>$1</code>')
                 .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        },
+
+        togglePluginResultFullscreen() {
+            this.pluginResultFullscreen = !this.pluginResultFullscreen;
+        },
+
+        toggleAiResultFullscreen() {
+            this.aiResultFullscreen = !this.aiResultFullscreen;
+        },
+
+        toggleBatchModalFullscreen() {
+            this.batchModalFullscreen = !this.batchModalFullscreen;
         }
     };
 }
