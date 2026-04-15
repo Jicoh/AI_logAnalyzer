@@ -27,75 +27,142 @@
         <template x-for="record in historyList" :key="record.folder_name">
             <div class="card mb-3">
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-4">
-                            <h6 class="mb-1">
-                                <i class="bi bi-folder"></i>
-                                <span x-text="record.folder_name"></span>
-                            </h6>
-                            <small class="text-muted" x-text="record.formatted_time"></small>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="d-flex gap-3">
-                                <div>
+                    <!-- 单文件记录头部 -->
+                    <template x-if="!record.is_batch">
+                        <div class="row align-items-center">
+                            <div class="col-md-4">
+                                <h6 class="mb-1">
+                                    <i class="bi bi-file-text"></i>
+                                    <span x-text="record.folder_name"></span>
+                                </h6>
+                                <small class="text-muted" x-text="record.formatted_time"></small>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex gap-2">
                                     <span class="badge bg-danger">
                                         <i class="bi bi-x-circle"></i>
                                         <span x-text="record.total_errors"></span> 错误
                                     </span>
-                                </div>
-                                <div>
                                     <span class="badge bg-warning text-dark">
                                         <i class="bi bi-exclamation-triangle"></i>
                                         <span x-text="record.total_warnings"></span> 警告
                                     </span>
-                                </div>
-                                <div>
                                     <span class="badge bg-info">
                                         <i class="bi bi-puzzle"></i>
                                         <span x-text="record.plugin_count"></span> 插件
                                     </span>
+                                    <span class="badge bg-success" x-show="record.has_ai_result">
+                                        <i class="bi bi-robot"></i> AI
+                                    </span>
                                 </div>
                             </div>
-                            <div x-show="record.has_ai_result" class="mt-1">
-                                <small class="text-success"><i class="bi bi-robot"></i> AI分析</small>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-outline-primary btn-sm" @click="viewDetail(record.folder_name)">
+                                    <i class="bi bi-eye"></i> 查看详情
+                                </button>
                             </div>
                         </div>
-                        <div class="col-md-4 text-end">
-                            <button class="btn btn-outline-primary btn-sm" @click="viewDetail(record.folder_name)">
-                                <i class="bi bi-eye"></i> 查看详情
-                            </button>
+                    </template>
+
+                    <!-- 批量记录头部 -->
+                    <template x-if="record.is_batch">
+                        <div>
+                            <div class="row align-items-center">
+                                <div class="col-md-5">
+                                    <h6 class="mb-1">
+                                        <i class="bi bi-folder-fill"></i>
+                                        <span x-text="record.folder_name"></span>
+                                        <button class="btn btn-sm btn-link ps-1" @click="toggleBatchExpand(record.folder_name)">
+                                            <i class="bi" :class="batchExpanded[record.folder_name] ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                        </button>
+                                    </h6>
+                                    <small class="text-muted" x-text="record.formatted_time"></small>
+                                    <small class="text-muted ms-2">(共 <span x-text="record.total_files"></span> 文件)</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <span class="badge bg-danger me-1" x-show="record.total_errors > 0">
+                                        <span x-text="record.total_errors"></span> 错误
+                                    </span>
+                                    <span class="badge bg-warning text-dark" x-show="record.total_warnings > 0">
+                                        <span x-text="record.total_warnings"></span> 警告
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 展开的子文件列表 -->
+                            <div x-show="batchExpanded[record.folder_name]" class="mt-3 border-top pt-3">
+                                <template x-for="file in record.files" :key="file.filename">
+                                    <div class="row align-items-center mb-2 py-1 bg-light rounded">
+                                        <div class="col-md-5">
+                                            <i class="bi bi-file-text text-muted"></i>
+                                            <span x-text="file.filename" class="ms-1"></span>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <span class="badge bg-danger me-1" x-show="file.errors > 0">
+                                                <i class="bi bi-x-circle"></i>
+                                                <span x-text="file.errors"></span> 错误
+                                            </span>
+                                            <span class="badge bg-warning text-dark me-1" x-show="file.warnings > 0">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                                <span x-text="file.warnings"></span> 警告
+                                            </span>
+                                            <span class="badge bg-info me-1">
+                                                <i class="bi bi-puzzle"></i>
+                                                <span x-text="file.plugin_count"></span> 插件
+                                            </span>
+                                            <span class="badge bg-success" x-show="file.has_ai_result">
+                                                <i class="bi bi-robot"></i> AI
+                                            </span>
+                                        </div>
+                                        <div class="col-md-3 text-end">
+                                            <button class="btn btn-outline-primary btn-sm"
+                                                    @click="viewBatchFileDetail(record.folder_name, file.output_dir)">
+                                                <i class="bi bi-eye"></i> 查看详情
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
-                    </div>
+                    </template>
                 </div>
             </div>
         </template>
     </div>
 
     <!-- Detail Modal -->
-    <div class="modal fade" id="detailModal" tabindex="-1" ref="detailModal">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
+    <div class="modal fade" id="detailModal" tabindex="-1" ref="detailModal"
+         :class="{ 'show': detailFullscreen }" :style="detailFullscreen ? 'display: block; opacity: 1;' : ''">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable"
+             :class="{ 'modal-fullscreen': detailFullscreen }">
+            <div class="modal-content" :style="detailFullscreen ? 'height: 100vh; border-radius: 0;' : ''">
+                <div class="modal-header" :style="detailFullscreen ? 'padding: 0.75rem 1rem;' : ''">
                     <h5 class="modal-title">
                         <i class="bi bi-folder"></i>
                         分析详情 - <span x-text="detail?.folder_name || ''"></span>
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="toggleDetailFullscreen()">
+                            <i class="bi" :class="detailFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+                        </button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
                 </div>
                 <div class="modal-body" x-show="detailLoading">
                     <div class="text-center py-5">
                         <div class="spinner-border text-primary"></div>
                     </div>
                 </div>
-                <div class="modal-body" x-show="!detailLoading && detail" style="padding: 0;">
+                <div class="modal-body" x-show="!detailLoading && detail" :style="detailFullscreen ? 'padding: 0; height: calc(100vh - 60px);' : 'padding: 0;'">
                     <!-- Plugin Results iframe -->
-                    <div x-show="detail?.html_path" class="plugin-result-container">
+                    <div x-show="detail?.html_path" class="plugin-result-container"
+                         :style="detailFullscreen ? 'height: 60%; border-bottom: 1px solid #dee2e6;' : ''">
                         <iframe :src="detail?.html_path ? '/api/plugin-result/html/' + detail.html_path : ''"
-                                style="width: 100%; height: 600px; border: none;"></iframe>
+                                :style="detailFullscreen ? 'width: 100%; height: 100%; border: none;' : 'width: 100%; height: 600px; border: none;'"></iframe>
                     </div>
 
                     <!-- AI Result -->
-                    <div x-show="detail?.ai_result" class="mt-3 p-3">
+                    <div x-show="detail?.ai_result" :class="detailFullscreen ? 'p-3 h-40 overflow-auto' : 'mt-3 p-3'">
                         <h6 class="mb-3"><i class="bi bi-robot"></i> AI 分析结果</h6>
                         <div class="card bg-light">
                             <div class="card-body">
@@ -104,7 +171,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer" x-show="!detailFullscreen">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
                 </div>
             </div>
@@ -122,6 +189,8 @@ function historyApp() {
         detail: null,
         detailLoading: false,
         modal: null,
+        batchExpanded: {},
+        detailFullscreen: false,
 
         init() {
             this.loadHistory();
@@ -142,9 +211,14 @@ function historyApp() {
             }
         },
 
+        toggleBatchExpand(folderName) {
+            this.batchExpanded[folderName] = !this.batchExpanded[folderName];
+        },
+
         async viewDetail(folderName) {
             this.detail = null;
             this.detailLoading = true;
+            this.detailFullscreen = false;
             this.modal.show();
 
             try {
@@ -157,6 +231,34 @@ function historyApp() {
                 console.error('Failed to load detail:', error);
             } finally {
                 this.detailLoading = false;
+            }
+        },
+
+        async viewBatchFileDetail(batchFolder, fileOutputDir) {
+            this.detail = null;
+            this.detailLoading = true;
+            this.detailFullscreen = false;
+            this.modal.show();
+
+            try {
+                const response = await fetch(`/api/history/batch/${batchFolder}/${fileOutputDir}`);
+                const data = await response.json();
+                if (data.success) {
+                    this.detail = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load batch file detail:', error);
+            } finally {
+                this.detailLoading = false;
+            }
+        },
+
+        toggleDetailFullscreen() {
+            this.detailFullscreen = !this.detailFullscreen;
+            if (this.detailFullscreen) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
             }
         },
 
