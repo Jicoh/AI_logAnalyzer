@@ -11,184 +11,206 @@
     </div>
 
     <div class="row">
-        <div class="col-lg-6">
-            <!-- API Settings -->
-            <div class="card mb-4">
-                <div class="card-header">
+        <!-- 左侧子侧边栏 -->
+        <div class="col-md-3 mb-4">
+            <div class="settings-sidebar">
+                <div class="nav-item" :class="{ 'active': currentTab === 'api' }" @click="currentTab = 'api'">
                     <i class="bi bi-cloud"></i> API 设置
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">Base URL</label>
-                        <input type="text" class="form-control" x-model="config.api.base_url"
-                               placeholder="https://api.example.com/v1">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">API Key</label>
-                        <input type="text" class="form-control" x-model="config.api.api_key" placeholder="sk-...">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Model</label>
-                        <input type="text" class="form-control" x-model="config.api.model"
-                               placeholder="gpt-4, glm-4, etc.">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Temperature</label>
-                            <input type="number" class="form-control" x-model="config.api.temperature"
-                                   min="0" max="2" step="0.1">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Max Tokens</label>
-                            <input type="number" class="form-control" x-model="config.api.max_tokens"
-                                   min="1" step="1">
-                        </div>
-                    </div>
+                <div class="nav-item" :class="{ 'active': currentTab === 'kb' }" @click="currentTab = 'kb'">
+                    <i class="bi bi-database"></i> 知识库设置
                 </div>
-            </div>
-
-            <!-- BM25 Parameters -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-bar-chart"></i> BM25 参数
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">k1 (词频饱和参数)</label>
-                            <input type="number" class="form-control" x-model="config.bm25.k1"
-                                   min="0" max="3" step="0.1">
-                            <small class="text-muted">通常在 1.2-2.0 之间</small>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">b (文档长度归一化)</label>
-                            <input type="number" class="form-control" x-model="config.bm25.b"
-                                   min="0" max="1" step="0.05">
-                            <small class="text-muted">通常在 0.75 左右</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Retrieval Settings -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-search"></i> 检索设置
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">检索模式</label>
-                        <select class="form-select" x-model="config.retrieval.mode">
-                            <option value="bm25">BM25</option>
-                            <option value="vector">Vector</option>
-                            <option value="hybrid">Hybrid (混合)</option>
-                        </select>
-                    </div>
-                    <div x-show="config.retrieval.mode === 'hybrid'">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">BM25 权重</label>
-                                <input type="number" class="form-control" x-model="config.retrieval.bm25_weight"
-                                       min="0" max="1" step="0.1">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Vector 权重</label>
-                                <input type="number" class="form-control" x-model="config.retrieval.vector_weight"
-                                       min="0" max="1" step="0.1">
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">RRF K 参数</label>
-                            <input type="number" class="form-control" x-model="config.retrieval.rrf_k"
-                                   min="1" max="100" step="1">
-                            <small class="text-muted">Reciprocal Rank Fusion 参数，通常为 60</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cache Cleanup -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-trash"></i> 缓存清理
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span><i class="bi bi-folder2-open"></i> 缓存文件 (data/temp)</span>
-                            <span class="badge bg-secondary" x-text="cacheStats.temp?.size_formatted || '计算中...'"></span>
-                        </div>
-                        <button class="btn btn-outline-warning btn-sm" @click="clearTemp()">
-                            <i class="bi bi-trash3"></i> 清理缓存文件
-                        </button>
-                    </div>
-                    <hr>
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span><i class="bi bi-folder"></i> 分析结果 (data/plugin_output)</span>
-                            <span class="badge bg-secondary" x-text="cacheStats.plugin_output?.size_formatted || '计算中...'"></span>
-                        </div>
-                        <button class="btn btn-outline-danger btn-sm" @click="clearResults()">
-                            <i class="bi bi-trash3"></i> 清理分析结果
-                        </button>
-                    </div>
-                    <small class="text-muted">
-                        <i class="bi bi-info-circle"></i>
-                        清理操作不可恢复，请谨慎操作
-                    </small>
+                <div class="nav-item" :class="{ 'active': currentTab === 'cache' }" @click="currentTab = 'cache'">
+                    <i class="bi bi-trash"></i> 缓存设置
                 </div>
             </div>
         </div>
 
-        <div class="col-lg-6">
-            <!-- Embedding Settings -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-diagram-3"></i> Embedding 设置
-                </div>
-                <div class="card-body">
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="embeddingEnabled"
-                               x-model="config.embedding.enabled">
-                        <label class="form-check-label" for="embeddingEnabled">启用向量嵌入</label>
+        <!-- 右侧内容区域 -->
+        <div class="col-md-9">
+            <!-- API 设置 -->
+            <div x-show="currentTab === 'api'" x-cloak>
+                <!-- API 配置 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-cloud"></i> API 配置
                     </div>
-
-                    <div x-show="config.embedding.enabled" x-cloak>
-                        <div class="mb-3">
-                            <label class="form-label">Provider</label>
-                            <select class="form-select" x-model="config.embedding.provider">
-                                <option value="ollama">Ollama</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="custom">Custom</option>
-                            </select>
-                        </div>
+                    <div class="card-body">
                         <div class="mb-3">
                             <label class="form-label">Base URL</label>
-                            <input type="text" class="form-control" x-model="config.embedding.base_url"
-                                   placeholder="http://localhost:11434/v1">
+                            <input type="text" class="form-control" x-model="config.api.base_url"
+                                   placeholder="https://api.example.com/v1">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">API Key</label>
-                            <input type="password" class="form-control" x-model="config.embedding.api_key"
-                                   placeholder="可选">
+                            <input type="text" class="form-control" x-model="config.api.api_key" placeholder="sk-...">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Model</label>
-                            <input type="text" class="form-control" x-model="config.embedding.model"
-                                   placeholder="nomic-embed-text, text-embedding-ada-002, etc.">
+                            <input type="text" class="form-control" x-model="config.api.model"
+                                   placeholder="gpt-4, glm-4, etc.">
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Dimension</label>
-                                <input type="number" class="form-control" x-model="config.embedding.dimension"
-                                       min="1" step="1">
+                                <label class="form-label">Temperature</label>
+                                <input type="number" class="form-control" x-model="config.api.temperature"
+                                       min="0" max="2" step="0.1">
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Batch Size</label>
-                                <input type="number" class="form-control" x-model="config.embedding.batch_size"
+                                <label class="form-label">Max Tokens</label>
+                                <input type="number" class="form-control" x-model="config.api.max_tokens"
                                        min="1" step="1">
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Embedding 设置 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-diagram-3"></i> Embedding 设置
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="embeddingEnabled"
+                                   x-model="config.embedding.enabled">
+                            <label class="form-check-label" for="embeddingEnabled">启用向量嵌入</label>
+                        </div>
+
+                        <div x-show="config.embedding.enabled">
+                            <div class="mb-3">
+                                <label class="form-label">Provider</label>
+                                <select class="form-select" x-model="config.embedding.provider">
+                                    <option value="ollama">Ollama</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Base URL</label>
+                                <input type="text" class="form-control" x-model="config.embedding.base_url"
+                                       placeholder="http://localhost:11434/v1">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">API Key</label>
+                                <input type="password" class="form-control" x-model="config.embedding.api_key"
+                                       placeholder="可选">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Model</label>
+                                <input type="text" class="form-control" x-model="config.embedding.model"
+                                       placeholder="nomic-embed-text, text-embedding-ada-002, etc.">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Dimension</label>
+                                    <input type="number" class="form-control" x-model="config.embedding.dimension"
+                                           min="1" step="1">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Batch Size</label>
+                                    <input type="number" class="form-control" x-model="config.embedding.batch_size"
+                                           min="1" step="1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识库设置 -->
+            <div x-show="currentTab === 'kb'" x-cloak>
+                <!-- BM25 参数 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-bar-chart"></i> BM25 参数
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">k1 (词频饱和参数)</label>
+                                <input type="number" class="form-control" x-model="config.bm25.k1"
+                                       min="0" max="3" step="0.1">
+                                <small class="text-muted">通常在 1.2-2.0 之间</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">b (文档长度归一化)</label>
+                                <input type="number" class="form-control" x-model="config.bm25.b"
+                                       min="0" max="1" step="0.05">
+                                <small class="text-muted">通常在 0.75 左右</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检索设置 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-search"></i> 检索设置
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">检索模式</label>
+                            <select class="form-select" x-model="config.retrieval.mode">
+                                <option value="bm25">BM25</option>
+                                <option value="vector">Vector</option>
+                                <option value="hybrid">Hybrid (混合)</option>
+                            </select>
+                        </div>
+                        <div x-show="config.retrieval.mode === 'hybrid'">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">BM25 权重</label>
+                                    <input type="number" class="form-control" x-model="config.retrieval.bm25_weight"
+                                           min="0" max="1" step="0.1">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Vector 权重</label>
+                                    <input type="number" class="form-control" x-model="config.retrieval.vector_weight"
+                                           min="0" max="1" step="0.1">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">RRF K 参数</label>
+                                <input type="number" class="form-control" x-model="config.retrieval.rrf_k"
+                                       min="1" max="100" step="1">
+                                <small class="text-muted">Reciprocal Rank Fusion 参数，通常为 60</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 缓存设置 -->
+            <div x-show="currentTab === 'cache'" x-cloak>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-trash"></i> 缓存清理
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span><i class="bi bi-folder2-open"></i> 缓存文件 (data/temp)</span>
+                                <span class="badge bg-secondary" x-text="cacheStats.temp?.size_formatted || '计算中...'"></span>
+                            </div>
+                            <button class="btn btn-outline-warning btn-sm" @click="clearTemp()">
+                                <i class="bi bi-trash3"></i> 清理缓存文件
+                            </button>
+                        </div>
+                        <hr>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span><i class="bi bi-folder"></i> 分析结果 (data/plugin_output)</span>
+                                <span class="badge bg-secondary" x-text="cacheStats.plugin_output?.size_formatted || '计算中...'"></span>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm" @click="clearResults()">
+                                <i class="bi bi-trash3"></i> 清理分析结果
+                            </button>
+                        </div>
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            清理操作不可恢复，请谨慎操作
+                        </small>
                     </div>
                 </div>
             </div>
@@ -227,6 +249,7 @@
 <script>
 function settingsApp() {
     return {
+        currentTab: 'api',
         config: {
             api: {
                 base_url: '',
