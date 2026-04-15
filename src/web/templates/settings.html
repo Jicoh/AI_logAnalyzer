@@ -106,6 +106,38 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Cache Cleanup -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-trash"></i> 缓存清理
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-folder2-open"></i> 缓存文件 (data/temp)</span>
+                            <span class="badge bg-secondary" x-text="cacheStats.temp?.size_formatted || '计算中...'"></span>
+                        </div>
+                        <button class="btn btn-outline-warning btn-sm" @click="clearTemp()">
+                            <i class="bi bi-trash3"></i> 清理缓存文件
+                        </button>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-folder"></i> 分析结果 (data/plugin_output)</span>
+                            <span class="badge bg-secondary" x-text="cacheStats.plugin_output?.size_formatted || '计算中...'"></span>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" @click="clearResults()">
+                            <i class="bi bi-trash3"></i> 清理分析结果
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        清理操作不可恢复，请谨慎操作
+                    </small>
+                </div>
+            </div>
         </div>
 
         <div class="col-lg-6">
@@ -257,6 +289,7 @@ function settingsApp() {
         },
         defaultPrompt: '',
         saving: false,
+        cacheStats: {},
         toast: {
             show: false,
             type: 'success',
@@ -267,6 +300,7 @@ function settingsApp() {
         init() {
             this.loadConfig();
             this.loadPrompt();
+            this.loadCacheStats();
         },
 
         async loadConfig() {
@@ -410,6 +444,58 @@ function settingsApp() {
             setTimeout(() => {
                 this.toast.show = false;
             }, 3000);
+        },
+
+        async loadCacheStats() {
+            try {
+                const response = await fetch('/api/cache/stats');
+                const data = await response.json();
+                if (data.success) {
+                    this.cacheStats = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load cache stats:', error);
+            }
+        },
+
+        async clearTemp() {
+            if (confirm('确定要清理缓存文件吗？此操作不可恢复！')) {
+                try {
+                    const response = await fetch('/api/cache/clear-temp', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.showToast('success', '清理成功', data.message);
+                        this.loadCacheStats();
+                    } else {
+                        this.showToast('error', '清理失败', data.error || '未知错误');
+                    }
+                } catch (error) {
+                    console.error('Failed to clear temp:', error);
+                    this.showToast('error', '清理失败', error.message);
+                }
+            }
+        },
+
+        async clearResults() {
+            if (confirm('确定要清理分析结果吗？此操作不可恢复！')) {
+                try {
+                    const response = await fetch('/api/cache/clear-results', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.showToast('success', '清理成功', data.message);
+                        this.loadCacheStats();
+                    } else {
+                        this.showToast('error', '清理失败', data.error || '未知错误');
+                    }
+                } catch (error) {
+                    console.error('Failed to clear results:', error);
+                    this.showToast('error', '清理失败', error.message);
+                }
+            }
         }
     };
 }
