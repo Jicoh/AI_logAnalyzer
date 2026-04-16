@@ -235,9 +235,14 @@
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div class="toast" :class="toast.show ? 'show' : ''" role="alert" x-show="toast.show" x-cloak>
-            <div class="toast-header" :class="toast.type === 'error' ? 'bg-danger text-white' : 'bg-success text-white'">
+            <div class="toast-header"
+                :class="{
+                    'bg-danger text-white': toast.type === 'error',
+                    'bg-warning': toast.type === 'warning',
+                    'bg-success text-white': toast.type === 'success'
+                }">
                 <strong class="me-auto" x-text="toast.title"></strong>
-                <button type="button" class="btn-close btn-close-white" @click="toast.show = false"></button>
+                <button type="button" class="btn-close" :class="toast.type === 'warning' ? '' : 'btn-close-white'" @click="toast.show = false"></button>
             </div>
             <div class="toast-body" x-text="toast.message"></div>
         </div>
@@ -401,7 +406,12 @@ function settingsApp() {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        this.showToast('success', '清理成功', data.message);
+                        if (data.stats && data.stats.failed > 0) {
+                            this.showToast('warning', '清理完成',
+                                `删除 ${data.stats.deleted} 个文件，${data.stats.failed} 个失败`);
+                        } else {
+                            this.showToast('success', '清理成功', data.message);
+                        }
                         this.loadCacheStats();
                     } else {
                         this.showToast('error', '清理失败', data.error || '未知错误');
@@ -421,7 +431,12 @@ function settingsApp() {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        this.showToast('success', '清理成功', data.message);
+                        if (data.stats && data.stats.failed > 0) {
+                            this.showToast('warning', '清理完成',
+                                `删除 ${data.stats.deleted} 个文件，${data.stats.failed} 个失败`);
+                        } else {
+                            this.showToast('success', '清理成功', data.message);
+                        }
                         this.loadCacheStats();
                     } else {
                         this.showToast('error', '清理失败', data.error || '未知错误');

@@ -3,6 +3,9 @@
 """
 
 import os
+import stat
+import errno
+import time
 import shutil
 from flask import Blueprint, jsonify
 from src.utils import get_data_dir
@@ -22,18 +25,52 @@ def format_size(size_bytes):
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
-def clear_dir_contents(path):
-    """清空目录内容但保留目录本身。"""
-    if not os.path.exists(path):
-        return
-    for entry in os.scandir(path):
+def handle_readonly(func, path, excinfo):
+    """处理只读文件删除失败，用于 shutil.rmtree 的 onerror 回调。"""
+    if func in (os.rmdir, os.remove):
+        exc = excinfo[1]
+        if hasattr(exc, 'errno') and exc.errno in (errno.EACCES, errno.EPERM):
+            try:
+                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+                func(path)
+            except OSError:
+                pass
+
+
+def delete_with_retry(path, is_dir=False, max_retries=3, delay=0.1):
+    """带重试和权限处理的删除。"""
+    for attempt in range(max_retries):
         try:
-            if entry.is_dir():
-                shutil.rmtree(entry.path)
+            if is_dir:
+                shutil.rmtree(path, onerror=handle_readonly)
             else:
-                os.remove(entry.path)
+                if not os.access(path, os.W_OK):
+                    os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+                os.remove(path)
+            return True
         except OSError:
-            pass
+            if attempt == max_retries - 1:
+                return False
+            time.sleep(delay)
+    return False
+
+
+def clear_dir_contents(path):
+    """清空目录内容但保留目录本身，返回统计信息。"""
+    if not os.path.exists(path):
+        return {'deleted': 0, 'failed': 0, 'failed_files': []}
+
+    stats = {'deleted': 0, 'failed': 0, 'failed_files': []}
+
+    for entry in os.scandir(path):
+        is_dir = entry.is_dir()
+        if delete_with_retry(entry.path, is_dir=is_dir):
+            stats['deleted'] += 1
+        else:
+            stats['failed'] += 1
+            stats['failed_files'].append(entry.path)
+
+    return stats
 
 
 @cache_bp.route('/api/cache/stats', methods=['GET'])
@@ -74,11 +111,16 @@ def clear_results():
     """清理分析结果目录。"""
     try:
         plugin_output_dir = get_data_dir('plugin_output')
-        clear_dir_contents(plugin_output_dir)
+        stats = clear_dir_contents(plugin_output_dir)
+
+        message = f"清理完成：删除 {stats['deleted']} 个文件"
+        if stats['failed'] > 0:
+            message += f"，{stats['failed']} 个文件删除失败"
 
         return jsonify({
             'success': True,
-            'message': '分析结果已清理'
+            'message': message,
+            'stats': stats
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -89,11 +131,16 @@ def clear_temp():
     """清理临时文件目录。"""
     try:
         temp_dir = get_data_dir('temp')
-        clear_dir_contents(temp_dir)
+        stats = clear_dir_contents(temp_dir)
+
+        message = f"清理完成：删除 {stats['deleted']} 个文件"
+        if stats['failed'] > 0:
+            message += f"，{stats['failed']} 个文件删除失败"
 
         return jsonify({
             'success': True,
-            'message': '缓存文件已清理'
+            'message': message,
+            'stats': stats
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

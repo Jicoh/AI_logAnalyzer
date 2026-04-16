@@ -363,7 +363,34 @@ def get_plugin_result_html(html_path):
     root_dir = get_project_root()
     full_path = os.path.join(root_dir, html_path)
     if not os.path.exists(full_path):
-        return jsonify({'success': False, 'error': 'HTML file not found'}), 404
+        # 返回友好的 HTML 页面，而不是 JSON 错误
+        return '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>结果已清理</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f8f9fa;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div style="text-align: center; padding: 40px;">
+        <i class="bi bi-trash3" style="font-size: 64px; color: #6c757d;"></i>
+        <p style="margin-top: 24px; color: #495057; font-size: 18px; font-weight: 500;">分析结果已被清理</p>
+        <p style="color: #6c757d; font-size: 14px; margin-top: 8px;">请重新上传日志文件进行分析</p>
+    </div>
+</body>
+</html>''', 200
+
     directory = os.path.dirname(full_path)
     filename = os.path.basename(full_path)
     return send_from_directory(directory, filename)
