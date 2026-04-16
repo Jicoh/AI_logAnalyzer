@@ -4,7 +4,6 @@
 
 import os
 import stat
-import errno
 import time
 import shutil
 from flask import Blueprint, jsonify
@@ -27,14 +26,49 @@ def format_size(size_bytes):
 
 def handle_readonly(func, path, excinfo):
     """处理只读文件删除失败，用于 shutil.rmtree 的 onerror 回调。"""
-    if func in (os.rmdir, os.remove):
-        exc = excinfo[1]
-        if hasattr(exc, 'errno') and exc.errno in (errno.EACCES, errno.EPERM):
+    # 先尝试修改权限，不管错误类型
+    try:
+        if os.path.isdir(path):
+            os.chmod(path, stat.S_IRWXU)
+        else:
+            os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+        func(path)
+    except OSError:
+        pass
+
+
+def force_delete_dir(path):
+    """强制删除目录，先递归修改所有权限再删除。"""
+    if not os.path.exists(path):
+        return True
+
+    # 递归修改权限
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            filepath = os.path.join(root, name)
             try:
-                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
-                func(path)
+                os.chmod(filepath, stat.S_IWUSR | stat.S_IRUSR)
             except OSError:
                 pass
+        for name in dirs:
+            dirpath = os.path.join(root, name)
+            try:
+                os.chmod(dirpath, stat.S_IRWXU)
+            except OSError:
+                pass
+
+    # 修改根目录权限
+    try:
+        os.chmod(path, stat.S_IRWXU)
+    except OSError:
+        pass
+
+    # 再次尝试删除
+    try:
+        shutil.rmtree(path)
+        return True
+    except OSError:
+        return False
 
 
 def delete_with_retry(path, is_dir=False, max_retries=3, delay=0.1):
@@ -42,6 +76,7 @@ def delete_with_retry(path, is_dir=False, max_retries=3, delay=0.1):
     for attempt in range(max_retries):
         try:
             if is_dir:
+                # 先尝试普通删除
                 shutil.rmtree(path, onerror=handle_readonly)
             else:
                 if not os.access(path, os.W_OK):
@@ -50,7 +85,16 @@ def delete_with_retry(path, is_dir=False, max_retries=3, delay=0.1):
             return True
         except OSError:
             if attempt == max_retries - 1:
-                return False
+                # 最后一次尝试，使用强制删除
+                if is_dir:
+                    return force_delete_dir(path)
+                else:
+                    try:
+                        os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+                        os.remove(path)
+                        return True
+                    except OSError:
+                        return False
             time.sleep(delay)
     return False
 

@@ -23,6 +23,7 @@ from src.utils.file_utils import (
 from src.utils import get_logger
 from plugins.manager import get_plugin_manager
 from plugins import render_html
+from plugins.base import count_severity
 
 logger = get_logger('analyze_api')
 
@@ -805,16 +806,9 @@ def analyze_batch_stream():
                 for plugin_id, plugin_data in plugin_result.items():
                     if isinstance(plugin_data, dict):
                         sections = plugin_data.get('sections', [])
-                        for section in sections:
-                            if section.get('type') == 'stats' and section.get('items'):
-                                for item in section.get('items', []):
-                                    severity = item.get('severity', '')
-                                    value = item.get('value', 0)
-                                    if isinstance(value, (int, float)):
-                                        if severity == 'error':
-                                            total_errors += int(value)
-                                        elif severity == 'warning':
-                                            total_warnings += int(value)
+                        counts = count_severity(sections)
+                        total_errors += counts['errors']
+                        total_warnings += counts['warnings']
 
                 frontend_files.append({
                     'filename': filename,

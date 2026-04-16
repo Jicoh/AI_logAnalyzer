@@ -28,6 +28,7 @@ from utils.file_utils import (
 )
 from plugins.manager import get_plugin_manager
 from plugins import render_html
+from plugins.base import count_severity
 from plugin_selection import PluginSelectionManager
 
 logger = get_logger('cli')
@@ -164,15 +165,10 @@ def cmd_analyze(args):
         return 1
 
     # 统计错误和警告数量
-    total_errors = 0
-    total_warnings = 0
-    for section in result_dict.get('sections', []):
-        if section['type'] == 'stats':
-            for item in section.get('items', []):
-                if item.get('severity') == 'error':
-                    total_errors += item.get('value', 0)
-                elif item.get('severity') == 'warning':
-                    total_warnings += item.get('value', 0)
+    sections = result_dict.get('sections', [])
+    counts = count_severity(sections)
+    total_errors = counts['errors']
+    total_warnings = counts['warnings']
 
     print(f"发现 {total_errors} 个错误, {total_warnings} 个警告")
 
@@ -601,16 +597,9 @@ def cmd_analyze_batch(args):
             for plugin_id, plugin_data in plugin_result.items():
                 if isinstance(plugin_data, dict):
                     sections = plugin_data.get('sections', [])
-                    for section in sections:
-                        if section.get('type') == 'stats' and section.get('items'):
-                            for item in section.get('items', []):
-                                severity = item.get('severity', '')
-                                value = item.get('value', 0)
-                                if isinstance(value, (int, float)):
-                                    if severity == 'error':
-                                        unit_errors += int(value)
-                                    elif severity == 'warning':
-                                        unit_warnings += int(value)
+                    counts = count_severity(sections)
+                    unit_errors += counts['errors']
+                    unit_warnings += counts['warnings']
 
             total_errors += unit_errors
             total_warnings += unit_warnings

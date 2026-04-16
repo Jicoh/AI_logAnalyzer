@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 from flask import Blueprint, jsonify
 from src.utils import get_data_dir
+from plugins.base import count_severity
 
 history_bp = Blueprint('history_api', __name__)
 
@@ -76,16 +77,9 @@ def get_history_list():
                     if isinstance(plugin_data, dict):
                         plugin_count += 1
                         sections = plugin_data.get('sections', [])
-                        for section in sections:
-                            if section.get('type') == 'stats' and section.get('items'):
-                                for item in section.get('items', []):
-                                    severity = item.get('severity', '')
-                                    value = item.get('value', 0)
-                                    if isinstance(value, (int, float)):
-                                        if severity == 'error':
-                                            file_errors += int(value)
-                                        elif severity == 'warning':
-                                            file_warnings += int(value)
+                        counts = count_severity(sections)
+                        file_errors += counts['errors']
+                        file_warnings += counts['warnings']
 
                 total_errors += file_errors
                 total_warnings += file_warnings
@@ -132,16 +126,9 @@ def get_history_list():
             if isinstance(plugin_data, dict):
                 plugin_count += 1
                 sections = plugin_data.get('sections', [])
-                for section in sections:
-                    if section.get('type') == 'stats' and section.get('items'):
-                        for item in section.get('items', []):
-                            severity = item.get('severity', '')
-                            value = item.get('value', 0)
-                            if isinstance(value, (int, float)):
-                                if severity == 'error':
-                                    total_errors += int(value)
-                                elif severity == 'warning':
-                                    total_warnings += int(value)
+                counts = count_severity(sections)
+                total_errors += counts['errors']
+                total_warnings += counts['warnings']
 
         # 检查是否有 HTML 结果文件
         html_path = os.path.join(folder_path, 'plugin_result.html')

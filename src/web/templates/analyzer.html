@@ -45,13 +45,20 @@
                         <i class="bi bi-cloud-arrow-up"></i>
                         <p class="mb-0 mt-2" x-text="uploadMode === 'single' ? '拖拽或点击上传日志文件' : '拖拽或点击上传日志文件夹'"></p>
                         <small class="text-muted" x-show="uploadMode === 'single'">支持: log, txt, tar.gz, tgz, tar, zip</small>
+                    </div>
 
-                        <!-- 显示已选择的文件 -->
-                        <div x-show="logFile && logFileName && uploadMode === 'single'" class="mt-2">
-                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> <span x-text="logFileName"></span></span>
+                    <!-- 文件名显示区域（拖拽框下方） -->
+                    <div x-show="logFile && logFileName && uploadMode === 'single'" class="mb-2">
+                        <div class="alert alert-success py-2 d-flex align-items-center">
+                            <i class="bi bi-check-circle me-2"></i>
+                            <span class="text-truncate" x-text="logFileName"></span>
                         </div>
-                        <div x-show="folderFiles.length > 0 && uploadMode === 'folder'" class="mt-2">
-                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> 已选择 <span x-text="folderFiles.length"></span> 个文件</span>
+                    </div>
+                    <div x-show="folderFiles.length > 0 && uploadMode === 'folder'" class="mb-2">
+                        <div class="alert alert-success py-2 d-flex align-items-center">
+                            <i class="bi bi-check-circle me-2"></i>
+                            已选择 <span x-text="folderFiles.length"></span> 个文件
+                            <small class="text-muted ms-2" x-text="'(' + folderName + ')'"></small>
                         </div>
                     </div>
 
