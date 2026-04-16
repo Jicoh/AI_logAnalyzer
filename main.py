@@ -23,7 +23,8 @@ from log_metadata import LogMetadataManager
 from utils import read_file, write_json, ensure_dir, get_logger
 from utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive,
-    create_batch_work_directory, create_single_log_output_dir, get_data_dir
+    create_batch_work_directory, create_single_log_output_dir, get_data_dir,
+    find_log_files_in_directory
 )
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -154,7 +155,8 @@ def cmd_analyze(args):
     # 插件分析
     print(f"正在分析日志: {args.log}")
     try:
-        result_dict = plugin_manager.run_analysis(plugin_ids, args.log)
+        # 使用主程序的 logger 作为回调，保持日志一致性
+        result_dict = plugin_manager.run_analysis(plugin_ids, args.log, log_callback=logger.info)
         logger.debug("插件分析完成")
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
@@ -506,28 +508,45 @@ def cmd_analyze_batch(args):
         print("错误: 没有可用的插件")
         return 1
 
-    # 查找目录中的所有日志文件
-    log_files = []
+    # 构建分析单元列表
+    # 每个分析单元是一个路径（目录或文件）
+    analysis_units = []
     for item in os.listdir(args.dir):
         item_path = os.path.join(args.dir, item)
         if os.path.isfile(item_path) and is_valid_log_file(item_path):
-            log_files.append(item_path)
+            # 单个日志文件
+            analysis_units.append({
+                'path': item_path,
+                'name': item,
+                'is_archive': False
+            })
         elif os.path.isfile(item_path) and is_archive_file(item_path):
-            # 解压压缩文件
+            # 压缩文件：解压
             temp_base = get_data_dir('temp')
-            extract_dir = os.path.join(temp_base, f"extract_{os.path.basename(item_path)}")
+            extract_dir = os.path.join(temp_base, f"extract_{item}")
+            # 处理扩展名
+            extract_name = item
+            if item.lower().endswith('.tar.gz'):
+                extract_name = item[:-7]
+            elif item.lower().endswith('.tgz'):
+                extract_name = item[:-4]
+            elif item.lower().endswith('.tar') or item.lower().endswith('.zip'):
+                extract_name = os.path.splitext(item)[0]
+            extract_dir = os.path.join(temp_base, f"extract_{extract_name}")
             ensure_dir(extract_dir)
-            extracted_files = extract_archive(item_path, extract_dir)
-            for ef in extracted_files:
-                if is_valid_log_file(ef):
-                    log_files.append(ef)
+            extract_archive(item_path, extract_dir)
+            analysis_units.append({
+                'path': extract_dir,
+                'name': extract_name,
+                'is_archive': True
+            })
 
-    if not log_files:
+    if not analysis_units:
         logger.error(f"目录中没有找到日志文件: {args.dir}")
         print(f"错误: 目录中没有找到日志文件: {args.dir}")
         return 1
 
-    print(f"发现 {len(log_files)} 个日志文件")
+    print(f"发现 {len(analysis_units)} 个分析单元")
     print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 创建批量输出目录
@@ -548,21 +567,26 @@ def cmd_analyze_batch(args):
     if not kb_id:
         kb_id = config_manager.get('knowledge_base.default_id')
 
-    # 批量分析每个日志文件
+    # 批量分析每个单元
     batch_results = {}
     total_errors = 0
     total_warnings = 0
 
-    for idx, log_file in enumerate(log_files, 1):
-        log_filename = os.path.basename(log_file)
-        print(f"\n[{idx}/{len(log_files)}] 分析: {log_filename}")
+    for idx, unit in enumerate(analysis_units, 1):
+        unit_name = unit['name']
+        unit_path = unit['path']
 
-        # 创建单个日志的输出目录
-        single_output_dir = create_single_log_output_dir(batch_output_dir, log_filename)
+        print(f"\n[{idx}/{len(analysis_units)}] 分析: {unit_name}")
+
+        # 创建单个单元的输出目录
+        single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
 
         try:
-            # 插件分析
-            plugin_result = plugin_manager.run_analysis(plugin_ids, log_file)
+            # 使用主程序的 logger 作为回调，保持日志一致性
+            plugin_result = plugin_manager.run_analysis(
+                plugin_ids, unit_path,
+                log_callback=logger.info
+            )
 
             # 保存插件结果
             plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
@@ -572,8 +596,8 @@ def cmd_analyze_batch(args):
             render_html(plugin_output_file)
 
             # 计算错误和警告数
-            file_errors = 0
-            file_warnings = 0
+            unit_errors = 0
+            unit_warnings = 0
             for plugin_id, plugin_data in plugin_result.items():
                 if isinstance(plugin_data, dict):
                     sections = plugin_data.get('sections', [])
@@ -584,12 +608,15 @@ def cmd_analyze_batch(args):
                                 value = item.get('value', 0)
                                 if isinstance(value, (int, float)):
                                     if severity == 'error':
-                                        file_errors += int(value)
+                                        unit_errors += int(value)
                                     elif severity == 'warning':
-                                        file_warnings += int(value)
+                                        unit_warnings += int(value)
 
-            total_errors += file_errors
-            total_warnings += file_warnings
+            total_errors += unit_errors
+            total_warnings += unit_warnings
+
+            # 获取该单元内的日志文件列表（用于AI分析）
+            log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
 
             # AI分析（如果启用）
             ai_result = None
@@ -598,7 +625,7 @@ def cmd_analyze_batch(args):
                 # 检查AI配置
                 api_config = config_manager.get('api', {})
                 if not api_config.get('base_url') or not api_config.get('api_key'):
-                    print(f"  警告: AI配置不完整，跳过AI分析")
+                    print(f"  告: AI配置不完整，跳过AI分析")
                 else:
                     try:
                         coordinator = AgentCoordinator(
@@ -607,9 +634,9 @@ def cmd_analyze_batch(args):
                         )
                         html_result = coordinator.run_analysis(
                             plugin_result=plugin_result,
-                            log_files=[log_file],
+                            log_files=log_files_in_unit,
                             kb_id=kb_id,
-                            actual_log_paths=[log_file]
+                            actual_log_paths=log_files_in_unit
                         )
                         ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
                         with open(ai_html_file, 'w', encoding='utf-8') as f:
@@ -619,26 +646,26 @@ def cmd_analyze_batch(args):
                     except Exception as e:
                         print(f"  AI分析失败: {e}")
 
-            batch_results[log_filename] = {
+            batch_results[unit_name] = {
                 'output_dir': os.path.basename(single_output_dir),
                 'plugin_result': plugin_result,
-                'errors': file_errors,
-                'warnings': file_warnings,
+                'errors': unit_errors,
+                'warnings': unit_warnings,
                 'ai_result': ai_result
             }
-            print(f"  完成: {file_errors}个错误, {file_warnings}个警告")
+            print(f"  完成: {unit_errors}个错误, {unit_warnings}个警告")
 
         except Exception as e:
-            logger.error(f"分析失败: {log_file}, 错误: {e}")
+            logger.error(f"分析失败: {unit_name}, 错误: {e}")
             print(f"  分析失败: {e}")
-            batch_results[log_filename] = {'error': str(e)}
+            batch_results[unit_name] = {'error': str(e)}
 
     # 生成汇总JSON
     batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
     summary_data = {
         'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'directory': args.dir,
-        'total_files': len(log_files),
+        'total_files': len(analysis_units),
         'total_errors': total_errors,
         'total_warnings': total_warnings,
         'files': batch_results
@@ -652,7 +679,7 @@ def cmd_analyze_batch(args):
     print("\n" + "=" * 50)
     print("批量分析完成")
     print("=" * 50)
-    print(f"总文件数: {len(log_files)}")
+    print(f"总单元数: {len(analysis_units)}")
     print(f"总错误数: {total_errors}")
     print(f"总警告数: {total_warnings}")
     print(f"汇总报告: {batch_html_path}")

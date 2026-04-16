@@ -17,7 +17,7 @@ from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
-    ensure_dir, get_files_in_directory,
+    ensure_dir, get_files_in_directory, find_log_files_in_directory,
     get_project_root, get_data_dir
 )
 from src.utils import get_logger
@@ -108,7 +108,6 @@ def analyze_stream():
     def generate():
         temp_file_path = None
         work_dir = None
-        log_files = []
 
         try:
             # 检查是否有文件
@@ -138,10 +137,11 @@ def analyze_stream():
             temp_base = get_data_dir('temp')
             work_dir = create_work_directory(temp_base, filename)
 
-            # 根据文件类型处理
+            # 根据文件类型处理，确定分析路径
             file_category = get_file_category(filename)
             all_log_content = ""
-            log_file_paths = []
+            log_file_paths = []  # 用于AI分析读取日志内容
+            analysis_path = None  # 用于插件分析的路径
 
             if file_category == 'archive':
                 # 保存压缩包到临时位置，解压后删除
@@ -156,21 +156,24 @@ def analyze_stream():
                     if os.path.exists(temp_archive_path):
                         os.remove(temp_archive_path)
 
-                # 查找所有日志文件
-                for f in extracted_files:
-                    if is_log_file(f):
-                        log_file_paths.append(f)
+                # 查找所有日志文件（用于AI分析）
+                log_file_paths = find_log_files_in_directory(work_dir)
 
                 if not log_file_paths:
                     yield generate_sse_event({'stage': 'error', 'message': 'No log files found in archive'})
                     return
+
+                # 插件分析使用工作目录
+                analysis_path = work_dir
             else:
                 # 直接是日志文件，保存到工作目录
                 uploaded_file_path = os.path.join(work_dir, filename)
                 file.save(uploaded_file_path)
                 log_file_paths = [uploaded_file_path]
+                # 插件分析使用文件路径
+                analysis_path = uploaded_file_path
 
-            # 读取所有日志内容
+            # 读取所有日志内容（用于AI分析）
             for log_path in log_file_paths:
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                     all_log_content += f.read() + "\n"
@@ -230,17 +233,19 @@ def analyze_stream():
             yield generate_sse_event({
                 'stage': 'plugin',
                 'status': 'start',
-                'message': f'Analyzing {len(selected_log_files)} log file(s) with {len(selected_plugins)} plugin(s)...'
+                'message': f'Analyzing with {len(selected_plugins)} plugin(s)...'
             })
 
             if not selected_plugins:
                 yield generate_sse_event({'stage': 'error', 'message': 'No plugins available for analysis'})
                 return
 
-            # 使用选定的插件分析选定的文件
+            # 使用选定的插件分析
             try:
-                combined_result = plugin_manager.run_analysis_multiple_files(
-                    selected_plugins, selected_log_files
+                # 使用主程序的 logger 作为回调，保持日志一致性
+                combined_result = plugin_manager.run_analysis(
+                    selected_plugins, analysis_path,
+                    log_callback=logger.info
                 )
             except Exception as e:
                 yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
@@ -551,8 +556,9 @@ def analyze_batch_stream():
                 'work_dir': work_dir
             })
 
-            # 处理上传的文件
-            all_log_files = []
+            # 处理上传的文件，构建分析单元列表
+            # 每个分析单元是一个路径（目录或文件）
+            analysis_units = []
             for file in files:
                 filename = secure_filename(file.filename)
                 if not filename:
@@ -571,13 +577,20 @@ def analyze_batch_stream():
                     try:
                         # 解压到工作目录
                         extract_dir_name = os.path.splitext(filename)[0]
+                        # 处理 .tar.gz 的双重扩展名
+                        if lower_name.endswith('.tar.gz'):
+                            extract_dir_name = filename[:-7]  # 移除 .tar.gz
+                        elif lower_name.endswith('.tgz'):
+                            extract_dir_name = filename[:-4]  # 移除 .tgz
                         extract_dir = os.path.join(work_dir, extract_dir_name)
                         ensure_dir(extract_dir)
-                        extracted_files = extract_archive(temp_archive_path, extract_dir)
-                        # 从解压后的文件中筛选日志文件
-                        for ef in extracted_files:
-                            if is_valid_log_file(ef):
-                                all_log_files.append(ef)
+                        extract_archive(temp_archive_path, extract_dir)
+                        # 分析单元为解压后的目录
+                        analysis_units.append({
+                            'path': extract_dir,
+                            'name': extract_dir_name,
+                            'is_archive': True
+                        })
                     finally:
                         # 删除临时压缩包
                         if os.path.exists(temp_archive_path):
@@ -586,19 +599,24 @@ def analyze_batch_stream():
                     # 普通日志文件：直接保存到工作目录
                     file_path = os.path.join(work_dir, filename)
                     file.save(file_path)
-                    all_log_files.append(file_path)
+                    # 分析单元为文件
+                    analysis_units.append({
+                        'path': file_path,
+                        'name': filename,
+                        'is_archive': False
+                    })
                 # 其他文件类型跳过
 
-            if not all_log_files:
+            if not analysis_units:
                 yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
                 return
 
-            total_files = len(all_log_files)
+            total_units = len(analysis_units)
             yield generate_sse_event({
                 'stage': 'batch',
                 'status': 'files_found',
-                'total': total_files,
-                'message': f'发现 {total_files} 个日志文件'
+                'total': total_units,
+                'message': f'发现 {total_units} 个分析单元'
             })
 
             # 获取插件管理器
@@ -609,31 +627,36 @@ def analyze_batch_stream():
                 yield generate_sse_event({'stage': 'error', 'message': '没有可用的插件'})
                 return
 
-            # 分析每个日志文件
+            # 分析每个单元
             batch_results = {}
-            for idx, log_file in enumerate(all_log_files):
-                log_filename = os.path.basename(log_file)
+            for idx, unit in enumerate(analysis_units):
+                unit_name = unit['name']
+                unit_path = unit['path']
 
                 yield generate_sse_event({
                     'stage': 'batch',
                     'status': 'start_file',
                     'current': idx + 1,
-                    'total': total_files,
-                    'file': log_filename,
-                    'message': f'开始分析: {log_filename} ({idx + 1}/{total_files})'
+                    'total': total_units,
+                    'file': unit_name,
+                    'message': f'开始分析: {unit_name} ({idx + 1}/{total_units})'
                 })
 
-                # 创建单个日志的输出目录
-                single_output_dir = create_single_log_output_dir(batch_output_dir, log_filename)
+                # 创建单个单元的输出目录
+                single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
 
                 # 插件分析
                 try:
-                    plugin_result = plugin_manager.run_analysis(selected_plugins, log_file)
+                    # 使用主程序的 logger 作为回调，保持日志一致性
+                    plugin_result = plugin_manager.run_analysis(
+                        selected_plugins, unit_path,
+                        log_callback=logger.info
+                    )
                 except Exception as e:
                     yield generate_sse_event({
                         'stage': 'batch',
                         'status': 'file_error',
-                        'file': log_filename,
+                        'file': unit_name,
                         'message': f'插件分析失败: {str(e)}'
                     })
                     continue
@@ -652,14 +675,17 @@ def analyze_batch_stream():
                     plugin_output_file.replace('.json', '.html'), root_dir
                 )
 
+                # 获取该单元内的日志文件列表（用于AI分析）
+                log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
+
                 # AI分析（如果启用）
                 ai_result = None
                 if enable_ai:
                     yield generate_sse_event({
                         'stage': 'batch',
                         'status': 'ai_start',
-                        'file': log_filename,
-                        'message': f'AI分析: {log_filename}'
+                        'file': unit_name,
+                        'message': f'AI分析: {unit_name}'
                     })
 
                     try:
@@ -671,11 +697,11 @@ def analyze_batch_stream():
 
                         html_result = coordinator.run_analysis(
                             plugin_result=plugin_result,
-                            log_files=[log_file],
+                            log_files=log_files_in_unit,
                             kb_id=kb_id,
                             user_prompt=user_prompt,
                             log_rules_id=log_rules_id,
-                            actual_log_paths=[log_file]
+                            actual_log_paths=log_files_in_unit
                         )
 
                         # 保存HTML结果
@@ -696,19 +722,19 @@ def analyze_batch_stream():
                         yield generate_sse_event({
                             'stage': 'batch',
                             'status': 'ai_complete',
-                            'file': log_filename
+                            'file': unit_name
                         })
 
                     except Exception as e:
                         yield generate_sse_event({
                             'stage': 'batch',
                             'status': 'ai_error',
-                            'file': log_filename,
+                            'file': unit_name,
                             'message': f'AI分析失败: {str(e)}'
                         })
 
                 # 记录结果
-                batch_results[log_filename] = {
+                batch_results[unit_name] = {
                     'output_dir': os.path.basename(single_output_dir),
                     'plugin_result': plugin_result,
                     'html_path': html_relative_path,
@@ -719,10 +745,10 @@ def analyze_batch_stream():
                     'stage': 'batch',
                     'status': 'file_complete',
                     'current': idx + 1,
-                    'total': total_files,
-                    'file': log_filename,
+                    'total': total_units,
+                    'file': unit_name,
                     'html_path': html_relative_path,
-                    'message': f'完成: {log_filename}'
+                    'message': f'完成: {unit_name}'
                 })
 
             # 生成汇总JSON
@@ -730,7 +756,7 @@ def analyze_batch_stream():
             summary_data = {
                 'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'folder_name': folder_name,
-                'total_files': total_files,
+                'total_files': total_units,
                 'files': batch_results
             }
             with open(batch_summary_file, 'w', encoding='utf-8') as f:
@@ -776,7 +802,7 @@ def analyze_batch_stream():
                 'status': 'complete',
                 'html_path': batch_html_relative,
                 'files': frontend_files,
-                'message': f'批量分析完成，共 {total_files} 个文件'
+                'message': f'批量分析完成，共 {total_units} 个分析单元'
             })
 
         except Exception as e:

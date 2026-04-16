@@ -121,6 +121,26 @@ def get_files_in_directory(dir_path):
     return files
 
 
+def find_log_files_in_directory(dir_path):
+    """
+    递归查找目录中的所有日志文件。
+
+    Args:
+        dir_path: 目录路径
+
+    Returns:
+        list: 日志文件路径列表
+    """
+    if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+        return []
+    log_files = []
+    for root, dirs, files in os.walk(dir_path):
+        for f in files:
+            if f.endswith('.log') or f.endswith('.txt'):
+                log_files.append(os.path.join(root, f))
+    return log_files
+
+
 def extract_archive(archive_path, extract_to):
     """
     解压压缩文件

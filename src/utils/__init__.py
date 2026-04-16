@@ -10,6 +10,7 @@ from .file_utils import (
     is_log_file,
     extract_archive,
     create_work_directory,
+    find_log_files_in_directory,
     get_project_root,
     get_data_dir
 )

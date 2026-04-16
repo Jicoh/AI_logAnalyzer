@@ -54,7 +54,8 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
 - **Builtin plugins**: `plugins/builtin/` (core plugins in submodule)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
-- Each plugin implements `BasePlugin` with `analyze(log_file)` returning `AnalysisResult`
+- Each plugin implements `BasePlugin` with `analyze(log_path)` returning `AnalysisResult`
+- `log_path` can be a file path or a directory path (for archives)
 - Plugin categories: PARSER, ANALYZER, DETECTOR, REPORTER, OTHER
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 
@@ -84,16 +85,27 @@ custom_plugins/my_plugin/
 from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem
 
 class MyPlugin(BasePlugin):
-    def analyze(self, log_file: str) -> AnalysisResult:
+    def analyze(self, log_path: str) -> AnalysisResult:
         import os
         from datetime import datetime
+
+        # 判断是文件还是目录
+        if os.path.isfile(log_path):
+            log_files = [log_path]
+        else:
+            # 目录：查找所有日志文件
+            log_files = []
+            for root, dirs, files in os.walk(log_path):
+                for f in files:
+                    if f.endswith('.log') or f.endswith('.txt'):
+                        log_files.append(os.path.join(root, f))
 
         meta = ResultMeta(
             plugin_id=self.id,
             plugin_name=self.name,
             version=self.get_version(),
             analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            log_file=os.path.basename(log_file),
+            log_files=[os.path.basename(f) for f in log_files],
             plugin_type=self.get_plugin_type()
         )
         result = AnalysisResult(meta=meta)
