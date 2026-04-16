@@ -27,45 +27,38 @@
                         </div>
                     </div>
 
-                    <!-- 拖拽上传区域 -->
+                    <!-- 统一上传区域 -->
                     <div class="drop-zone mb-3"
                          @dragover.prevent="handleDragOver($event)"
                          @dragleave.prevent="handleDragLeave($event)"
                          @drop.prevent="handleDrop($event)"
+                         @click="triggerFileSelect($event)"
                          :class="{ 'drag-over': isDragging }">
-                        <i class="bi bi-cloud-arrow-up"></i>
-                        <p class="mb-0 mt-2">拖拽文件或文件夹到此处上传</p>
-                        <small class="text-muted" x-show="uploadMode === 'single'">支持: log, txt, tar.gz, tgz, tar, zip</small>
-                    </div>
-
-                    <!-- 单文件上传 -->
-                    <div class="mb-3" x-show="uploadMode === 'single'">
-                        <label class="form-label">日志文件</label>
-                        <input type="file" class="form-control" id="logFile"
+                        <!-- 隐藏的 file input -->
+                        <input type="file" class="d-none" id="hiddenLogFile"
                                accept=".log,.txt,.tar.gz,.tgz,.tar,.zip"
                                @change="handleFileChange($event)">
-                        <small class="text-muted" x-show="logFile && logFileName" x-text="'已选择: ' + logFileName"></small>
-                        <small class="text-warning" x-show="!logFile && logFileName">
-                            <i class="bi bi-exclamation-circle"></i> 上次文件: <span x-text="logFileName"></span>（需重新选择）
-                        </small>
-                        <small class="text-muted" x-show="!logFile && !logFileName">支持格式：log, txt, tar.gz, tgz, tar, zip</small>
-                    </div>
-
-                    <!-- 文件夹上传 -->
-                    <div class="mb-3" x-show="uploadMode === 'folder'">
-                        <label class="form-label">日志文件夹</label>
-                        <input type="file" class="form-control" id="folderFiles"
+                        <input type="file" class="d-none" id="hiddenFolderFiles"
                                webkitdirectory directory multiple
                                @change="handleFolderChange($event)">
-                        <small class="text-muted" x-show="folderFiles.length > 0" x-text="'已选择 ' + folderFiles.length + ' 个文件'"></small>
-                        <small class="text-muted" x-show="folderFiles.length === 0">选择包含日志文件的文件夹</small>
-                        <div x-show="folderFiles.length > 0" class="mt-2">
-                            <small class="text-muted">
-                                <i class="bi bi-info-circle"></i>
-                                文件夹内的 .log/.txt 文件将被分析，压缩文件会解压处理
-                            </small>
+
+                        <i class="bi bi-cloud-arrow-up"></i>
+                        <p class="mb-0 mt-2" x-text="uploadMode === 'single' ? '拖拽或点击上传日志文件' : '拖拽或点击上传日志文件夹'"></p>
+                        <small class="text-muted" x-show="uploadMode === 'single'">支持: log, txt, tar.gz, tgz, tar, zip</small>
+
+                        <!-- 显示已选择的文件 -->
+                        <div x-show="logFile && logFileName && uploadMode === 'single'" class="mt-2">
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> <span x-text="logFileName"></span></span>
+                        </div>
+                        <div x-show="folderFiles.length > 0 && uploadMode === 'folder'" class="mt-2">
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> 已选择 <span x-text="folderFiles.length"></span> 个文件</span>
                         </div>
                     </div>
+
+                    <!-- 上次文件提示（页面刷新后需要重新选择） -->
+                    <small class="text-warning mb-2" x-show="!logFile && logFileName && uploadMode === 'single'">
+                        <i class="bi bi-exclamation-circle"></i> 上次文件: <span x-text="logFileName"></span>（需重新选择）
+                    </small>
 
                     <button class="btn btn-outline-secondary btn-sm" x-show="completed || wasInterrupted" @click="clearState()">
                         <i class="bi bi-x-circle"></i> 清除结果
@@ -612,6 +605,16 @@ function analyzerApp() {
                 }
             } catch (error) {
                 console.error('Failed to load log rules:', error);
+            }
+        },
+
+        triggerFileSelect(event) {
+            // 如果点击的是 input 元素，不重复触发
+            if (event.target.tagName === 'INPUT') return;
+            if (this.uploadMode === 'single') {
+                document.getElementById('hiddenLogFile').click();
+            } else {
+                document.getElementById('hiddenFolderFiles').click();
             }
         },
 
