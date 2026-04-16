@@ -143,7 +143,7 @@ def find_log_files_in_directory(dir_path):
 
 def extract_archive(archive_path, extract_to):
     """
-    解压压缩文件
+    解压压缩文件，保留压缩包内的原始目录结构
 
     Args:
         archive_path: 压缩文件路径
@@ -159,21 +159,12 @@ def extract_archive(archive_path, extract_to):
 
     if archive_type == 'tar.gz' or archive_type == 'tar':
         with tarfile.open(archive_path, 'r:*') as tar:
-            members = tar.getmembers()
-            # 检测是否有公共的顶层目录
-            common_prefix = get_common_prefix([m.name for m in members if not m.isdir()])
-
-            for member in members:
+            for member in tar.getmembers():
                 if member.isdir():
                     continue
                 # 安全处理：避免路径穿越
                 if member.name.startswith('/') or '..' in member.name:
                     continue
-                # 去除公共前缀
-                if common_prefix and member.name.startswith(common_prefix):
-                    member.name = member.name[len(common_prefix):]
-                    if not member.name:
-                        continue
                 tar.extract(member, extract_to)
                 extracted_path = os.path.join(extract_to, member.name)
                 if os.path.isfile(extracted_path):
@@ -181,23 +172,14 @@ def extract_archive(archive_path, extract_to):
 
     elif archive_type == 'zip':
         with zipfile.ZipFile(archive_path, 'r') as zf:
-            names = [n for n in zf.namelist() if not n.endswith('/')]
-            # 检测是否有公共的顶层目录
-            common_prefix = get_common_prefix(names)
-
-            for name in names:
+            for name in zf.namelist():
+                if name.endswith('/'):
+                    continue
                 # 安全处理：避免路径穿越
                 if name.startswith('/') or '..' in name:
                     continue
-                # 去除公共前缀
-                target_name = name
-                if common_prefix and name.startswith(common_prefix):
-                    target_name = name[len(common_prefix):]
-                    if not target_name:
-                        continue
-
                 # 创建目标路径
-                target_path = os.path.join(extract_to, target_name)
+                target_path = os.path.join(extract_to, name)
                 ensure_dir(os.path.dirname(target_path))
 
                 with zf.open(name) as src, open(target_path, 'wb') as dst:
@@ -207,30 +189,6 @@ def extract_archive(archive_path, extract_to):
                     extracted_files.append(target_path)
 
     return extracted_files
-
-
-def get_common_prefix(paths):
-    """
-    获取路径列表的公共前缀（以/结尾的目录前缀）
-
-    Args:
-        paths: 路径列表
-
-    Returns:
-        str: 公共前缀，如 'test/' 或空字符串
-    """
-    if not paths:
-        return ''
-
-    # 找到第一个路径的顶层目录
-    first = paths[0]
-    if '/' in first:
-        top_dir = first.split('/')[0] + '/'
-        # 检查所有路径是否都以这个顶层目录开头
-        if all(p.startswith(top_dir) for p in paths):
-            return top_dir
-
-    return ''
 
 
 def create_work_directory(base_dir, filename):

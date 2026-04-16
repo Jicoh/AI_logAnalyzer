@@ -23,7 +23,12 @@ python main.py config set api.model <model_name>
 python main.py kb create --name "Knowledge Base Name"
 python main.py kb add --kb-id <id> --file <document>
 python main.py analyze --log <logfile> --kb <kb_id>
+python main.py analyze --log <logfile> --ai-select --prompt <prompt>  # AI智能选择
+python main.py analyze-batch --dir <directory> --enable-ai  # 批量分析
 python main.py plugin list
+python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
+python main.py log-rules list  # 日志规则管理
+python main.py cache stats  # 缓存统计
 ```
 
 ## Architecture
@@ -35,6 +40,12 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 2. **Knowledge Base Retrieval**: BM25/vector search retrieves relevant documents from `document/`
 3. **AI Analysis**: Combines plugin results + knowledge base context, calls LLM API with streaming
 
+### Dual-Agent Architecture (Scout + Sage)
+The AI analysis uses a two-stage agent system:
+- **Scout Agent** (`scout_agent.py`): Reconnaissance - extracts machine info, selects relevant log files, identifies key events
+- **Sage Agent** (`sage_agent.py`): Deep analysis - generates comprehensive HTML report with problem analysis and solutions
+- **Agent Coordinator** (`agent_coordinator.py`): Orchestrates Scout → Sage flow, extracts plugin summary, manages knowledge retrieval
+
 ### Key Modules
 
 | Module | Location | Purpose |
@@ -43,6 +54,9 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
+| Scout Agent | `src/ai_analyzer/scout_agent.py` | Log reconnaissance, machine info extraction, file selection |
+| Sage Agent | `src/ai_analyzer/sage_agent.py` | Deep analysis, HTML report generation |
+| Agent Coordinator | `src/ai_analyzer/agent_coordinator.py` | Orchestrates Scout → Sage flow |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
 | Plugin Selection | `src/plugin_selection/` | Web UI state: selected plugins, KB, AI settings |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
@@ -52,11 +66,11 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 ### Plugin System
 - Plugins extend log analysis capabilities
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
-- **Builtin plugins**: `plugins/builtin/` (core plugins in submodule)
+- **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
 - Each plugin implements `BasePlugin` with `analyze(log_path)` returning `AnalysisResult`
 - `log_path` can be a file path or a directory path (for archives)
-- Plugin categories: PARSER, ANALYZER, DETECTOR, REPORTER, OTHER
+- Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 
 #### Plugin Development
@@ -89,16 +103,17 @@ class MyPlugin(BasePlugin):
         import os
         from datetime import datetime
 
-        # 判断是文件还是目录
-        if os.path.isfile(log_path):
-            log_files = [log_path]
-        else:
-            # 目录：查找所有日志文件
-            log_files = []
-            for root, dirs, files in os.walk(log_path):
-                for f in files:
-                    if f.endswith('.log') or f.endswith('.txt'):
-                        log_files.append(os.path.join(root, f))
+        # 场景1：分析目录中的所有日志文件
+        log_files = []
+        for root, dirs, files in os.walk(log_path):
+            for f in files:
+                if f.endswith('.log') or f.endswith('.txt'):
+                    log_files.append(os.path.join(root, f))
+
+        # 场景2：分析特定文件名（如果插件只分析特定文件）
+        # target_file = os.path.join(log_path, "system.log")
+        # if os.path.exists(target_file):
+        #     log_files = [target_file]
 
         meta = ResultMeta(
             plugin_id=self.id,
@@ -110,7 +125,7 @@ class MyPlugin(BasePlugin):
         )
         result = AnalysisResult(meta=meta)
         result.add_stats("概览", [
-            StatsItem(label="行数", value=100, severity="info")
+            StatsItem(label="文件数", value=len(log_files), severity="info")
         ])
         return result
 
@@ -212,6 +227,8 @@ Config file: `config/ai_config.json`
 Prompt files:
 - `config/default_prompt_template.txt` - Read-only template
 - `config/default_prompt.txt` - User-customizable prompt (overrides template)
+- `config/scout_prompt.txt` - Scout Agent prompt for log reconnaissance
+- `config/sage_prompt.txt` - Sage Agent prompt for deep analysis
 - `config/log_metadata_rules.json` - Log file description rulesets for AI selection
 
 ## Knowledge Base Retrieval
