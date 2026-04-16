@@ -5,39 +5,9 @@
 import os
 import shutil
 from flask import Blueprint, jsonify
+from src.utils import get_data_dir
 
 cache_bp = Blueprint('cache_api', __name__)
-
-
-def get_root_dir():
-    """获取项目根目录。"""
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-
-def get_temp_dir():
-    """获取临时文件目录。"""
-    return os.path.join(get_root_dir(), 'data', 'temp')
-
-
-def get_plugin_output_dir():
-    """获取插件输出目录。"""
-    return os.path.join(get_root_dir(), 'data', 'plugin_output')
-
-
-def get_dir_size(path):
-    """计算目录大小（字节）。"""
-    if not os.path.exists(path):
-        return 0
-    total = 0
-    try:
-        for entry in os.scandir(path):
-            if entry.is_file():
-                total += entry.stat().st_size
-            elif entry.is_dir():
-                total += get_dir_size(entry.path)
-    except OSError:
-        pass
-    return total
 
 
 def format_size(size_bytes):
@@ -70,8 +40,8 @@ def clear_dir_contents(path):
 def get_cache_stats():
     """获取缓存目录大小统计。"""
     try:
-        temp_dir = get_temp_dir()
-        plugin_output_dir = get_plugin_output_dir()
+        temp_dir = get_data_dir('temp')
+        plugin_output_dir = get_data_dir('plugin_output')
 
         temp_size = get_dir_size(temp_dir)
         plugin_output_size = get_dir_size(plugin_output_dir)
@@ -103,7 +73,7 @@ def get_cache_stats():
 def clear_results():
     """清理分析结果目录。"""
     try:
-        plugin_output_dir = get_plugin_output_dir()
+        plugin_output_dir = get_data_dir('plugin_output')
         clear_dir_contents(plugin_output_dir)
 
         return jsonify({
@@ -118,7 +88,7 @@ def clear_results():
 def clear_temp():
     """清理临时文件目录。"""
     try:
-        temp_dir = get_temp_dir()
+        temp_dir = get_data_dir('temp')
         clear_dir_contents(temp_dir)
 
         return jsonify({
@@ -127,3 +97,19 @@ def clear_temp():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def get_dir_size(path):
+    """计算目录大小（字节）。"""
+    if not os.path.exists(path):
+        return 0
+    total = 0
+    try:
+        for entry in os.scandir(path):
+            if entry.is_file():
+                total += entry.stat().st_size
+            elif entry.is_dir():
+                total += get_dir_size(entry.path)
+    except OSError:
+        pass
+    return total

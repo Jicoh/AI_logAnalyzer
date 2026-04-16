@@ -17,10 +17,14 @@ from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
-    ensure_dir, get_files_in_directory
+    ensure_dir, get_files_in_directory,
+    get_project_root, get_data_dir
 )
+from src.utils import get_logger
 from plugins.manager import get_plugin_manager
 from plugins import render_html
+
+logger = get_logger('analyze_api')
 
 analyze_bp = Blueprint('analyze_api', __name__)
 
@@ -29,11 +33,6 @@ config_manager = None
 kb_manager = None
 log_metadata_manager = None
 plugin_selection_manager = None
-
-
-def get_project_root():
-    """获取项目根目录。"""
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def get_plugin_manager_with_custom():
@@ -96,14 +95,6 @@ def get_file_category(filename):
     return 'log'
 
 
-def get_temp_base_dir():
-    """获取 temp 目录路径"""
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    temp_dir = os.path.join(root_dir, 'data', 'temp')
-    ensure_dir(temp_dir)
-    return temp_dir
-
-
 def generate_sse_event(data):
     """将数据格式化为 SSE 事件。"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -144,7 +135,7 @@ def analyze_stream():
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
             # 创建工作目录
-            temp_base = get_temp_base_dir()
+            temp_base = get_data_dir('temp')
             work_dir = create_work_directory(temp_base, filename)
 
             # 根据文件类型处理
@@ -256,7 +247,7 @@ def analyze_stream():
                 return
 
             # 保存插件分析结果
-            plugin_output_base = os.path.join(get_temp_base_dir(), '..', 'plugin_output')
+            plugin_output_base = get_data_dir('plugin_output')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             # 使用原始上传文件名（去除扩展名）
             clean_name = filename
@@ -323,8 +314,7 @@ def analyze_stream():
                     })
 
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    logger.error(f"AI分析失败: {str(e)}")
                     yield generate_sse_event({
                         'stage': 'ai',
                         'status': 'error',
@@ -539,7 +529,7 @@ def analyze_batch_stream():
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
             # 创建批量工作目录
-            temp_base = get_temp_base_dir()
+            temp_base = get_data_dir('temp')
             work_dir = create_batch_work_directory(temp_base, folder_name)
 
             # 创建批量输出目录

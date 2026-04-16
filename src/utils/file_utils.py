@@ -43,6 +43,29 @@ def ensure_dir(dir_path):
         os.makedirs(dir_path)
 
 
+def get_project_root() -> str:
+    """获取项目根目录"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(current_dir))
+
+
+def get_data_dir(subdir: str = '') -> str:
+    """
+    获取data目录或子目录路径
+
+    Args:
+        subdir: 子目录名，如 'temp', 'plugin_output', 'ai_output'
+
+    Returns:
+        str: 目录路径
+    """
+    root = get_project_root()
+    data_dir = os.path.join(root, 'data')
+    if subdir:
+        return os.path.join(data_dir, subdir)
+    return data_dir
+
+
 def get_filename(file_path):
     """获取文件名（不含扩展名）"""
     basename = os.path.basename(file_path)

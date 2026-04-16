@@ -9,6 +9,9 @@ import re
 from typing import Dict, Any, List
 
 from .client import AIClient
+from src.utils import get_logger
+
+logger = get_logger('scout_agent')
 
 
 class ScoutAgent:
@@ -129,8 +132,7 @@ class ScoutAgent:
             for chunk in self.client.chat(messages):
                 full_response += chunk
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.error(f"AI调用失败: {str(e)}")
 
         return full_response
 

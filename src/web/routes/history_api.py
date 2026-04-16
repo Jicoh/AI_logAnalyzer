@@ -7,20 +7,9 @@ import json
 import re
 from datetime import datetime
 from flask import Blueprint, jsonify
+from src.utils import get_data_dir
 
 history_bp = Blueprint('history_api', __name__)
-
-
-def get_plugin_output_dir():
-    """获取插件输出目录路径。"""
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    return os.path.join(root_dir, 'data', 'plugin_output')
-
-
-def get_ai_output_dir():
-    """获取 AI 输出目录路径。"""
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    return os.path.join(root_dir, 'data', 'ai_output')
 
 
 def parse_timestamp_folder(folder_name):
@@ -44,7 +33,7 @@ def parse_timestamp_folder(folder_name):
 
 def get_history_list():
     """获取所有分析历史记录列表。"""
-    plugin_output_dir = get_plugin_output_dir()
+    plugin_output_dir = get_data_dir('plugin_output')
 
     history_records = []
 
@@ -180,7 +169,7 @@ def get_history_list():
 
 def get_history_detail(timestamp):
     """获取特定历史记录的详情。"""
-    plugin_output_dir = get_plugin_output_dir()
+    plugin_output_dir = get_data_dir('plugin_output')
     folder_path = os.path.join(plugin_output_dir, timestamp)
 
     if not os.path.exists(folder_path):
@@ -228,7 +217,7 @@ def get_history_detail(timestamp):
 
 def get_batch_file_detail(batch_folder, file_output_dir):
     """获取批量记录中单个文件的详情。"""
-    plugin_output_dir = get_plugin_output_dir()
+    plugin_output_dir = get_data_dir('plugin_output')
     folder_path = os.path.join(plugin_output_dir, batch_folder, file_output_dir)
 
     if not os.path.exists(folder_path):

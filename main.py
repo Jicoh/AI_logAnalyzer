@@ -17,9 +17,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config_manager import ConfigManager
 from knowledge_base import KnowledgeBaseManager
 from ai_analyzer import AIAnalyzer
-from utils import read_file, write_json, ensure_dir
+from utils import read_file, write_json, ensure_dir, get_logger
 from plugins.manager import get_plugin_manager
 from plugin_selection import PluginSelectionManager
+
+logger = get_logger('cli')
 
 
 def display_plugin_result(result: Dict):
@@ -67,17 +69,21 @@ def display_plugin_result(result: Dict):
 
 def cmd_analyze(args):
     """分析日志命令"""
+    logger.debug(f"开始分析日志: {args.log}")
+
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
     plugin_selection_manager = PluginSelectionManager()
 
     # 检查日志文件
     if not os.path.exists(args.log):
+        logger.error(f"日志文件不存在: {args.log}")
         print(f"错误: 日志文件不存在: {args.log}")
         return 1
 
     # 读取日志内容
     log_content = read_file(args.log)
+    logger.debug(f"读取日志内容，长度: {len(log_content)}")
 
     # 初始化插件管理器
     root_dir = os.path.dirname(os.path.abspath(__file__))
@@ -91,6 +97,7 @@ def cmd_analyze(args):
         plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
 
     if not plugin_ids:
+        logger.error("没有可用的插件")
         print("错误: 没有可用的插件")
         return 1
 
@@ -100,7 +107,9 @@ def cmd_analyze(args):
     print(f"正在分析日志: {args.log}")
     try:
         result_dict = plugin_manager.run_analysis(plugin_ids, args.log)
+        logger.debug("插件分析完成")
     except Exception as e:
+        logger.error(f"插件分析失败: {e}")
         print(f"插件分析失败: {e}")
         return 1
 

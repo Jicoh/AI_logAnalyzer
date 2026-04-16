@@ -15,6 +15,9 @@ from .embedding_client import EmbeddingClient
 from .vector_retriever import VectorRetriever
 from .hybrid_retriever import HybridRetriever
 from src.utils.cache import HybridCache
+from src.utils import get_logger
+
+logger = get_logger('kb_manager')
 
 
 class KnowledgeBaseManager:
@@ -404,20 +407,25 @@ class KnowledgeBaseManager:
         Returns:
             list: 搜索结果
         """
+        logger.debug(f"知识库搜索: kb_id={kb_id}, query={query[:50]}...")
+
         # 生成缓存键
         cache_key = f"search_{kb_id}_{query}_{top_n}"
 
         # 先查缓存
         cached = self.cache.get(cache_key)
         if cached is not None:
+            logger.debug("知识库搜索命中缓存")
             return cached
 
         # 缓存未命中，执行搜索
         retriever = self.get_retriever(kb_id)
         if not retriever:
+            logger.warning(f"知识库检索器不可用: kb_id={kb_id}")
             return []
 
         result = retriever.retrieve(query, top_n)
+        logger.debug(f"知识库搜索结果数: {len(result)}")
 
         # 写入缓存
         self.cache.set(cache_key, result)

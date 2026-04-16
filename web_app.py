@@ -22,6 +22,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask
 from src.web.routes import register_routes
 from src.config_manager.manager import ConfigManager
+from src.utils import get_logger
+
+logger = get_logger('web_app')
 
 
 def get_web_config():
@@ -55,11 +58,11 @@ def create_app():
     os.makedirs(uploads_dir, exist_ok=True)
 
     # 预加载插件
-    print("正在预加载插件...")
+    logger.info("正在预加载插件...")
     from plugins.manager import get_plugin_manager
     custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
-    print(f"可用插件: {[p.id for p in plugin_manager.get_all_plugins()]}")
+    logger.info(f"可用插件: {[p.id for p in plugin_manager.get_all_plugins()]}")
 
     # 注册路由
     register_routes(app)
@@ -89,11 +92,11 @@ if __name__ == '__main__':
     port = args.port if args.port else config['port']
     debug = args.debug if args.debug is not None else config['debug']
 
-    print("=" * 50)
-    print("AI Log Analyzer - Web Interface")
-    print("=" * 50)
-    print(f"Access at: http://{host}:{port}")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("AI Log Analyzer - Web Interface")
+    logger.info("=" * 50)
+    logger.info(f"Access at: http://{host}:{port}")
+    logger.info("=" * 50)
 
     app.run(
         host=host,

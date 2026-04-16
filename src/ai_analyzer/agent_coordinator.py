@@ -8,6 +8,9 @@ from typing import Dict, Any, List
 
 from .scout_agent import ScoutAgent
 from .sage_agent import SageAgent
+from src.utils import get_logger
+
+logger = get_logger('agent_coordinator')
 
 
 class AgentCoordinator:
@@ -217,8 +220,11 @@ class AgentCoordinator:
                      kb_id: str = None, user_prompt: str = None,
                      log_rules_id: str = None, actual_log_paths: List[str] = None) -> str:
 
+        logger.debug(f"开始协调分析，日志文件数: {len(log_files)}")
+
         # 1. 从插件结果提取机器信息
         machine_info = self.extract_machine_info_from_plugins(plugin_result)
+        logger.debug(f"提取机器信息: {machine_info}")
 
         # 2. 获取插件分析的日志文件列表
         plugin_log_files = self.get_plugin_log_files(plugin_result)
@@ -230,6 +236,7 @@ class AgentCoordinator:
         plugin_summary = self.format_plugin_summary(plugin_result)
 
         # 5. Scout 侦察日志
+        logger.debug("Scout开始侦察日志")
         scout_result = self.scout.scout_and_extract(
             plugin_summary=plugin_summary,
             machine_info_from_plugins=machine_info,
@@ -246,11 +253,15 @@ class AgentCoordinator:
         # 如果 Scout 没有返回内容，直接从实际文件读取
         if not selected_content and actual_log_paths:
             selected_content = self.scout.extract_log_content(actual_log_paths, 8000)
+            logger.debug(f"从实际文件读取日志内容，长度: {len(selected_content)}")
 
         # 7. 获取知识库内容
         knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
+        if knowledge_content:
+            logger.debug(f"知识库内容长度: {len(knowledge_content)}")
 
         # 8. Sage 分析
+        logger.debug("Sage开始深度分析")
         html_result = self.sage.analyze(
             plugin_result=plugin_result,
             log_content=selected_content,

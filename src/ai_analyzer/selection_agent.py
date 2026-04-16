@@ -10,6 +10,9 @@ from typing import Dict, List, Any, Optional
 from src.ai_analyzer.client import AIClient
 from src.log_metadata.manager import LogMetadataManager
 from plugins.manager import PluginManager
+from src.utils import get_logger
+
+logger = get_logger('selection_agent')
 
 
 class SelectionAgent:
@@ -79,10 +82,12 @@ class SelectionAgent:
         """
         # 检查是否有用户提示词
         if not user_prompt or not user_prompt.strip():
+            logger.debug("无用户提示词，执行全量分析")
             return self.fallback_result(log_files, "无用户提示词，执行全量分析")
 
         # 检查 API 配置
         if not self.ai_client.base_url or not self.ai_client.api_key:
+            logger.warning("API 配置不完整，执行全量分析")
             return self.fallback_result(log_files, "API 配置不完整，执行全量分析")
 
         # 获取插件描述
@@ -100,14 +105,17 @@ class SelectionAgent:
 
         try:
             # 调用 AI（非流式）
+            logger.debug(f"AI智能选择开始，日志文件数: {len(log_files)}")
             response_text = self.call_ai(prompt)
 
             # 解析 JSON 结果
             result = self.parse_response(response_text, log_files)
+            logger.debug(f"AI智能选择完成，结果: {result.get('reason', '未知')}")
 
             return result
 
         except Exception as e:
+            logger.error(f"AI 选择失败: {str(e)}")
             return self.fallback_result(log_files, f"AI 选择失败: {str(e)}，执行全量分析")
 
     def call_ai(self, prompt: str) -> str:
