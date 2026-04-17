@@ -58,3 +58,6 @@ def test_ai_connection():
     assert len(full_response) > 0, "API返回内容为空"
 
     print(f"\nAPI响应: {full_response}")
+
+if '__name__' == '__main__':
+    test_ai_connection()

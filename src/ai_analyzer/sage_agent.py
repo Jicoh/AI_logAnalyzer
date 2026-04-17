@@ -125,7 +125,14 @@ class SageAgent:
         )
 
         # 调用 AI 获取 JSON 响应
-        response_text = self.call_ai(prompt)
+        response_text, success, error_msg = self.call_ai(prompt)
+
+        # 检查是否失败
+        if not success:
+            return self.generate_error_html("AI调用失败", error_msg)
+
+        if not response_text.strip():
+            return self.generate_error_html("AI返回空内容", "AI未返回有效分析结果")
 
         # 解析 JSON 数据
         analysis_data = self.parse_json_response(response_text)
@@ -193,7 +200,7 @@ class SageAgent:
         # 模板不存在时生成基本 HTML
         return self.generate_fallback_html(data)
 
-    def call_ai(self, prompt: str) -> str:
+    def call_ai(self, prompt: str) -> tuple:
         """
         调用 AI 获取完整响应
 
@@ -201,7 +208,7 @@ class SageAgent:
             prompt: 提示词
 
         Returns:
-            str: AI 响应文本
+            tuple: (响应文本, 是否成功, 错误信息)
         """
         messages = [{"role": "user", "content": prompt}]
         full_response = ""
@@ -209,10 +216,11 @@ class SageAgent:
         try:
             for chunk in self.client.chat(messages):
                 full_response += chunk
+            return full_response, True, ""
         except Exception as e:
-            logger.error(f"AI调用失败: {str(e)}")
-
-        return full_response
+            error_msg = str(e)
+            logger.error(f"AI调用失败: {error_msg}")
+            return "", False, error_msg
 
     def format_plugin_result(self, plugin_result: Dict) -> str:
         """
@@ -251,6 +259,49 @@ class SageAgent:
                     lines.append(f"\n{title}: {rows_count} 条记录")
 
         return '\n'.join(lines)
+
+    def generate_error_html(self, error_title: str, error_detail: str) -> str:
+        """
+        生成错误提示 HTML
+
+        Args:
+            error_title: 错误标题
+            error_detail: 错误详情
+
+        Returns:
+            str: 错误提示 HTML
+        """
+        if self.template:
+            # 使用模板渲染错误状态
+            return self.template.render(
+                machine_info={},
+                summary={'errors': 1, 'warnings': 0, 'info': 0},
+                problems=[{
+                    'title': error_title,
+                    'severity': 'error',
+                    'description': error_detail,
+                    'source': 'AI分析系统'
+                }],
+                solutions=[{
+                    'title': '建议操作',
+                    'description': '请检查AI配置是否正确，或稍后重试',
+                    'steps': ['检查API配置（base_url, api_key）', '确认网络连接正常', '查看后台日志获取详细错误信息'],
+                    'priority': 'high'
+                }],
+                log_snippets=[],
+                risk={'level': '高', 'description': 'AI分析未能正常完成'},
+                analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+
+        # 备用HTML生成
+        return self.generate_fallback_html({
+            'machine_info': {},
+            'summary': {'errors': 1, 'warnings': 0, 'info': 0},
+            'problems': [{'title': error_title, 'severity': 'error', 'description': error_detail}],
+            'solutions': [{'title': '建议操作', 'description': '请检查AI配置或稍后重试', 'steps': [], 'priority': 'high'}],
+            'log_snippets': [],
+            'risk': {'level': '高', 'description': 'AI分析未能正常完成'}
+        })
 
     def generate_fallback_html(self, data: Dict) -> str:
         """
