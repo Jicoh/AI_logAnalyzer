@@ -78,15 +78,26 @@ class SageAgent:
 {user_prompt}
 
 请根据上述信息，输出一个 JSON 对象，包含以下字段：
-1. machine_info: 机器信息对象
-2. summary: 问题摘要，包含 errors、warnings、info
-3. problems: 问题列表，每个包含 title、severity、description
-4. solutions: 解决方案列表，每个包含 title、description、steps、priority
-5. log_snippets: 相关日志片段列表
-6. risk: 风险评估，包含 level 和 description
 
-直接输出 JSON 对象，不要包含代码块标记。示例格式：
-{{"machine_info": {{}}, "summary": {{}}, "problems": [], "solutions": [], "log_snippets": [], "risk": {{}}}}"""
+1. machine_info: 机器核心信息对象，必须包含以下字段（从插件结果中提取，若插件结果中无相关信息则填"未知"）：
+   - serial_number: 序列号
+   - model: 机型/型号
+   - product_name: 产品名称
+   - board_type: 主板类型
+   - bmc_version: BMC版本
+   - bios_version: BIOS版本
+   - firmware_version: 固件版本
+   - ip_address: IP地址
+   - mac_address: MAC地址（如有）
+
+2. summary: 问题摘要，包含 errors（严重问题数）、warnings（警告数）、info（提示数）
+3. problems: 问题列表，每个问题包含 title、severity（error/warning/info）、description、source（可选）
+4. solutions: 解决方案列表，每个方案包含 title、description、steps（步骤列表）、priority（high/medium/low）
+5. log_snippets: 相关日志片段列表，每个片段包含 title（可选）、content
+6. risk: 风险评估，包含 level（高/中/低）、description
+
+直接输出 JSON 对象，不要包含代码块标记或其他解释内容。输出格式示例：
+{"machine_info": {"serial_number": "xxx", "model": "xxx", "product_name": "xxx", "board_type": "xxx", "bmc_version": "xxx", "bios_version": "xxx", "firmware_version": "xxx", "ip_address": "xxx", "mac_address": "xxx"}, "summary": {"errors": 0, "warnings": 0, "info": 0}, "problems": [], "solutions": [], "log_snippets": [], "risk": {"level": "低", "description": ""}}"""
 
     def analyze(self, plugin_result: Dict, log_content: str, machine_info: Dict,
                 knowledge_content: str, user_prompt: str) -> Dict[str, Any]:
@@ -201,21 +212,94 @@ class SageAgent:
         Returns:
             dict: 解析后的数据
         """
+        # 清理响应文本
+        text = response_text.strip()
+
+        # 移除可能的 <think> 标签内容（某些AI模型会输出思考过程）
+        think_match = re.search(r'<think>[\s\S]*?</think>', text)
+        if think_match:
+            text = text.replace(think_match.group(0), '').strip()
+            logger.debug(f"移除think标签后的文本: {text[:200]}")
+
+        # 移除控制字符（JSON只允许 \t \n \r，其他控制字符必须移除）
+        # 使用更可靠的方法：移除所有 ASCII 0-31 中除了 9,10,13 的字符
+        cleaned_text = []
+        for char in text:
+            code = ord(char)
+            if code >= 32 or code in (9, 10, 13):  # 可打印字符或 TAB/LF/CR
+                cleaned_text.append(char)
+        text = ''.join(cleaned_text)
+
         # 尝试直接解析
         try:
-            return json.loads(response_text)
-        except json.JSONDecodeError:
-            pass
+            result = json.loads(text)
+            logger.debug(f"直接解析成功")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"直接解析失败: {str(e)}, 文本长度: {len(text)}")
 
-        # 尝试提取 JSON 部分
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
-        if json_match:
+        # 尝试提取 markdown 代码块中的 JSON
+        code_block_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
+        if code_block_match:
             try:
-                return json.loads(json_match.group(0))
-            except json.JSONDecodeError:
-                pass
+                result = json.loads(code_block_match.group(1).strip())
+                logger.debug(f"从代码块解析成功")
+                return result
+            except json.JSONDecodeError as e:
+                logger.debug(f"代码块解析失败: {str(e)}")
 
-        # 解析失败，返回默认结构
+        # 尝试提取 JSON 对象（使用括号计数法找到第一个完整JSON）
+        start_idx = text.find('{')
+        if start_idx >= 0:
+            brace_count = 0
+            end_idx = start_idx
+            in_string = False
+            escape_next = False
+
+            for i, char in enumerate(text[start_idx:], start_idx):
+                if escape_next:
+                    escape_next = False
+                    continue
+                if char == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i
+                        break
+
+            if end_idx > start_idx:
+                json_str = text[start_idx:end_idx + 1]
+                try:
+                    result = json.loads(json_str)
+                    logger.debug(f"括号计数法解析成功")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.warning(f"括号计数法解析失败: {str(e)}, JSON片段长度: {len(json_str)}")
+                    logger.warning(f"JSON片段前200字符: {json_str[:200]}")
+                    # 尝试修复常见问题：末尾多余的逗号
+                    json_str_fixed = re.sub(r',\s*}', '}', json_str)
+                    json_str_fixed = re.sub(r',\s*]', ']', json_str_fixed)
+                    try:
+                        result = json.loads(json_str_fixed)
+                        logger.debug(f"修复后解析成功")
+                        return result
+                    except json.JSONDecodeError:
+                        pass
+
+        # 解析失败，记录详细信息
+        logger.error(f"JSON解析完全失败，响应文本长度: {len(response_text)}")
+        logger.error(f"响应文本前500字符: {response_text[:500]}")
+
+        # 返回默认结构
         return {
             'machine_info': {},
             'summary': {'errors': 0, 'warnings': 0, 'info': 0},
@@ -304,8 +388,105 @@ class SageAgent:
 
                 elif section.get('type') == 'table':
                     title = section.get('title', '表格')
-                    rows_count = len(section.get('rows', []))
-                    lines.append(f"\n{title}: {rows_count} 条记录")
+                    rows = section.get('rows', [])
+                    columns = section.get('columns', [])
+                    lines.append(f"\n{title}: {len(rows)} 条记录")
+
+                    if rows:
+                        col_labels = [col.get('label', col.get('key', '')) for col in columns]
+                        lines.append(f"  列: {', '.join(col_labels)}")
+
+                        # 小数据全传，大数据截断（超过100行）
+                        display_rows = rows if len(rows) <= 100 else rows[:100]
+                        for i, row in enumerate(display_rows):
+                            row_values = []
+                            for col in columns:
+                                key = col.get('key', '')
+                                val = row.get(key, '')
+                                if isinstance(val, str) and len(val) > 50:
+                                    val = val[:50] + '...'
+                                row_values.append(str(val))
+                            lines.append(f"  行{i+1}: {' | '.join(row_values)}")
+
+                        if len(rows) > 100:
+                            lines.append(f"  ... 省略 {len(rows) - 100} 行")
+
+                elif section.get('type') == 'timeline':
+                    title = section.get('title', '时间线')
+                    events = section.get('events', [])
+                    lines.append(f"\n{title}: {len(events)} 个事件")
+
+                    # 小数据全传，大数据截断（超过50个）
+                    display_events = events if len(events) <= 50 else events[:50]
+                    for i, event in enumerate(display_events):
+                        ts = event.get('timestamp', '')
+                        ev_title = event.get('title', '')
+                        sev = event.get('severity', 'info')
+                        desc = event.get('description', '')
+                        lines.append(f"  [{ts}] {ev_title} [{sev}]")
+                        if desc:
+                            desc_short = desc[:80] + '...' if len(desc) > 80 else desc
+                            lines.append(f"    {desc_short}")
+
+                    if len(events) > 50:
+                        lines.append(f"  ... 省略 {len(events) - 50} 个事件")
+
+                elif section.get('type') == 'cards':
+                    title = section.get('title', '卡片')
+                    cards = section.get('cards', [])
+                    lines.append(f"\n{title}: {len(cards)} 张卡片")
+
+                    # 小数据全传，大数据截断（超过20张）
+                    display_cards = cards if len(cards) <= 20 else cards[:20]
+                    for i, card in enumerate(display_cards):
+                        card_title = card.get('title', '')
+                        sev = card.get('severity', 'info')
+                        content = card.get('content', {})
+                        lines.append(f"  {card_title} [{sev}]")
+                        if content:
+                            for key, val in list(content.items())[:10]:
+                                if isinstance(val, str) and len(val) > 50:
+                                    val = val[:50] + '...'
+                                lines.append(f"    {key}: {val}")
+
+                    if len(cards) > 20:
+                        lines.append(f"  ... 省略 {len(cards) - 20} 张卡片")
+
+                elif section.get('type') == 'chart':
+                    title = section.get('title', '图表')
+                    chart_type = section.get('chart_type', 'bar')
+                    data = section.get('data', {})
+                    labels = data.get('labels', [])
+                    values = data.get('values', [])
+                    lines.append(f"\n{title} ({chart_type}图):")
+                    # 小数据全传，大数据截断（超过50项）
+                    display_count = min(len(labels), len(values))
+                    display_items = display_count if display_count <= 50 else 50
+                    for i in range(display_items):
+                        lines.append(f"  {labels[i]}: {values[i]}")
+                    if display_count > 50:
+                        lines.append(f"  ... 省略 {display_count - 50} 项")
+
+                elif section.get('type') == 'search_box':
+                    title = section.get('title', '搜索框')
+                    data = section.get('data', [])
+                    lines.append(f"\n{title}: {len(data)} 条数据")
+
+                elif section.get('type') == 'raw':
+                    title = section.get('title', '原始数据')
+                    data = section.get('data', {})
+                    lines.append(f"\n{title}:")
+                    # 小数据全传，大数据截断（超过20项）
+                    items = list(data.items())
+                    display_items = items if len(items) <= 20 else items[:20]
+                    for key, val in display_items:
+                        if isinstance(val, str) and len(val) > 100:
+                            val = val[:100] + '...'
+                        elif isinstance(val, (list, dict)):
+                            val = str(val)[:100] + '...'
+                        lines.append(f"  {key}: {val}")
+                    if len(items) > 20:
+                        lines.append(f"  ... 省略 {len(items) - 20} 项")
 
         return '\n'.join(lines)
 

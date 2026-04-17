@@ -12,6 +12,7 @@ from .scout_agent import ScoutAgent
 from .sage_agent import SageAgent
 from src.utils import get_logger
 from src.utils.file_utils import get_ai_temp_dir, write_json
+from plugins.base import count_severity
 
 logger = get_logger('agent_coordinator')
 
@@ -45,7 +46,17 @@ class AgentCoordinator:
         Returns:
             dict: 机器信息字典
         """
-        machine_info = {}
+        machine_info = {
+            'serial_number': '未知',
+            'model': '未知',
+            'product_name': '未知',
+            'board_type': '未知',
+            'bmc_version': '未知',
+            'bios_version': '未知',
+            'firmware_version': '未知',
+            'ip_address': '未知',
+            'mac_address': '未知'
+        }
 
         # 检查常见的机器信息插件 ID
         info_plugin_ids = ['bmc_info', 'system_info', 'machine_info', 'hardware_info']
@@ -64,12 +75,22 @@ class AgentCoordinator:
                                 # 根据标签匹配机器信息字段
                                 if '序列号' in label or 'Serial' in label:
                                     machine_info['serial_number'] = value
-                                elif '型号' in label or 'Model' in label:
+                                elif '型号' in label or 'Model' in label or '机型' in label:
                                     machine_info['model'] = value
-                                elif '版本' in label or 'Version' in label:
-                                    machine_info['version'] = value
+                                elif '产品' in label or 'Product' in label:
+                                    machine_info['product_name'] = value
+                                elif '主板' in label or 'Board' in label:
+                                    machine_info['board_type'] = value
+                                elif 'BMC' in label and '版本' in label:
+                                    machine_info['bmc_version'] = value
                                 elif 'BIOS' in label:
                                     machine_info['bios_version'] = value
+                                elif '固件' in label or 'Firmware' in label:
+                                    machine_info['firmware_version'] = value
+                                elif 'IP' in label or 'ip_address' in label.lower():
+                                    machine_info['ip_address'] = value
+                                elif 'MAC' in label or 'mac_address' in label.lower():
+                                    machine_info['mac_address'] = value
 
             # 也检查卡片类型的数据
             sections = plugin_data.get('sections', [])
@@ -82,12 +103,27 @@ class AgentCoordinator:
                         if '机器' in card_title or '系统' in card_title or 'BMC' in card_title:
                             metrics = content.get('metrics', {})
                             for key, val in metrics.items():
-                                if '序列号' in key or 'Serial' in key:
-                                    machine_info['serial_number'] = val
-                                elif '型号' in key or 'Model' in key:
-                                    machine_info['model'] = val
-                                elif '版本' in key or 'Version' in key:
-                                    machine_info['version'] = val
+                                if isinstance(val, str):
+                                    if '序列号' in key or 'Serial' in key:
+                                        machine_info['serial_number'] = val
+                                    elif '型号' in key or 'Model' in key or '机型' in key:
+                                        machine_info['model'] = val
+                                    elif '产品' in key or 'Product' in key:
+                                        machine_info['product_name'] = val
+                                    elif '主板' in key or 'Board' in key:
+                                        machine_info['board_type'] = val
+                                    elif 'BMC' in key and '版本' in key:
+                                        machine_info['bmc_version'] = val
+                                    elif 'BIOS' in key:
+                                        machine_info['bios_version'] = val
+                                    elif '固件' in key or 'Firmware' in key:
+                                        machine_info['firmware_version'] = val
+                                    elif 'IP' in key or 'ip_address' in key.lower():
+                                        machine_info['ip_address'] = val
+                                    elif 'MAC' in key or 'mac_address' in key.lower():
+                                        machine_info['mac_address'] = val
+
+        return machine_info
 
         return machine_info
 
@@ -129,24 +165,10 @@ class AgentCoordinator:
         for plugin_id, plugin_data in plugin_result.items():
             meta = plugin_data.get('meta', {})
             plugin_name = meta.get('plugin_name', plugin_id)
-
-            # 提取关键统计信息
-            error_count = 0
-            warning_count = 0
-
             sections = plugin_data.get('sections', [])
-            for section in sections:
-                if section.get('type') == 'stats':
-                    for item in section.get('items', []):
-                        severity = item.get('severity', '')
-                        value = item.get('value', 0)
-                        if severity == 'error' and isinstance(value, (int, float)):
-                            error_count += int(value)
-                        elif severity == 'warning' and isinstance(value, (int, float)):
-                            warning_count += int(value)
-
+            counts = count_severity(sections)
             summary_lines.append(
-                f"- {plugin_name}: 错误 {error_count} 个, 警告 {warning_count} 个"
+                f"- {plugin_name}: 错误 {counts['errors']} 个, 警告 {counts['warnings']} 个"
             )
 
         return '\n'.join(summary_lines)
@@ -245,24 +267,37 @@ class AgentCoordinator:
         # 4. 格式化插件概要
         plugin_summary = self.format_plugin_summary(plugin_result)
 
-        # 5. Scout 侦察日志
-        logger.debug("Scout开始侦察日志")
-        scout_data = self.scout.scout_and_extract(
-            plugin_summary=plugin_summary,
-            machine_info_from_plugins=machine_info,
-            log_files=plugin_log_files,
-            file_descriptions=file_descriptions,
-            user_prompt=user_prompt or ""
-        )
+        # 5. Scout 侦察日志（使用实际日志路径）
+        logger.debug(f"准备调用Scout")
+        try:
+            scout_data = self.scout.scout_and_extract(
+                plugin_summary=plugin_summary,
+                machine_info_from_plugins=machine_info,
+                log_files=actual_log_paths or [],  # 传绝对路径，让 Scout 能读取内容
+                file_descriptions=file_descriptions,
+                user_prompt=user_prompt or ""
+            )
+
+        except Exception as e:
+            logger.error(f"Scout调用异常: {type(e).__name__}: {str(e)}")
+            raise
 
         # 提取侦察结果和AI交互记录
-        scout_result = scout_data['result']
-        ai_interactions['scout'] = scout_data['ai_interaction']
+        scout_result = scout_data.get('result')
+        if scout_result is None:
+            logger.error("Scout返回的result为None")
+            scout_result = self.scout.fallback_selection(actual_log_paths or [], plugin_summary)
+        ai_interactions['scout'] = scout_data.get('ai_interaction')
+
+        # 验证 scout_result 类型
+        if not isinstance(scout_result, dict):
+            logger.error(f"scout_result类型错误: {type(scout_result)}, 值: {scout_result}")
+            scout_result = {"selected_content": "", "selected_files": [], "reason": "结果类型错误"}
 
         # 6. 提取日志内容
-        # 使用实际路径读取日志内容
         selected_files = scout_result.get('selected_files', [])
         selected_content = scout_result.get('selected_content', '')
+        logger.debug(f"Scout返回: selected_content长度={len(selected_content)}, selected_files={selected_files}")
 
         # 如果 Scout 没有返回内容，直接从实际文件读取
         if not selected_content and actual_log_paths:

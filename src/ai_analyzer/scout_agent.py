@@ -31,16 +31,21 @@ class ScoutAgent:
 ## 可用日志文件（插件分析的文件列表）
 {log_files}
 
+## 日志内容片段
+{log_content}
+
 ## 用户请求
 {user_prompt}
 
 请执行以下任务：
-1. 根据插件结果中的 meta.log_files，筛选出最需要深入分析的日志内容片段
-2. 控制筛选的日志总长度在8000字符内
+1. 根据日志内容片段和插件分析结果，筛选出最关键的日志内容（可精简或保留原文）
+2. 如果日志内容过长，优先保留错误、警告相关的部分
 3. 不要自行提取机器信息，机器信息已从插件结果中获取
 
-请返回一个 JSON 对象，格式如下（直接输出 JSON，不要包裹在代码块中）：
-{{"selected_content": "筛选的关键日志片段文本内容", "content_range": {{}}, "selected_files": ["file1.log"], "reason": "筛选原因说明"}}"""
+请返回一个 JSON 对象（直接输出 JSON，不要包裹在代码块中），包含以下字段：
+- selected_content: 筛选的关键日志片段文本内容
+- selected_files: 选定的文件名列表
+- reason: 筛选原因说明"""
 
     def __init__(self, config_manager, log_metadata_manager=None):
         """
@@ -87,6 +92,7 @@ class ScoutAgent:
                 - result: 侦察结果，包含 selected_content, selected_files, reason
                 - ai_interaction: AI交互记录，包含 prompt和response
         """
+        logger.debug(f"scout_and_extract开始, log_files数量: {len(log_files)}")
         # 构建提示词
         prompt_template = self.load_prompt()
 
@@ -97,22 +103,35 @@ class ScoutAgent:
                 f"- {k}: {v}" for k, v in machine_info_from_plugins.items()
             ])
 
+        # 先读取日志内容
+        log_content = "无日志内容"
+        if log_files:
+            log_content = self.extract_log_content(log_files, max_length=8000)
+        logger.debug(f"读取日志内容长度: {len(log_content)}")
+
+        # 显示文件名（不是完整路径）
+        log_file_names = [os.path.basename(f) for f in log_files] if log_files else []
+
         prompt = prompt_template.format(
             plugin_summary=plugin_summary,
             machine_info_from_plugins=machine_info_str,
             file_descriptions=file_descriptions or "无文件描述规则",
-            log_files="\n".join(log_files) if log_files else "无日志文件",
+            log_files="\n".join(log_file_names) if log_file_names else "无日志文件",
+            log_content=log_content,
             user_prompt=user_prompt or "无用户提示词"
         )
 
         # 调用 AI（收集完整响应）
+        logger.debug("开始调用AI")
         ai_prompt, response_text = self.call_ai(prompt)
+        logger.debug(f"AI响应长度: {len(response_text)}, 内容预览: {response_text[:100] if response_text else '空'}")
 
         # 解析 JSON 结果
         result = self.parse_response(response_text)
 
         # 如果解析失败，使用默认筛选策略
         if result is None:
+            logger.warning("JSON解析失败，使用fallback策略")
             result = self.fallback_selection(log_files, plugin_summary)
 
         # 返回侦察结果和AI交互记录
@@ -126,7 +145,8 @@ class ScoutAgent:
                     'machine_info_from_plugins': machine_info_from_plugins,
                     'log_files': log_files,
                     'file_descriptions': file_descriptions,
-                    'user_prompt': user_prompt
+                    'user_prompt': user_prompt,
+                    'log_content_preview': log_content[:500] if log_content else ""
                 }
             }
         }
@@ -162,6 +182,10 @@ class ScoutAgent:
         Returns:
             dict: 解析后的结果，或 None（解析失败时）
         """
+        if not response_text or not response_text.strip():
+            logger.warning("AI响应为空")
+            return None
+
         # 尝试提取 JSON
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
         if json_match:
@@ -174,11 +198,17 @@ class ScoutAgent:
             result = json.loads(json_text.strip())
 
             if not isinstance(result, dict):
+                logger.warning(f"AI响应不是字典类型: {type(result)}, 内容: {result}")
                 return None
+
+            # 检查必要字段
+            if 'selected_content' not in result:
+                logger.warning(f"AI响应缺少selected_content字段: {result.keys()}")
 
             return result
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析失败: {str(e)}, 响应内容: {response_text[:200]}")
             return None
 
     def fallback_selection(self, log_files: List[str], plugin_summary: str) -> Dict[str, Any]:

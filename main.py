@@ -34,6 +34,14 @@ from plugin_selection import PluginSelectionManager
 logger = get_logger('cli')
 
 
+def log_callback(message: str, level: str = "info"):
+    """日志回调适配函数，根据级别调用不同的日志方法。"""
+    # success 映射为 info
+    log_level = level if level in ['info', 'warning', 'error'] else 'info'
+    log_method = getattr(logger, log_level, logger.info)
+    log_method(message)
+
+
 def display_plugin_result(result: Dict):
     """在 CLI 显示插件分析结果。"""
     print("\n" + "="*50)
@@ -156,8 +164,8 @@ def cmd_analyze(args):
     # 插件分析
     print(f"正在分析日志: {args.log}")
     try:
-        # 使用主程序的 logger 作为回调，保持日志一致性
-        result_dict = plugin_manager.run_analysis(plugin_ids, args.log, log_callback=logger.info)
+        # 使用日志回调函数，支持不同日志级别
+        result_dict = plugin_manager.run_analysis(plugin_ids, args.log, log_callback=log_callback)
         logger.debug("插件分析完成")
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
@@ -581,7 +589,7 @@ def cmd_analyze_batch(args):
             # 使用主程序的 logger 作为回调，保持日志一致性
             plugin_result = plugin_manager.run_analysis(
                 plugin_ids, unit_path,
-                log_callback=logger.info
+                log_callback=log_callback
             )
 
             # 保存插件结果

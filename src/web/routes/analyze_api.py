@@ -29,6 +29,14 @@ logger = get_logger('analyze_api')
 
 analyze_bp = Blueprint('analyze_api', __name__)
 
+
+def log_callback(message: str, level: str = "info"):
+    """日志回调适配函数，根据级别调用不同的日志方法。"""
+    # success 映射为 info
+    log_level = level if level in ['info', 'warning', 'error'] else 'info'
+    log_method = getattr(logger, log_level, logger.info)
+    log_method(message)
+
 # 全局实例
 config_manager = None
 kb_manager = None
@@ -243,10 +251,10 @@ def analyze_stream():
 
             # 使用选定的插件分析
             try:
-                # 使用主程序的 logger 作为回调，保持日志一致性
+                # 使用日志回调函数，支持不同日志级别
                 combined_result = plugin_manager.run_analysis(
                     selected_plugins, analysis_path,
-                    log_callback=logger.info
+                    log_callback=log_callback
                 )
             except Exception as e:
                 yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
@@ -675,10 +683,10 @@ def analyze_batch_stream():
 
                 # 插件分析
                 try:
-                    # 使用主程序的 logger 作为回调，保持日志一致性
+                    # 使用日志回调函数，支持不同日志级别
                     plugin_result = plugin_manager.run_analysis(
                         selected_plugins, unit_path,
-                        log_callback=logger.info
+                        log_callback=log_callback
                     )
                 except Exception as e:
                     yield generate_sse_event({
