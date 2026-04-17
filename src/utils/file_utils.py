@@ -66,6 +66,18 @@ def get_data_dir(subdir: str = '') -> str:
     return data_dir
 
 
+def get_ai_temp_dir() -> str:
+    """
+    获取AI临时数据保存目录（data/ai_temp）
+
+    Returns:
+        str: ai_temp目录路径
+    """
+    ai_temp_dir = get_data_dir('ai_temp')
+    ensure_dir(ai_temp_dir)
+    return ai_temp_dir
+
+
 def get_filename(file_path):
     """获取文件名（不含扩展名）"""
     basename = os.path.basename(file_path)

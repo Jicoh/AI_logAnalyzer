@@ -83,7 +83,9 @@ class ScoutAgent:
             user_prompt: 用户提示词
 
         Returns:
-            dict: 侦察结果，包含 selected_content, selected_files, reason
+            dict: 包含result和ai_interaction两个字段
+                - result: 侦察结果，包含 selected_content, selected_files, reason
+                - ai_interaction: AI交互记录，包含 prompt和response
         """
         # 构建提示词
         prompt_template = self.load_prompt()
@@ -104,7 +106,7 @@ class ScoutAgent:
         )
 
         # 调用 AI（收集完整响应）
-        response_text = self.call_ai(prompt)
+        ai_prompt, response_text = self.call_ai(prompt)
 
         # 解析 JSON 结果
         result = self.parse_response(response_text)
@@ -113,9 +115,23 @@ class ScoutAgent:
         if result is None:
             result = self.fallback_selection(log_files, plugin_summary)
 
-        return result
+        # 返回侦察结果和AI交互记录
+        return {
+            'result': result,
+            'ai_interaction': {
+                'prompt': ai_prompt,
+                'response': response_text,
+                'params': {
+                    'plugin_summary': plugin_summary,
+                    'machine_info_from_plugins': machine_info_from_plugins,
+                    'log_files': log_files,
+                    'file_descriptions': file_descriptions,
+                    'user_prompt': user_prompt
+                }
+            }
+        }
 
-    def call_ai(self, prompt: str) -> str:
+    def call_ai(self, prompt: str) -> tuple:
         """
         调用 AI 获取完整响应
 
@@ -123,7 +139,7 @@ class ScoutAgent:
             prompt: 提示词
 
         Returns:
-            str: AI 响应文本
+            tuple: (提示词, AI响应文本)
         """
         messages = [{"role": "user", "content": prompt}]
         full_response = ""
@@ -134,7 +150,7 @@ class ScoutAgent:
         except Exception as e:
             logger.error(f"AI调用失败: {str(e)}")
 
-        return full_response
+        return prompt, full_response
 
     def parse_response(self, response_text: str) -> Dict[str, Any]:
         """

@@ -89,7 +89,7 @@ class SageAgent:
 {{"machine_info": {{}}, "summary": {{}}, "problems": [], "solutions": [], "log_snippets": [], "risk": {{}}}}"""
 
     def analyze(self, plugin_result: Dict, log_content: str, machine_info: Dict,
-                knowledge_content: str, user_prompt: str) -> str:
+                knowledge_content: str, user_prompt: str) -> Dict[str, Any]:
         """
         执行分析任务，输出 HTML 报告
 
@@ -101,7 +101,9 @@ class SageAgent:
             user_prompt: 用户提示词
 
         Returns:
-            str: HTML 格式的分析报告
+            dict: 包含html和ai_interaction两个字段
+                - html: HTML格式的分析报告
+                - ai_interaction: AI交互记录，包含prompt和response
         """
         # 构建提示词
         prompt_template = self.load_prompt()
@@ -125,14 +127,46 @@ class SageAgent:
         )
 
         # 调用 AI 获取 JSON 响应
-        response_text, success, error_msg = self.call_ai(prompt)
+        ai_prompt, response_text, success, error_msg = self.call_ai(prompt)
 
         # 检查是否失败
         if not success:
-            return self.generate_error_html("AI调用失败", error_msg)
+            html_result = self.generate_error_html("AI调用失败", error_msg)
+            return {
+                'html': html_result,
+                'ai_interaction': {
+                    'prompt': ai_prompt,
+                    'response': response_text,
+                    'success': False,
+                    'error': error_msg,
+                    'params': {
+                        'plugin_result': plugin_result,
+                        'log_content': log_content,
+                        'machine_info': machine_info,
+                        'knowledge_content': knowledge_content,
+                        'user_prompt': user_prompt
+                    }
+                }
+            }
 
         if not response_text.strip():
-            return self.generate_error_html("AI返回空内容", "AI未返回有效分析结果")
+            html_result = self.generate_error_html("AI返回空内容", "AI未返回有效分析结果")
+            return {
+                'html': html_result,
+                'ai_interaction': {
+                    'prompt': ai_prompt,
+                    'response': response_text,
+                    'success': True,
+                    'error': "AI未返回有效分析结果",
+                    'params': {
+                        'plugin_result': plugin_result,
+                        'log_content': log_content,
+                        'machine_info': machine_info,
+                        'knowledge_content': knowledge_content,
+                        'user_prompt': user_prompt
+                    }
+                }
+            }
 
         # 解析 JSON 数据
         analysis_data = self.parse_json_response(response_text)
@@ -140,7 +174,22 @@ class SageAgent:
         # 使用模板渲染 HTML
         html_result = self.render_html(analysis_data)
 
-        return html_result
+        return {
+            'html': html_result,
+            'ai_interaction': {
+                'prompt': ai_prompt,
+                'response': response_text,
+                'success': True,
+                'parsed_result': analysis_data,
+                'params': {
+                    'plugin_result': plugin_result,
+                    'log_content': log_content,
+                    'machine_info': machine_info,
+                    'knowledge_content': knowledge_content,
+                    'user_prompt': user_prompt
+                }
+            }
+        }
 
     def parse_json_response(self, response_text: str) -> Dict:
         """
@@ -208,7 +257,7 @@ class SageAgent:
             prompt: 提示词
 
         Returns:
-            tuple: (响应文本, 是否成功, 错误信息)
+            tuple: (提示词, 响应文本, 是否成功, 错误信息)
         """
         messages = [{"role": "user", "content": prompt}]
         full_response = ""
@@ -216,11 +265,11 @@ class SageAgent:
         try:
             for chunk in self.client.chat(messages):
                 full_response += chunk
-            return full_response, True, ""
+            return prompt, full_response, True, ""
         except Exception as e:
             error_msg = str(e)
             logger.error(f"AI调用失败: {error_msg}")
-            return "", False, error_msg
+            return prompt, "", False, error_msg
 
     def format_plugin_result(self, plugin_result: Dict) -> str:
         """

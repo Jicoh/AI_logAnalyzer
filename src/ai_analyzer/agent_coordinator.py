@@ -4,11 +4,14 @@ Agent Coordinator - Scout + Sage 协调器
 """
 
 import json
+import os
+from datetime import datetime
 from typing import Dict, Any, List
 
 from .scout_agent import ScoutAgent
 from .sage_agent import SageAgent
 from src.utils import get_logger
+from src.utils.file_utils import get_ai_temp_dir, write_json
 
 logger = get_logger('agent_coordinator')
 
@@ -222,6 +225,13 @@ class AgentCoordinator:
 
         logger.debug(f"开始协调分析，日志文件数: {len(log_files)}")
 
+        # 初始化AI交互记录
+        ai_interactions = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'scout': None,
+            'sage': None
+        }
+
         # 1. 从插件结果提取机器信息
         machine_info = self.extract_machine_info_from_plugins(plugin_result)
         logger.debug(f"提取机器信息: {machine_info}")
@@ -237,13 +247,17 @@ class AgentCoordinator:
 
         # 5. Scout 侦察日志
         logger.debug("Scout开始侦察日志")
-        scout_result = self.scout.scout_and_extract(
+        scout_data = self.scout.scout_and_extract(
             plugin_summary=plugin_summary,
             machine_info_from_plugins=machine_info,
             log_files=plugin_log_files,
             file_descriptions=file_descriptions,
             user_prompt=user_prompt or ""
         )
+
+        # 提取侦察结果和AI交互记录
+        scout_result = scout_data['result']
+        ai_interactions['scout'] = scout_data['ai_interaction']
 
         # 6. 提取日志内容
         # 使用实际路径读取日志内容
@@ -262,7 +276,7 @@ class AgentCoordinator:
 
         # 8. Sage 分析
         logger.debug("Sage开始深度分析")
-        html_result = self.sage.analyze(
+        sage_data = self.sage.analyze(
             plugin_result=plugin_result,
             log_content=selected_content,
             machine_info=machine_info,
@@ -270,4 +284,26 @@ class AgentCoordinator:
             user_prompt=user_prompt or ""
         )
 
+        # 提取HTML结果和AI交互记录
+        html_result = sage_data['html']
+        ai_interactions['sage'] = sage_data['ai_interaction']
+
+        # 9. 保存AI交互记录到临时目录
+        self.save_ai_temp(ai_interactions)
+
         return html_result
+
+    def save_ai_temp(self, ai_interactions: Dict[str, Any]):
+        """
+        保存AI交互记录到临时目录
+
+        Args:
+            ai_interactions: AI交互记录数据
+        """
+        try:
+            ai_temp_dir = get_ai_temp_dir()
+            output_file = os.path.join(ai_temp_dir, 'ai_analysis.json')
+            write_json(output_file, ai_interactions)
+            logger.debug(f"AI交互记录已保存: {output_file}")
+        except Exception as e:
+            logger.error(f"保存AI交互记录失败: {str(e)}")
