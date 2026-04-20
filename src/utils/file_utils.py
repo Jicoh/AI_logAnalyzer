@@ -8,6 +8,7 @@ import os
 import sys
 import tarfile
 import zipfile
+import gzip
 import shutil
 from datetime import datetime
 
@@ -105,7 +106,7 @@ def get_archive_type(file_path):
     获取压缩文件类型
 
     Returns:
-        str: 'tar.gz', 'tar', 'zip' 或 None
+        str: 'tar.gz', 'tar', 'zip', 'gz' 或 None
     """
     lower_path = file_path.lower()
     if lower_path.endswith('.tar.gz') or lower_path.endswith('.tgz'):
@@ -114,6 +115,8 @@ def get_archive_type(file_path):
         return 'tar'
     elif lower_path.endswith('.zip'):
         return 'zip'
+    elif lower_path.endswith('.gz'):
+        return 'gz'
     return None
 
 
@@ -215,7 +218,70 @@ def extract_archive(archive_path, extract_to):
                 if os.path.isfile(target_path):
                     extracted_files.append(target_path)
 
+    elif archive_type == 'gz':
+        # gzip文件：解压后文件名去掉.gz扩展名
+        basename = os.path.basename(archive_path)
+        if basename.lower().endswith('.gz'):
+            output_name = basename[:-3]
+        else:
+            output_name = basename + '.extracted'
+        target_path = os.path.join(extract_to, output_name)
+        ensure_dir(extract_to)
+
+        with gzip.open(archive_path, 'rb') as src, open(target_path, 'wb') as dst:
+            dst.write(src.read())
+
+        if os.path.isfile(target_path):
+            extracted_files.append(target_path)
+
     return extracted_files
+
+
+def extract_archive_recursive(archive_path, extract_to):
+    """
+    递归解压压缩文件，处理嵌套压缩包
+
+    Args:
+        archive_path: 压缩文件路径
+        extract_to: 解压目标目录
+
+    Returns:
+        list: 最终解压出的所有非压缩文件列表
+    """
+    # 首次解压
+    extracted_files = extract_archive(archive_path, extract_to)
+
+    # 记录已处理的压缩包，避免重复解压
+    processed_archives = set()
+
+    # 递归处理嵌套压缩包
+    while True:
+        # 找出所有未处理的嵌套压缩包
+        nested_archives = []
+        for root, dirs, files in os.walk(extract_to):
+            for f in files:
+                file_path = os.path.join(root, f)
+                if is_archive_file(file_path) and file_path not in processed_archives:
+                    nested_archives.append(file_path)
+
+        if not nested_archives:
+            break
+
+        # 解压每个嵌套压缩包到其所在目录
+        for nested_archive in nested_archives:
+            archive_dir = os.path.dirname(nested_archive)
+            extract_archive(nested_archive, archive_dir)
+            processed_archives.add(nested_archive)
+
+    # 返回最终的非压缩文件列表
+    final_files = []
+    for root, dirs, files in os.walk(extract_to):
+        for f in files:
+            file_path = os.path.join(root, f)
+            if not is_archive_file(file_path):
+                final_files.append(file_path)
+
+    return final_files
 
 
 def create_work_directory(base_dir, filename):

@@ -15,7 +15,7 @@ from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
 from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
-    is_archive_file, is_log_file, is_valid_log_file, extract_archive,
+    is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
     get_project_root, get_data_dir
@@ -158,8 +158,8 @@ def analyze_stream():
                 file.save(temp_archive_path)
 
                 try:
-                    # 解压压缩文件到工作目录
-                    extracted_files = extract_archive(temp_archive_path, work_dir)
+                    # 解压压缩文件到工作目录（递归解压嵌套压缩包）
+                    extracted_files = extract_archive_recursive(temp_archive_path, work_dir)
                 finally:
                     # 删除临时压缩包
                     if os.path.exists(temp_archive_path):
@@ -620,7 +620,7 @@ def analyze_batch_stream():
                             extract_dir_name = filename[:-4]  # 移除 .tgz
                         extract_dir = os.path.join(work_dir, extract_dir_name)
                         ensure_dir(extract_dir)
-                        extract_archive(temp_archive_path, extract_dir)
+                        extract_archive_recursive(temp_archive_path, extract_dir)
                         # 分析单元为解压后的目录
                         analysis_units.append({
                             'path': extract_dir,

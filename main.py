@@ -22,7 +22,7 @@ from ai_analyzer.selection_agent import SelectionAgent
 from log_metadata import LogMetadataManager
 from utils import read_file, write_json, ensure_dir, get_logger
 from utils.file_utils import (
-    is_archive_file, is_log_file, is_valid_log_file, extract_archive,
+    is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
     create_batch_work_directory, create_single_log_output_dir, get_data_dir,
     find_log_files_in_directory
 )
@@ -565,7 +565,7 @@ def cmd_analyze_batch(args):
                 extract_name = os.path.splitext(item)[0]
             extract_dir = os.path.join(temp_base, f"extract_{extract_name}")
             ensure_dir(extract_dir)
-            extract_archive(item_path, extract_dir)
+            extract_archive_recursive(item_path, extract_dir)
             analysis_units.append({
                 'path': extract_dir,
                 'name': extract_name,
