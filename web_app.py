@@ -39,8 +39,11 @@ def get_web_config():
 
 def create_app():
     """创建并配置 Flask 应用。"""
-    # 获取项目根目录
-    root_dir = os.path.dirname(os.path.abspath(__file__))
+    # 获取项目根目录（支持打包）
+    if getattr(sys, 'frozen', False):
+        root_dir = os.path.dirname(sys.executable)
+    else:
+        root_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 创建 Flask 应用，设置模板和静态文件夹
     app = Flask(

@@ -5,6 +5,7 @@
 
 import json
 import os
+import sys
 
 
 class ConfigManager:
@@ -59,8 +60,13 @@ class ConfigManager:
 
     def __init__(self, config_path=None):
         if config_path is None:
-            config_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(config_dir))
+            if getattr(sys, 'frozen', False):
+                # exe运行时，从exe所在目录读取
+                project_root = os.path.dirname(sys.executable)
+            else:
+                # 源码运行时
+                config_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(os.path.dirname(config_dir))
             config_path = os.path.join(project_root, "config", "ai_config.json")
         self.config_path = config_path
         self.config = self.load_config()

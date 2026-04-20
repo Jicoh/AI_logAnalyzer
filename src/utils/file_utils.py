@@ -5,6 +5,7 @@
 
 import json
 import os
+import sys
 import tarfile
 import zipfile
 import shutil
@@ -43,10 +44,24 @@ def ensure_dir(dir_path):
         os.makedirs(dir_path)
 
 
+def get_base_path():
+    """获取程序运行的基础路径（PyInstaller内部资源路径）"""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    else:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.dirname(os.path.dirname(current_dir))
+
+
 def get_project_root() -> str:
-    """获取项目根目录"""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.dirname(os.path.dirname(current_dir))
+    """获取项目根目录（exe所在目录或源码根目录）"""
+    if getattr(sys, 'frozen', False):
+        # exe运行时，返回exe所在目录
+        return os.path.dirname(sys.executable)
+    else:
+        # 源码运行时，返回项目根目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.dirname(os.path.dirname(current_dir))
 
 
 def get_data_dir(subdir: str = '') -> str:
