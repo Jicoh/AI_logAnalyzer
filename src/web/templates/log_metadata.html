@@ -51,28 +51,76 @@
 
     <!-- Create Rule Set Modal -->
     <div class="modal fade" :class="{ 'show d-block': showCreateModal }" tabindex="-1" x-show="showCreateModal"
-         @click.self="showCreateModal = false" style="background: rgba(0,0,0,0.5);">
+         @click.self="closeCreateModal()" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-plus-circle"></i> 创建规则集</h5>
-                    <button type="button" class="btn-close" @click="showCreateModal = false"></button>
+                    <button type="button" class="btn-close" @click="closeCreateModal()"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">名称 *</label>
-                        <input type="text" class="form-control" x-model="newRules.name" placeholder="输入规则集名称">
+                    <!-- 模式切换 -->
+                    <div class="btn-group w-100 mb-3">
+                        <button class="btn" :class="createMode === 'manual' ? 'btn-primary' : 'btn-outline-secondary'"
+                                @click="createMode = 'manual'">手动创建</button>
+                        <button class="btn" :class="createMode === 'json' ? 'btn-primary' : 'btn-outline-secondary'"
+                                @click="createMode = 'json'">JSON导入</button>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">描述</label>
-                        <textarea class="form-control" x-model="newRules.description" placeholder="输入描述（可选）"></textarea>
-                    </div>
+
+                    <!-- 手动创建模式 -->
+                    <template x-if="createMode === 'manual'">
+                        <div>
+                            <div class="mb-3">
+                                <label class="form-label">名称 *</label>
+                                <input type="text" class="form-control" x-model="newRules.name" placeholder="输入规则集名称">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">描述</label>
+                                <textarea class="form-control" x-model="newRules.description" placeholder="输入描述（可选）"></textarea>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- JSON导入模式 -->
+                    <template x-if="createMode === 'json'">
+                        <div>
+                            <div class="mb-3">
+                                <label class="form-label">JSON 数据</label>
+                                <textarea class="form-control" x-model="jsonInput" rows="10"
+                                          placeholder="输入JSON格式的规则集数据"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <button class="btn btn-outline-secondary btn-sm" @click="showJsonTemplate = !showJsonTemplate">
+                                    <i class="bi bi-code"></i> 查看模板
+                                </button>
+                                <div x-show="showJsonTemplate" class="mt-2 p-2 bg-light rounded">
+                                    <pre class="small text-muted mb-0">{
+  "name": "规则集名称",
+  "description": "规则集描述",
+  "rules": [
+    {
+      "file_path": "/var/log/sel.log",
+      "description": "SEL系统事件日志",
+      "keywords": ["SEL", "IPMI"],
+      "suggested_plugins": ["sel_parser"]
+    },
+    {
+      "file_path": "/var/log/bmc.log",
+      "description": "BMC日志"
+    }
+  ]
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @click="showCreateModal = false">取消</button>
-                    <button type="button" class="btn btn-primary" @click="createRules()" :disabled="!newRules.name">
+                    <button type="button" class="btn btn-secondary" @click="closeCreateModal()">取消</button>
+                    <button type="button" class="btn btn-primary" @click="createRules()"
+                            :disabled="createMode === 'manual' ? !newRules.name : !jsonInput || creating">
                         <span x-show="creating" class="spinner-border spinner-border-sm"></span>
-                        创建
+                        <span x-text="createMode === 'manual' ? '创建' : '导入'"></span>
                     </button>
                 </div>
             </div>
@@ -273,6 +321,9 @@ function logMetadataApp() {
         deleting: false,
         addingRule: false,
         updatingRule: false,
+        createMode: 'manual',
+        jsonInput: '',
+        showJsonTemplate: false,
         newRules: { name: '', description: '' },
         selectedRules: null,
         deleteTarget: null,
@@ -298,25 +349,53 @@ function logMetadataApp() {
             this.loading = false;
         },
 
+        closeCreateModal() {
+            this.showCreateModal = false;
+            this.createMode = 'manual';
+            this.newRules = { name: '', description: '' };
+            this.jsonInput = '';
+            this.showJsonTemplate = false;
+        },
+
         async createRules() {
             this.creating = true;
             try {
-                const response = await fetch('/api/log-rules', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.newRules)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', '规则集创建成功');
-                    this.showCreateModal = false;
-                    this.newRules = { name: '', description: '' };
-                    this.loadRuleSets();
+                if (this.createMode === 'manual') {
+                    const response = await fetch('/api/log-rules', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.newRules)
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.showToast('success', '成功', '规则集创建成功');
+                        this.closeCreateModal();
+                        this.loadRuleSets();
+                    } else {
+                        this.showToast('error', '错误', data.error);
+                    }
                 } else {
-                    this.showToast('error', '错误', data.error);
+                    const parsed = JSON.parse(this.jsonInput);
+                    const response = await fetch('/api/log-rules/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(parsed)
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.showToast('success', '成功', `规则集导入成功，共 ${data.data.rule_count} 条规则`);
+                        this.closeCreateModal();
+                        this.loadRuleSets();
+                    } else {
+                        this.showToast('error', '错误', data.error);
+                    }
                 }
             } catch (error) {
-                this.showToast('error', '错误', '创建规则集失败');
+                if (this.createMode === 'json') {
+                    this.showToast('error', '错误', 'JSON 格式无效');
+                } else {
+                    this.showToast('error', '错误', '创建规则集失败');
+                }
             }
             this.creating = false;
         },

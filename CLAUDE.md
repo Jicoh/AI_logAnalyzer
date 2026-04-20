@@ -22,9 +22,9 @@ python main.py config set api.api_key <key>
 python main.py config set api.model <model_name>
 python main.py kb create --name "Knowledge Base Name"
 python main.py kb add --kb-id <id> --file <document>
-python main.py analyze --log <logfile> --kb <kb_id>
-python main.py analyze --log <logfile> --ai-select --prompt <prompt>  # AI智能选择
-python main.py analyze-batch --dir <directory> --enable-ai  # 批量分析
+python main.py analyze <path>                       # 插件分析（无AI）
+python main.py analyze <path> --ai                  # 插件分析+AI分析
+python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择
 python main.py plugin list
 python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
 python main.py log-rules list  # 日志规则管理

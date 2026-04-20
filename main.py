@@ -87,20 +87,25 @@ def display_plugin_result(result: Dict):
 
 def cmd_analyze(args):
     """分析日志命令"""
-    logger.debug(f"开始分析日志: {args.log}")
+    logger.debug(f"开始分析日志: {args.path}")
+
+    # 检查 --ai-select 必须配合 --ai
+    if args.ai_select and not args.ai:
+        print("错误: --ai-select 必须配合 --ai 使用")
+        return 1
 
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
     plugin_selection_manager = PluginSelectionManager()
 
     # 检查日志文件
-    if not os.path.exists(args.log):
-        logger.error(f"日志文件不存在: {args.log}")
-        print(f"错误: 日志文件不存在: {args.log}")
+    if not os.path.exists(args.path):
+        logger.error(f"日志文件不存在: {args.path}")
+        print(f"错误: 日志文件不存在: {args.path}")
         return 1
 
     # 读取日志内容
-    log_content = read_file(args.log)
+    log_content = read_file(args.path)
     logger.debug(f"读取日志内容，长度: {len(log_content)}")
 
     # 初始化插件管理器
@@ -109,9 +114,9 @@ def cmd_analyze(args):
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
 
     # 确定要使用的插件
-    log_file_paths = [args.log]  # 用于AI智能选择
+    log_file_paths = [args.path]  # 用于AI智能选择
 
-    if args.ai_select:
+    if args.ai and args.ai_select:
         # AI智能选择模式
         print("AI智能选择模式已启用...")
 
@@ -162,10 +167,10 @@ def cmd_analyze(args):
     print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 插件分析
-    print(f"正在分析日志: {args.log}")
+    print(f"正在分析日志: {args.path}")
     try:
         # 使用日志回调函数，支持不同日志级别
-        result_dict = plugin_manager.run_analysis(plugin_ids, args.log, log_callback=log_callback)
+        result_dict = plugin_manager.run_analysis(plugin_ids, args.path, log_callback=log_callback)
         logger.debug("插件分析完成")
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
@@ -184,7 +189,7 @@ def cmd_analyze(args):
     from datetime import datetime
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     # 使用日志文件名（去除扩展名）
-    log_filename = os.path.basename(args.log)
+    log_filename = os.path.basename(args.path)
     clean_name = log_filename
     for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
         if clean_name.lower().endswith(ext):
@@ -201,7 +206,7 @@ def cmd_analyze(args):
     display_plugin_result(result_dict)
 
     # AI分析
-    if args.no_ai:
+    if not args.ai:
         print("跳过AI分析")
         return 0
 
@@ -261,12 +266,12 @@ def cmd_analyze(args):
         result = {
             'analysis_time': '未知',
             'kb_id': kb_id,
-            'plugin_result': plugin_result,
+            'plugin_result': plugin_output,
             'analysis': ''
         }
 
     # 保存AI分析结果
-    ai_output = os.path.join('data', 'ai_output', os.path.basename(args.log).replace('.txt', '_ai.json'))
+    ai_output = os.path.join('data', 'ai_output', os.path.basename(args.path).replace('.txt', '_ai.json'))
     ensure_dir(os.path.dirname(ai_output))
     ai_analyzer.save_result(result, ai_output)
     print(f"\nAI分析结果已保存: {ai_output}")
@@ -473,6 +478,23 @@ def cmd_plugin(args):
         print(f"已选择: [{args.category}] {', '.join(selected_ids)}")
         return 0
 
+    if args.plugin_action == 'selected':
+        plugin_selection_manager = PluginSelectionManager()
+        selected_ids = plugin_selection_manager.get('selected_plugins', [])
+
+        if not selected_ids:
+            print("未选择任何插件")
+            return 0
+
+        # 获取所有插件信息
+        all_plugins = plugin_manager.get_all_plugins()
+        print("已选择的插件:")
+        for plugin in all_plugins:
+            if plugin.id in selected_ids:
+                plugin_type = plugin.get_plugin_type()
+                print(f"  [{plugin_type}] {plugin.name}")
+        return 0
+
     return 1
 
 
@@ -480,19 +502,24 @@ def cmd_analyze_batch(args):
     """批量分析日志目录"""
     from datetime import datetime
 
-    logger.debug(f"开始批量分析: {args.dir}")
+    # 检查 --ai-select 必须配合 --ai
+    if args.ai_select and not args.ai:
+        print("错误: --ai-select 必须配合 --ai 使用")
+        return 1
+
+    logger.debug(f"开始批量分析: {args.path}")
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
 
     # 检查目录是否存在
-    if not os.path.exists(args.dir):
-        logger.error(f"目录不存在: {args.dir}")
-        print(f"错误: 目录不存在: {args.dir}")
+    if not os.path.exists(args.path):
+        logger.error(f"目录不存在: {args.path}")
+        print(f"错误: 目录不存在: {args.path}")
         return 1
 
-    if not os.path.isdir(args.dir):
-        logger.error(f"路径不是目录: {args.dir}")
-        print(f"错误: 路径不是目录: {args.dir}")
+    if not os.path.isdir(args.path):
+        logger.error(f"路径不是目录: {args.path}")
+        print(f"错误: 路径不是目录: {args.path}")
         return 1
 
     # 初始化插件管理器
@@ -515,8 +542,8 @@ def cmd_analyze_batch(args):
     # 构建分析单元列表
     # 每个分析单元是一个路径（目录或文件）
     analysis_units = []
-    for item in os.listdir(args.dir):
-        item_path = os.path.join(args.dir, item)
+    for item in os.listdir(args.path):
+        item_path = os.path.join(args.path, item)
         if os.path.isfile(item_path) and is_valid_log_file(item_path):
             # 单个日志文件
             analysis_units.append({
@@ -546,8 +573,8 @@ def cmd_analyze_batch(args):
             })
 
     if not analysis_units:
-        logger.error(f"目录中没有找到日志文件: {args.dir}")
-        print(f"错误: 目录中没有找到日志文件: {args.dir}")
+        logger.error(f"目录中没有找到日志文件: {args.path}")
+        print(f"错误: 目录中没有找到日志文件: {args.path}")
         return 1
 
     print(f"发现 {len(analysis_units)} 个分析单元")
@@ -556,7 +583,7 @@ def cmd_analyze_batch(args):
     # 创建批量输出目录
     plugin_output_base = get_data_dir('plugin_output')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    dir_name = os.path.basename(args.dir)
+    dir_name = os.path.basename(args.path)
     clean_name = dir_name
     for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
         if clean_name.lower().endswith(ext):
@@ -570,6 +597,13 @@ def cmd_analyze_batch(args):
     kb_id = args.kb
     if not kb_id:
         kb_id = config_manager.get('knowledge_base.default_id')
+
+    # AI智能选择相关
+    if args.ai and args.ai_select:
+        print("AI智能选择模式已启用...")
+        user_prompt = args.prompt
+        if user_prompt and os.path.exists(user_prompt):
+            user_prompt = read_file(user_prompt)
 
     # 批量分析每个单元
     batch_results = {}
@@ -585,10 +619,31 @@ def cmd_analyze_batch(args):
         # 创建单个单元的输出目录
         single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
 
+        # 确定当前单元使用的插件
+        current_plugin_ids = plugin_ids
+        current_log_files = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
+
+        if args.ai and args.ai_select and user_prompt:
+            # 对每个单元进行AI智能选择
+            try:
+                log_metadata_manager = LogMetadataManager()
+                selection_agent = SelectionAgent(
+                    config_manager=config_manager,
+                    log_metadata_manager=log_metadata_manager,
+                    plugin_manager=plugin_manager
+                )
+                selection_result = selection_agent.select(current_log_files, user_prompt)
+                current_plugin_ids = selection_result['selected_plugins']
+                current_log_files = selection_result['selected_files']
+                print(f"  AI选择插件: {', '.join(current_plugin_ids)}")
+                print(f"  AI选择文件: {', '.join([os.path.basename(f) for f in current_log_files])}")
+            except Exception as e:
+                print(f"  AI智能选择失败: {e}，使用默认插件")
+
         try:
             # 使用主程序的 logger 作为回调，保持日志一致性
             plugin_result = plugin_manager.run_analysis(
-                plugin_ids, unit_path,
+                current_plugin_ids, unit_path,
                 log_callback=log_callback
             )
 
@@ -612,28 +667,27 @@ def cmd_analyze_batch(args):
             total_errors += unit_errors
             total_warnings += unit_warnings
 
-            # 获取该单元内的日志文件列表（用于AI分析）
-            log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
-
             # AI分析（如果启用）
             ai_result = None
-            if args.enable_ai:
+            if args.ai:
                 print(f"  AI分析中...")
                 # 检查AI配置
                 api_config = config_manager.get('api', {})
                 if not api_config.get('base_url') or not api_config.get('api_key'):
-                    print(f"  告: AI配置不完整，跳过AI分析")
+                    print(f"  警告: AI配置不完整，跳过AI分析")
                 else:
                     try:
                         coordinator = AgentCoordinator(
                             config_manager=config_manager,
-                            kb_manager=kb_manager
+                            kb_manager=kb_manager,
+                            log_metadata_manager=log_metadata_manager if args.ai_select else None
                         )
                         html_result = coordinator.run_analysis(
                             plugin_result=plugin_result,
-                            log_files=log_files_in_unit,
+                            log_files=current_log_files,
                             kb_id=kb_id,
-                            actual_log_paths=log_files_in_unit
+                            user_prompt=user_prompt if args.ai_select else None,
+                            actual_log_paths=current_log_files
                         )
                         ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
                         with open(ai_html_file, 'w', encoding='utf-8') as f:
@@ -661,7 +715,7 @@ def cmd_analyze_batch(args):
     batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
     summary_data = {
         'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'directory': args.dir,
+        'directory': args.path,
         'total_files': len(analysis_units),
         'total_errors': total_errors,
         'total_warnings': total_warnings,
@@ -882,20 +936,13 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
 
     # analyze 命令
-    analyze_parser = subparsers.add_parser('analyze', help='分析日志文件')
-    analyze_parser.add_argument('--log', '-l', required=True, help='日志文件路径')
-    analyze_parser.add_argument('--plugins', help='指定使用的插件ID，多个插件用逗号分隔')
+    analyze_parser = subparsers.add_parser('analyze', help='分析日志文件或目录')
+    analyze_parser.add_argument('path', help='日志文件或目录路径')
+    analyze_parser.add_argument('--plugins', help='指定插件ID，多个用逗号分隔')
     analyze_parser.add_argument('--kb', '-k', help='知识库ID')
-    analyze_parser.add_argument('--prompt', '-p', help='自定义提示词或提示词文件路径（AI智能选择必需）')
-    analyze_parser.add_argument('--no-ai', action='store_true', help='仅运行插件分析，跳过AI分析')
-    analyze_parser.add_argument('--ai-select', action='store_true', help='启用AI智能选择插件和文件')
-
-    # analyze-batch 命令
-    analyze_batch_parser = subparsers.add_parser('analyze-batch', help='批量分析日志目录')
-    analyze_batch_parser.add_argument('--dir', '-d', required=True, help='日志目录路径')
-    analyze_batch_parser.add_argument('--plugins', help='指定使用的插件ID，多个插件用逗号分隔')
-    analyze_batch_parser.add_argument('--kb', '-k', help='知识库ID')
-    analyze_batch_parser.add_argument('--enable-ai', action='store_true', help='启用AI分析')
+    analyze_parser.add_argument('--prompt', '-p', help='用户提示词（配合--ai使用）')
+    analyze_parser.add_argument('--ai', action='store_true', help='启用AI分析')
+    analyze_parser.add_argument('--ai-select', action='store_true', help='AI智能选择模式（需配合--ai）')
 
     # plugin 命令
     plugin_parser = subparsers.add_parser('plugin', help='插件管理')
@@ -911,6 +958,9 @@ def main():
     plugin_select = plugin_subparsers.add_parser('select', help='选择插件（必须指定类别）')
     plugin_select.add_argument('category', nargs='?', help='插件类别名（CloudBMC/iBMC/LxBMC），不指定则显示当前选择')
     plugin_select.add_argument('plugins', nargs='?', help='插件ID列表（逗号分隔），不指定则选择该类别全部插件')
+
+    # plugin selected
+    plugin_selected = plugin_subparsers.add_parser('selected', help='显示已选择的插件')
 
     # kb 命令
     kb_parser = subparsers.add_parser('kb', help='知识库管理')
@@ -1017,9 +1067,10 @@ def main():
     args = parser.parse_args()
 
     if args.command == 'analyze':
-        return cmd_analyze(args)
-    elif args.command == 'analyze-batch':
-        return cmd_analyze_batch(args)
+        if os.path.isdir(args.path):
+            return cmd_analyze_batch(args)
+        else:
+            return cmd_analyze(args)
     elif args.command == 'plugin':
         return cmd_plugin(args)
     elif args.command == 'kb':

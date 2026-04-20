@@ -147,6 +147,47 @@ class LogMetadataManager:
         self.save_rules_config()
         return rules_id
 
+    def import_rule_set(self, rule_set_data: Dict) -> str:
+        """
+        通过 JSON 导入完整规则集
+
+        Args:
+            rule_set_data: 规则集数据，包含 name, description, rules
+
+        Returns:
+            str: 新规则集ID
+
+        Raises:
+            ValueError: 数据格式无效
+        """
+        name = rule_set_data.get('name', '').strip()
+        if not name:
+            raise ValueError('名称不能为空')
+
+        rules_id = f"custom_{uuid.uuid4().hex[:8]}"
+        rules_dict = {}
+
+        rules_list = rule_set_data.get('rules', [])
+        for rule in rules_list:
+            file_path = rule.get('file_path', '').strip()
+            if not file_path:
+                continue
+            rule_id = f"rule_{uuid.uuid4().hex[:8]}"
+            rules_dict[rule_id] = {
+                'file_path': file_path,
+                'description': rule.get('description', ''),
+                'keywords': rule.get('keywords', []),
+                'suggested_plugins': rule.get('suggested_plugins', [])
+            }
+
+        self.rules_config['rule_sets'][rules_id] = {
+            'name': name,
+            'description': rule_set_data.get('description', ''),
+            'rules': rules_dict
+        }
+        self.save_rules_config()
+        return rules_id
+
     def update_rule_set(self, rules_id: str, name: str = None, description: str = None) -> bool:
         """
         更新规则集信息

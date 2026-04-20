@@ -72,6 +72,29 @@ def create_rule_set():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@log_metadata_bp.route('/api/log-rules/import', methods=['POST'])
+def import_rule_set():
+    """通过 JSON 导入完整规则集"""
+    try:
+        data = request.get_json()
+        manager = get_log_metadata_manager()
+        rules_id = manager.import_rule_set(data)
+
+        rule_set = manager.get_rule_set(rules_id)
+        return jsonify({
+            'success': True,
+            'data': {
+                'rules_id': rules_id,
+                'name': rule_set.get('name'),
+                'rule_count': len(rule_set.get('rules', []))
+            }
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @log_metadata_bp.route('/api/log-rules/<rules_id>', methods=['PUT'])
 def update_rule_set(rules_id):
     """更新规则集信息"""

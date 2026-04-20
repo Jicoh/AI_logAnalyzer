@@ -53,20 +53,71 @@ python web_app.py --no-debug
 | 历史记录 | 查看过往分析结果，包括插件输出和AI分析 |
 | 设置 | 配置API、BM25、向量检索参数，编辑提示词模板 |
 
-### 4. CLI核心命令
+### 4. CLI命令完整说明
+
+#### 日志分析
 
 ```bash
-# 创建知识库
-python main.py kb create --name "BMC知识库"
+python main.py analyze <path>                       # 插件分析（无AI）
+python main.py analyze <path> --ai                  # 插件分析+AI分析
+python main.py analyze <path> --ai --prompt <提示词>  # AI分析+提示词
+python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择
+```
 
-# 添加文档（支持txt/md/pdf/docx）
-python main.py kb add --kb-id <id> --file <file>
+#### 插件管理
 
-# 分析日志
-python main.py analyze --log <logfile> --kb <kb_id>
+```bash
+python main.py plugin list          # 列出所有可用插件（显示类型、ID、描述）
+python main.py plugin categories    # 按分类查看插件列表
+python main.py plugin select        # 显示当前选择的插件
+python main.py plugin select <category>              # 选择某类别全部插件
+python main.py plugin select <category> <plugins>    # 选择某类别指定插件
+python main.py plugin selected      # 显示已选择的插件（类型+名称）
+```
 
-# 查看插件列表
-python main.py plugin list
+#### 知识库管理
+
+```bash
+python main.py kb list                                    # 列出所有知识库
+python main.py kb create --name <name> --description <desc>  # 创建知识库
+python main.py kb info --kb-id <id>                       # 查看知识库详情
+python main.py kb delete --kb-id <id>                     # 删除知识库
+python main.py kb add --kb-id <id> --file <file>          # 添加文档
+python main.py kb remove --kb-id <id> --doc-id <doc_id>   # 删除文档
+python main.py kb search --kb-id <id> --query <query> --top <n>  # 搜索知识库
+python main.py kb reindex --kb-id <id>                    # 重建索引
+```
+
+#### 配置管理
+
+```bash
+python main.py config list                   # 查看所有配置
+python main.py config get --key <key>        # 获取单个配置项
+python main.py config set --key <key> --value <value>  # 设置配置项
+
+# 示例：配置API
+python main.py config set api.base_url https://api.example.com/v1
+python main.py config set api.api_key your_api_key
+python main.py config set api.model gpt-4
+```
+
+#### 日志规则管理
+
+```bash
+python main.py log-rules list                                        # 列出所有规则集
+python main.py log-rules create --name <name> --description <desc>   # 创建规则集
+python main.py log-rules show --rules-id <id>                        # 查看规则集详情
+python main.py log-rules delete --rules-id <id>                      # 删除规则集
+python main.py log-rules add --rules-id <id> --file-path <path>      # 添加规则
+python main.py log-rules remove --rules-id <id> --rule-id <rule_id>  # 删除规则
+```
+
+#### 缓存管理
+
+```bash
+python main.py cache stats           # 查看缓存大小统计
+python main.py cache clear-results   # 清理分析结果缓存
+python main.py cache clear-temp      # 清理临时文件缓存
 ```
 
 ## 项目结构
