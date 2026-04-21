@@ -138,8 +138,7 @@ See `plugins/README.md` for full documentation.
 ### Data Directories
 - `data/uploads/` - Web-uploaded files
 - `data/temp/` - Temporary processing (work directories with timestamp_filename format)
-- `data/plugin_output/` - Plugin analysis results (JSON + HTML)
-- `data/ai_output/` - AI analysis results
+- `data/analysis_output/` - Analysis results (JSON + HTML)
 - `document/` - Knowledge base storage
 - `custom_plugins/` - User-defined plugins
 

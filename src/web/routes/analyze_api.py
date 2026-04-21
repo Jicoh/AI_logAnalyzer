@@ -359,7 +359,7 @@ def analyze_stream():
                 return
 
             # 保存插件分析结果
-            plugin_output_base = get_data_dir('plugin_output')
+            analysis_output_base = get_data_dir('analysis_output')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             # 使用原始上传文件名（去除扩展名）
             clean_name = filename
@@ -368,9 +368,9 @@ def analyze_stream():
                     clean_name = clean_name[:-len(ext)]
                     break
             dir_name = f"{timestamp}_{clean_name}"
-            plugin_output_dir = os.path.join(plugin_output_base, dir_name)
-            ensure_dir(plugin_output_dir)
-            plugin_output_file = os.path.join(plugin_output_dir, 'plugin_result.json')
+            analysis_output_dir = os.path.join(analysis_output_base, dir_name)
+            ensure_dir(analysis_output_dir)
+            plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
             with open(plugin_output_file, 'w', encoding='utf-8') as f:
                 json.dump(combined_result, f, indent=4, ensure_ascii=False)
 
@@ -405,7 +405,7 @@ def analyze_stream():
                     )
 
                     # 保存 HTML 结果
-                    ai_html_file = os.path.join(plugin_output_dir, 'ai_analysis.html')
+                    ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
                     with open(ai_html_file, 'w', encoding='utf-8') as f:
                         f.write(html_result)
 
@@ -684,7 +684,7 @@ def analyze_local_stream():
                 )
 
                 # 保存结果
-                plugin_output_base = get_data_dir('plugin_output')
+                analysis_output_base = get_data_dir('analysis_output')
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 clean_name = filename
                 for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
@@ -692,9 +692,9 @@ def analyze_local_stream():
                         clean_name = clean_name[:-len(ext)]
                         break
                 dir_name = f"{timestamp}_{clean_name}"
-                plugin_output_dir = os.path.join(plugin_output_base, dir_name)
-                ensure_dir(plugin_output_dir)
-                plugin_output_file = os.path.join(plugin_output_dir, 'plugin_result.json')
+                analysis_output_dir = os.path.join(analysis_output_base, dir_name)
+                ensure_dir(analysis_output_dir)
+                plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
                 with open(plugin_output_file, 'w', encoding='utf-8') as f:
                     json.dump(combined_result, f, indent=4, ensure_ascii=False)
 
@@ -724,7 +724,7 @@ def analyze_local_stream():
                             log_rules_id=log_rules_id,
                             actual_log_paths=log_file_paths
                         )
-                        ai_html_file = os.path.join(plugin_output_dir, 'ai_analysis.html')
+                        ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
                         with open(ai_html_file, 'w', encoding='utf-8') as f:
                             f.write(html_result)
                         ai_html_relative = os.path.relpath(ai_html_file, get_project_root())
@@ -759,7 +759,7 @@ def analyze_local_stream():
                     complete_data['ai_html_path'] = ai_result_data['html_path']
 
                 # 自动打开日志查看器
-                open_log_viewer(work_dir, get_config_manager())
+                open_log_viewer(work_dir)
 
                 yield generate_sse_event(complete_data)
 
@@ -767,7 +767,7 @@ def analyze_local_stream():
                 # 目录批量分析
                 folder_name = os.path.basename(path) or 'analysis_folder'
                 work_dir = create_batch_work_directory(temp_base, folder_name)
-                batch_output_dir = os.path.join(temp_base, '..', 'plugin_output')
+                batch_output_dir = os.path.join(temp_base, '..', 'analysis_output')
                 batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 batch_dir_name = f"{batch_timestamp}_{folder_name}"
                 batch_output_dir = os.path.join(batch_output_dir, batch_dir_name)
@@ -1263,7 +1263,7 @@ def analyze_batch_stream():
             work_dir = create_batch_work_directory(temp_base, folder_name)
 
             # 创建批量输出目录
-            plugin_output_base = os.path.join(temp_base, '..', 'plugin_output')
+            analysis_output_base = os.path.join(temp_base, '..', 'analysis_output')
             batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             clean_folder_name = folder_name
             for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
@@ -1271,7 +1271,7 @@ def analyze_batch_stream():
                     clean_folder_name = clean_folder_name[:-len(ext)]
                     break
             batch_dir_name = f"{batch_timestamp}_{clean_folder_name}"
-            batch_output_dir = os.path.join(plugin_output_base, batch_dir_name)
+            batch_output_dir = os.path.join(analysis_output_base, batch_dir_name)
             ensure_dir(batch_output_dir)
 
             yield generate_sse_event({

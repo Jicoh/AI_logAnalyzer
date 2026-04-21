@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config_manager import ConfigManager
 from knowledge_base import KnowledgeBaseManager
-from ai_analyzer import AIAnalyzer
 from ai_analyzer.agent_coordinator import AgentCoordinator
 from ai_analyzer.selection_agent import SelectionAgent
 from log_metadata import LogMetadataManager
@@ -104,17 +103,42 @@ def cmd_analyze(args):
         print(f"错误: 日志文件不存在: {args.path}")
         return 1
 
-    # 读取日志内容
-    log_content = read_file(args.path)
-    logger.debug(f"读取日志内容，长度: {len(log_content)}")
-
     # 初始化插件管理器
     root_dir = os.path.dirname(os.path.abspath(__file__))
     custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
 
-    # 确定要使用的插件
-    log_file_paths = [args.path]  # 用于AI智能选择
+    # 处理文件类型：压缩包需要解压
+    analysis_path = args.path  # 用于插件分析的路径
+    log_file_paths = [args.path]  # 用于AI智能选择的日志文件列表
+
+    if is_archive_file(args.path):
+        # 压缩包：解压到临时目录
+        from datetime import datetime
+        temp_base = get_data_dir('temp')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.basename(args.path)
+        clean_name = filename
+        for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
+            if clean_name.lower().endswith(ext):
+                clean_name = clean_name[:-len(ext)]
+                break
+        work_dir_name = f"{timestamp}_{clean_name}"
+        work_dir = os.path.join(temp_base, work_dir_name)
+        ensure_dir(work_dir)
+
+        print(f"解压压缩包到: {work_dir}")
+        extract_archive_recursive(args.path, work_dir)
+
+        # 查找解压后的日志文件
+        log_file_paths = find_log_files_in_directory(work_dir)
+        if not log_file_paths:
+            print(f"错误: 压缩包中没有找到日志文件")
+            return 1
+
+        print(f"找到 {len(log_file_paths)} 个日志文件")
+        # 插件分析使用解压后的目录
+        analysis_path = work_dir
 
     if args.ai and args.ai_select:
         # AI智能选择模式
@@ -137,12 +161,17 @@ def cmd_analyze(args):
             else:
                 try:
                     log_metadata_manager = LogMetadataManager()
+                    # 如果指定了日志规则，设置为活跃规则
+                    log_rules_id = args.log_rules
+                    if log_rules_id:
+                        log_metadata_manager.set_active_rules(log_rules_id)
+
                     selection_agent = SelectionAgent(
                         config_manager=config_manager,
                         log_metadata_manager=log_metadata_manager,
                         plugin_manager=plugin_manager
                     )
-                    selection_result = selection_agent.select(log_file_paths, user_prompt)
+                    selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
 
                     plugin_ids = selection_result['selected_plugins']
                     log_file_paths = selection_result['selected_files']
@@ -167,10 +196,10 @@ def cmd_analyze(args):
     print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 插件分析
-    print(f"正在分析日志: {args.path}")
+    print(f"正在分析日志: {analysis_path}")
     try:
         # 使用日志回调函数，支持不同日志级别
-        result_dict = plugin_manager.run_analysis(plugin_ids, args.path, log_callback=log_callback)
+        result_dict = plugin_manager.run_analysis(plugin_ids, analysis_path, log_callback=log_callback)
         logger.debug("插件分析完成")
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
@@ -196,11 +225,11 @@ def cmd_analyze(args):
             clean_name = clean_name[:-len(ext)]
             break
     dir_name = f"{timestamp}_{clean_name}"
-    plugin_output_dir = os.path.join('data', 'plugin_output', dir_name)
-    ensure_dir(plugin_output_dir)
-    plugin_output = os.path.join(plugin_output_dir, 'plugin_result.json')
-    write_json(plugin_output, result_dict)
-    print(f"插件分析结果已保存: {plugin_output}")
+    analysis_output_dir = os.path.join('data', 'analysis_output', dir_name)
+    ensure_dir(analysis_output_dir)
+    plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
+    write_json(plugin_output_file, result_dict)
+    print(f"插件分析结果已保存: {plugin_output_file}")
 
     # 显示结果概览
     display_plugin_result(result_dict)
@@ -236,45 +265,44 @@ def cmd_analyze(args):
 
     # 执行AI分析
     print("正在进行AI分析...")
-    ai_analyzer = AIAnalyzer(config_manager, kb_manager)
 
-    # 流式输出分析结果
-    print("\n" + "="*50)
-    print("分析报告")
-    print("="*50)
-
-    gen = ai_analyzer.analyze(
-        plugin_result=result_dict,
-        log_content=log_content,
-        kb_id=kb_id,
-        user_prompt=user_prompt
-    )
-
-    # 收集完整结果并流式输出
-    result = None
     try:
-        while True:
-            chunk = next(gen)
-            print(chunk, end='', flush=True)
-    except StopIteration as e:
-        # 生成器结束，获取返回值
-        result = e.value
+        log_metadata_manager = LogMetadataManager()
+        log_rules_id = args.log_rules
+        if log_rules_id:
+            log_metadata_manager.set_active_rules(log_rules_id)
 
-    print()  # 换行
+        coordinator = AgentCoordinator(
+            config_manager=config_manager,
+            kb_manager=kb_manager,
+            log_metadata_manager=log_metadata_manager
+        )
 
-    if result is None:
-        result = {
-            'analysis_time': '未知',
-            'kb_id': kb_id,
-            'plugin_result': plugin_output,
-            'analysis': ''
-        }
+        html_result = coordinator.run_analysis(
+            plugin_result=result_dict,
+            log_files=log_file_paths,
+            kb_id=kb_id,
+            user_prompt=user_prompt,
+            log_rules_id=log_rules_id,
+            actual_log_paths=log_file_paths
+        )
 
-    # 保存AI分析结果
-    ai_output = os.path.join('data', 'ai_output', os.path.basename(args.path).replace('.txt', '_ai.json'))
-    ensure_dir(os.path.dirname(ai_output))
-    ai_analyzer.save_result(result, ai_output)
-    print(f"\nAI分析结果已保存: {ai_output}")
+        # 保存AI分析HTML结果（与Web界面一致）
+        ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
+        with open(ai_html_file, 'w', encoding='utf-8') as f:
+            f.write(html_result)
+
+        # 生成插件HTML
+        render_html(plugin_output_file)
+
+        print(f"\nAI分析完成")
+        print(f"插件报告: {plugin_output_file.replace('.json', '.html')}")
+        print(f"AI报告: {ai_html_file}")
+
+    except Exception as e:
+        logger.error(f"AI分析失败: {e}")
+        print(f"AI分析失败: {e}")
+        return 1
 
     return 0
 
@@ -581,7 +609,7 @@ def cmd_analyze_batch(args):
     print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 创建批量输出目录
-    plugin_output_base = get_data_dir('plugin_output')
+    analysis_output_base = get_data_dir('analysis_output')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     dir_name = os.path.basename(args.path)
     clean_name = dir_name
@@ -590,7 +618,7 @@ def cmd_analyze_batch(args):
             clean_name = clean_name[:-len(ext)]
             break
     batch_dir_name = f"{timestamp}_{clean_name}"
-    batch_output_dir = os.path.join(plugin_output_base, batch_dir_name)
+    batch_output_dir = os.path.join(analysis_output_base, batch_dir_name)
     ensure_dir(batch_output_dir)
 
     # 获取知识库ID
@@ -599,6 +627,7 @@ def cmd_analyze_batch(args):
         kb_id = config_manager.get('knowledge_base.default_id')
 
     # AI智能选择相关
+    log_rules_id = args.log_rules
     if args.ai and args.ai_select:
         print("AI智能选择模式已启用...")
         user_prompt = args.prompt
@@ -627,12 +656,14 @@ def cmd_analyze_batch(args):
             # 对每个单元进行AI智能选择
             try:
                 log_metadata_manager = LogMetadataManager()
+                if log_rules_id:
+                    log_metadata_manager.set_active_rules(log_rules_id)
                 selection_agent = SelectionAgent(
                     config_manager=config_manager,
                     log_metadata_manager=log_metadata_manager,
                     plugin_manager=plugin_manager
                 )
-                selection_result = selection_agent.select(current_log_files, user_prompt)
+                selection_result = selection_agent.select(current_log_files, user_prompt, log_rules_id)
                 current_plugin_ids = selection_result['selected_plugins']
                 current_log_files = selection_result['selected_files']
                 print(f"  AI选择插件: {', '.join(current_plugin_ids)}")
@@ -677,16 +708,23 @@ def cmd_analyze_batch(args):
                     print(f"  警告: AI配置不完整，跳过AI分析")
                 else:
                     try:
+                        # 初始化 log_metadata_manager（如果尚未初始化）
+                        if 'log_metadata_manager' not in dir() or log_metadata_manager is None:
+                            log_metadata_manager = LogMetadataManager()
+                            if log_rules_id:
+                                log_metadata_manager.set_active_rules(log_rules_id)
+
                         coordinator = AgentCoordinator(
                             config_manager=config_manager,
                             kb_manager=kb_manager,
-                            log_metadata_manager=log_metadata_manager if args.ai_select else None
+                            log_metadata_manager=log_metadata_manager
                         )
                         html_result = coordinator.run_analysis(
                             plugin_result=plugin_result,
                             log_files=current_log_files,
                             kb_id=kb_id,
                             user_prompt=user_prompt if args.ai_select else None,
+                            log_rules_id=log_rules_id,
                             actual_log_paths=current_log_files
                         )
                         ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
@@ -896,21 +934,21 @@ def cmd_cache(args):
         return stats
 
     temp_dir = get_data_dir('temp')
-    plugin_output_dir = get_data_dir('plugin_output')
+    analysis_output_dir = get_data_dir('analysis_output')
 
     if args.cache_action == 'stats':
         temp_size = get_dir_size(temp_dir)
-        output_size = get_dir_size(plugin_output_dir)
+        output_size = get_dir_size(analysis_output_dir)
         total_size = temp_size + output_size
 
         print("缓存统计:")
         print(f"  临时文件: {format_size(temp_size)} ({temp_dir})")
-        print(f"  分析结果: {format_size(output_size)} ({plugin_output_dir})")
+        print(f"  分析结果: {format_size(output_size)} ({analysis_output_dir})")
         print(f"  总计: {format_size(total_size)}")
         return 0
 
     elif args.cache_action == 'clear-results':
-        stats = clear_dir_contents(plugin_output_dir)
+        stats = clear_dir_contents(analysis_output_dir)
         print(f"清理完成：删除 {stats['deleted']} 个文件")
         if stats['failed'] > 0:
             print(f"警告：{stats['failed']} 个文件删除失败")
@@ -943,6 +981,7 @@ def main():
     analyze_parser.add_argument('--prompt', '-p', help='用户提示词（配合--ai使用）')
     analyze_parser.add_argument('--ai', action='store_true', help='启用AI分析')
     analyze_parser.add_argument('--ai-select', action='store_true', help='AI智能选择模式（需配合--ai）')
+    analyze_parser.add_argument('--log-rules', '-l', help='日志规则集ID（配合--ai-select使用）')
 
     # plugin 命令
     plugin_parser = subparsers.add_parser('plugin', help='插件管理')

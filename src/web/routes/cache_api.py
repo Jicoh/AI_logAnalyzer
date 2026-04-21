@@ -122,10 +122,10 @@ def get_cache_stats():
     """获取缓存目录大小统计。"""
     try:
         temp_dir = get_data_dir('temp')
-        plugin_output_dir = get_data_dir('plugin_output')
+        analysis_output_dir = get_data_dir('analysis_output')
 
         temp_size = get_dir_size(temp_dir)
-        plugin_output_size = get_dir_size(plugin_output_dir)
+        analysis_output_size = get_dir_size(analysis_output_dir)
 
         return jsonify({
             'success': True,
@@ -135,14 +135,14 @@ def get_cache_stats():
                     'size_bytes': temp_size,
                     'size_formatted': format_size(temp_size)
                 },
-                'plugin_output': {
-                    'path': plugin_output_dir,
-                    'size_bytes': plugin_output_size,
-                    'size_formatted': format_size(plugin_output_size)
+                'analysis_output': {
+                    'path': analysis_output_dir,
+                    'size_bytes': analysis_output_size,
+                    'size_formatted': format_size(analysis_output_size)
                 },
                 'total': {
-                    'size_bytes': temp_size + plugin_output_size,
-                    'size_formatted': format_size(temp_size + plugin_output_size)
+                    'size_bytes': temp_size + analysis_output_size,
+                    'size_formatted': format_size(temp_size + analysis_output_size)
                 }
             }
         })
@@ -154,8 +154,8 @@ def get_cache_stats():
 def clear_results():
     """清理分析结果目录。"""
     try:
-        plugin_output_dir = get_data_dir('plugin_output')
-        stats = clear_dir_contents(plugin_output_dir)
+        analysis_output_dir = get_data_dir('analysis_output')
+        stats = clear_dir_contents(analysis_output_dir)
 
         message = f"清理完成：删除 {stats['deleted']} 个文件"
         if stats['failed'] > 0:

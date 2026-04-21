@@ -65,7 +65,7 @@ def main():
 
     # 4. 创建空的数据目录
     print("\n[3/7] 创建数据目录...")
-    data_dirs = ['uploads', 'temp', 'plugin_output', 'ai_output']
+    data_dirs = ['uploads', 'temp', 'analysis_output']
     for d in data_dirs:
         data_path = os.path.join(dist_dir, 'data', d)
         os.makedirs(data_path, exist_ok=True)

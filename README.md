@@ -130,8 +130,7 @@ AI_logAnalyzer/
 ├── data/                   # 数据目录
 │   ├── uploads/            # 上传文件
 │   ├── temp/               # 处理临时目录
-│   ├── plugin_output/      # 插件分析输出
-│   └── ai_output/          # AI分析输出
+│   └── analysis_output/    # 分析结果输出（插件+AI）
 ├── document/               # 知识库存储
 ├── plugins/                # 插件目录
 │   ├── builtin/            # 内置插件

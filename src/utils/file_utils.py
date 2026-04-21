@@ -70,7 +70,7 @@ def get_data_dir(subdir: str = '') -> str:
     获取data目录或子目录路径
 
     Args:
-        subdir: 子目录名，如 'temp', 'plugin_output', 'ai_output'
+        subdir: 子目录名，如 'temp', 'analysis_output'
 
     Returns:
         str: 目录路径

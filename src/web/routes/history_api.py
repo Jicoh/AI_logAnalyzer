@@ -34,16 +34,16 @@ def parse_timestamp_folder(folder_name):
 
 def get_history_list():
     """获取所有分析历史记录列表。"""
-    plugin_output_dir = get_data_dir('plugin_output')
+    analysis_output_dir = get_data_dir('analysis_output')
 
     history_records = []
 
-    if not os.path.exists(plugin_output_dir):
+    if not os.path.exists(analysis_output_dir):
         return history_records
 
     # 列出所有时间戳目录
-    for folder_name in sorted(os.listdir(plugin_output_dir), reverse=True):
-        folder_path = os.path.join(plugin_output_dir, folder_name)
+    for folder_name in sorted(os.listdir(analysis_output_dir), reverse=True):
+        folder_path = os.path.join(analysis_output_dir, folder_name)
         if not os.path.isdir(folder_path):
             continue
 
@@ -156,8 +156,8 @@ def get_history_list():
 
 def get_history_detail(timestamp):
     """获取特定历史记录的详情。"""
-    plugin_output_dir = get_data_dir('plugin_output')
-    folder_path = os.path.join(plugin_output_dir, timestamp)
+    analysis_output_dir = get_data_dir('analysis_output')
+    folder_path = os.path.join(analysis_output_dir, timestamp)
 
     if not os.path.exists(folder_path):
         return None
@@ -204,8 +204,8 @@ def get_history_detail(timestamp):
 
 def get_batch_file_detail(batch_folder, file_output_dir):
     """获取批量记录中单个文件的详情。"""
-    plugin_output_dir = get_data_dir('plugin_output')
-    folder_path = os.path.join(plugin_output_dir, batch_folder, file_output_dir)
+    analysis_output_dir = get_data_dir('analysis_output')
+    folder_path = os.path.join(analysis_output_dir, batch_folder, file_output_dir)
 
     if not os.path.exists(folder_path):
         return None
