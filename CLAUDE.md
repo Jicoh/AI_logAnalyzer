@@ -51,6 +51,7 @@ The AI analysis uses a two-stage agent system:
 | Module | Location | Purpose |
 |--------|----------|---------|
 | Config Manager | `src/config_manager/` | AI config (API, BM25 params, embedding settings) |
+| Settings Manager | `src/settings_manager/` | User preferences (log viewer settings) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
@@ -218,13 +219,23 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 
 ## Configuration
 
-Config file: `config/ai_config.json`
+### AI Config
+File: `config/ai_config.json`
 - `api.*` - LLM API settings (base_url, api_key, model, temperature, max_tokens)
 - `bm25.*` - BM25 parameters (k1, b)
 - `embedding.*` - Vector embedding settings (enabled, provider, model, dimension)
 - `retrieval.*` - Search mode (bm25/vector/hybrid), weights, RRF parameters
 
-Prompt files:
+### User Settings
+File: `config/settings.json`
+- `log_viewer.enabled` - 是否在分析完成后自动打开日志目录
+- `log_viewer.exe_path` - 日志查看工具路径（支持 exe 或 .lnk 快捷方式）
+
+### Plugin Selection State
+File: `config/plugin_selection.json`
+- Web UI 状态存储（选中的插件、知识库、AI 设置等）
+
+### Prompt files
 - `config/default_prompt_template.txt` - Read-only template
 - `config/default_prompt.txt` - User-customizable prompt (overrides template)
 - `config/scout_prompt.txt` - Scout Agent prompt for log reconnaissance

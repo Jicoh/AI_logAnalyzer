@@ -5,6 +5,7 @@
 import os
 import json
 import tempfile
+import subprocess
 from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
 
@@ -13,6 +14,7 @@ from src.ai_analyzer.selection_agent import SelectionAgent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
+from src.settings_manager.manager import SettingsManager
 from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
@@ -39,6 +41,7 @@ def log_callback(message: str, level: str = "info"):
 
 # 全局实例
 config_manager = None
+settings_manager = None
 kb_manager = None
 log_metadata_manager = None
 plugin_selection_manager = None
@@ -57,6 +60,14 @@ def get_config_manager():
     if config_manager is None:
         config_manager = ConfigManager()
     return config_manager
+
+
+def get_settings_manager():
+    """获取或创建 SettingsManager 实例。"""
+    global settings_manager
+    if settings_manager is None:
+        settings_manager = SettingsManager()
+    return settings_manager
 
 
 def get_kb_manager():
@@ -94,6 +105,93 @@ def allowed_log_file(filename):
         if lower_name.endswith(ext):
             return True
     return False
+
+
+def resolve_shortcut(lnk_path: str) -> str:
+    """解析 Windows 快捷方式(.lnk)文件，获取实际目标路径。"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['powershell', '-command',
+             f"(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk_path}').TargetPath"],
+            capture_output=True, text=True, timeout=5
+        )
+        target_path = result.stdout.strip()
+        if target_path and os.path.exists(target_path):
+            return target_path
+    except Exception as e:
+        logger.warning(f"解析快捷方式失败: {str(e)}")
+    return lnk_path
+
+
+def normalize_path(path: str) -> str:
+    """规范化路径：去除双引号、解析快捷方式。"""
+    # 去除首尾双引号
+    path = path.strip()
+    if path.startswith('"') and path.endswith('"'):
+        path = path[1:-1]
+    # 解析快捷方式
+    if path.lower().endswith('.lnk'):
+        resolved = resolve_shortcut(path)
+        if resolved != path:
+            return resolved
+    return path
+
+
+def detect_tool_type(exe_path: str) -> str:
+    """根据路径自动检测工具类型。"""
+    lower_path = exe_path.lower()
+    if 'code' in lower_path and ('vscode' in lower_path or 'visual' in lower_path):
+        return 'vscode'
+    if 'notepad++' in lower_path or 'notepadplus' in lower_path:
+        return 'notepad++'
+    return 'custom'
+
+
+def open_log_viewer(work_dir: str):
+    """使用配置的查看器打开日志目录。"""
+    settings_manager = get_settings_manager()
+
+    if not settings_manager.get('log_viewer.enabled'):
+        logger.info("日志查看器未启用，跳过自动打开")
+        return
+
+    exe_path = settings_manager.get('log_viewer.exe_path', '')
+
+    logger.info(f"准备打开日志查看器: exe_path={exe_path}, work_dir={work_dir}")
+
+    if not exe_path:
+        logger.warning("日志查看器路径为空")
+        return
+
+    # 规范化路径
+    exe_path = normalize_path(exe_path)
+    logger.info(f"规范化路径: {exe_path}")
+
+    if not os.path.exists(exe_path):
+        logger.warning(f"日志查看器路径不存在: {exe_path}")
+        return
+
+    if not os.path.exists(work_dir):
+        logger.warning(f"工作目录不存在: {work_dir}")
+        return
+
+    # 自动检测工具类型
+    tool_type = detect_tool_type(exe_path)
+    logger.info(f"检测到工具类型: {tool_type}")
+
+    try:
+        if tool_type == 'notepad++':
+            # Notepad++: 新窗口 + 工程模式打开
+            # -multiInst: 强制新开窗口
+            # -openFoldersAsWorkspace: 以工程形式打开文件夹
+            subprocess.Popen([exe_path, '-multiInst', '-openFoldersAsWorkspace', work_dir], shell=False)
+            logger.info(f"使用 Notepad++ 工程模式打开: {work_dir}")
+        else:
+            subprocess.Popen([exe_path, work_dir], shell=False)
+            logger.info(f"使用 {tool_type} 打开: {work_dir}")
+    except Exception as e:
+        logger.error(f"打开日志查看器失败: {str(e)}")
 
 
 def get_file_category(filename):
@@ -350,6 +448,9 @@ def analyze_stream():
             # 如果有 AI 分析结果，也传递 ai_html_path
             if ai_result_data and ai_result_data.get('html_path'):
                 complete_data['ai_html_path'] = ai_result_data['html_path']
+
+            # 自动打开日志查看器
+            open_log_viewer(work_dir)
 
             yield generate_sse_event(complete_data)
 
@@ -656,6 +757,10 @@ def analyze_local_stream():
                 }
                 if ai_result_data and ai_result_data.get('html_path'):
                     complete_data['ai_html_path'] = ai_result_data['html_path']
+
+                # 自动打开日志查看器
+                open_log_viewer(work_dir, get_config_manager())
+
                 yield generate_sse_event(complete_data)
 
             elif os.path.isdir(path):
@@ -1015,6 +1120,76 @@ def update_config():
         manager.save()
 
         return jsonify({'success': True, 'message': 'Configuration updated'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/log-viewer/test', methods=['POST'])
+def test_log_viewer():
+    """测试日志查看器是否能正常打开。"""
+    try:
+        data = request.get_json()
+        exe_path = data.get('exe_path', '')
+
+        if not exe_path:
+            return jsonify({'success': False, 'error': '请先设置查看工具路径'})
+
+        # 规范化路径
+        exe_path = normalize_path(exe_path)
+
+        if not os.path.exists(exe_path):
+            return jsonify({'success': False, 'error': f'路径不存在: {exe_path}'})
+
+        # 自动检测工具类型
+        tool_type = detect_tool_type(exe_path)
+
+        # 打开 data/temp 目录进行测试
+        temp_dir = get_data_dir('temp')
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+
+        try:
+            if tool_type == 'notepad++':
+                subprocess.Popen([exe_path, '-multiInst', '-openFoldersAsWorkspace', temp_dir], shell=False)
+            else:
+                subprocess.Popen([exe_path, temp_dir], shell=False)
+            return jsonify({'success': True, 'message': f'已使用 {tool_type} 打开 temp 目录'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'打开失败: {str(e)}'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/settings', methods=['GET'])
+def get_settings():
+    """获取通用设置。"""
+    try:
+        manager = get_settings_manager()
+        manager.reload()
+        settings = manager.get_all()
+        return jsonify({'success': True, 'data': settings})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analyze_bp.route('/api/settings', methods=['POST'])
+def update_settings():
+    """更新通用设置。"""
+    try:
+        data = request.get_json()
+        manager = get_settings_manager()
+
+        # 更新 log_viewer 设置
+        if 'log_viewer' in data:
+            viewer_config = data['log_viewer']
+            if 'enabled' in viewer_config:
+                manager.set('log_viewer.enabled', viewer_config['enabled'])
+            if 'exe_path' in viewer_config:
+                manager.set('log_viewer.exe_path', viewer_config['exe_path'])
+
+        manager.save()
+        return jsonify({'success': True, 'message': '设置已更新'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

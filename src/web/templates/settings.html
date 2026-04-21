@@ -20,6 +20,9 @@
                 <div class="nav-item" :class="{ 'active': currentTab === 'kb' }" @click="currentTab = 'kb'">
                     <i class="bi bi-database"></i> 知识库设置
                 </div>
+                <div class="nav-item" :class="{ 'active': currentTab === 'logviewer' }" @click="currentTab = 'logviewer'">
+                    <i class="bi bi-folder2-open"></i> 日志查看设置
+                </div>
                 <div class="nav-item" :class="{ 'active': currentTab === 'cache' }" @click="currentTab = 'cache'">
                     <i class="bi bi-trash"></i> 缓存设置
                 </div>
@@ -181,6 +184,43 @@
                 </div>
             </div>
 
+            <!-- 日志查看设置 -->
+            <div x-show="currentTab === 'logviewer'" x-cloak>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-folder2-open"></i> 日志查看工具
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">查看工具路径</label>
+                            <input type="text" class="form-control" x-model="config.log_viewer.exe_path"
+                                   placeholder="支持 exe 或快捷方式(.lnk)，例如: C:\...\Code.exe">
+                            <small class="text-muted">支持 VSCode、Notepad++ 或其他编辑器/查看器</small>
+                        </div>
+
+                        <div class="form-check form-switch mb-3" x-show="config.log_viewer.exe_path">
+                            <input class="form-check-input" type="checkbox" id="logViewerEnabled"
+                                   x-model="config.log_viewer.enabled">
+                            <label class="form-check-label" for="logViewerEnabled">启用自动打开</label>
+                        </div>
+
+                        <div class="mb-3" x-show="config.log_viewer.exe_path">
+                            <button class="btn btn-outline-info btn-sm" @click="testLogViewer()">
+                                <i class="bi bi-play-circle"></i> 测试打开
+                            </button>
+                            <small class="text-muted ms-2">测试是否能够正常打开文件夹</small>
+                        </div>
+
+                        <div class="alert alert-info" x-show="config.log_viewer.enabled">
+                            <small>
+                                <i class="bi bi-info-circle"></i>
+                                启用后，日志分析完成时会自动使用所选工具打开 <code>data/temp</code> 目录下对应的分析工作目录（时间戳+日志文件名）。
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 缓存设置 -->
             <div x-show="currentTab === 'cache'" x-cloak>
                 <div class="card mb-4">
@@ -281,6 +321,10 @@ function settingsApp() {
                 bm25_weight: 0.4,
                 vector_weight: 0.6,
                 rrf_k: 60
+            },
+            log_viewer: {
+                enabled: false,
+                exe_path: ''
             }
         },
         saving: false,
@@ -299,10 +343,10 @@ function settingsApp() {
 
         async loadConfig() {
             try {
+                // 加载 AI 配置
                 const response = await fetch('/api/config');
                 const data = await response.json();
                 if (data.success) {
-                    // Merge loaded config with defaults
                     if (data.data.api) {
                         this.config.api = { ...this.config.api, ...data.data.api };
                     }
@@ -316,6 +360,13 @@ function settingsApp() {
                         this.config.retrieval = { ...this.config.retrieval, ...data.data.retrieval };
                     }
                 }
+
+                // 加载通用设置
+                const settingsResponse = await fetch('/api/settings');
+                const settingsData = await settingsResponse.json();
+                if (settingsData.success && settingsData.data.log_viewer) {
+                    this.config.log_viewer = { ...this.config.log_viewer, ...settingsData.data.log_viewer };
+                }
             } catch (error) {
                 console.error('Failed to load config:', error);
                 this.showToast('error', '加载失败', '无法加载配置');
@@ -325,6 +376,7 @@ function settingsApp() {
         async saveConfig() {
             this.saving = true;
             try {
+                // 保存 AI 配置
                 const response = await fetch('/api/config', {
                     method: 'POST',
                     headers: {
@@ -361,10 +413,30 @@ function settingsApp() {
                 });
 
                 const data = await response.json();
-                if (data.success) {
+                if (!data.success) {
+                    this.showToast('error', '保存失败', data.error || '未知错误');
+                    return;
+                }
+
+                // 保存通用设置
+                const settingsResponse = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        log_viewer: {
+                            enabled: this.config.log_viewer.enabled,
+                            exe_path: this.config.log_viewer.exe_path
+                        }
+                    })
+                });
+
+                const settingsData = await settingsResponse.json();
+                if (settingsData.success) {
                     this.showToast('success', '保存成功', '配置已更新');
                 } else {
-                    this.showToast('error', '保存失败', data.error || '未知错误');
+                    this.showToast('error', '保存失败', settingsData.error || '未知错误');
                 }
             } catch (error) {
                 console.error('Failed to save config:', error);
@@ -384,6 +456,30 @@ function settingsApp() {
             setTimeout(() => {
                 this.toast.show = false;
             }, 3000);
+        },
+
+        async testLogViewer() {
+            if (!this.config.log_viewer.exe_path) {
+                this.showToast('warning', '提示', '请先设置查看工具路径');
+                return;
+            }
+            try {
+                const response = await fetch('/api/log-viewer/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        exe_path: this.config.log_viewer.exe_path
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '测试成功', data.message);
+                } else {
+                    this.showToast('error', '测试失败', data.error);
+                }
+            } catch (error) {
+                this.showToast('error', '测试失败', error.message);
+            }
         },
 
         async loadCacheStats() {
