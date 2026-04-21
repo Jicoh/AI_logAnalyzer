@@ -366,6 +366,520 @@ def analyze_stream():
     )
 
 
+@analyze_bp.route('/api/analyze/local-path', methods=['POST'])
+def validate_local_path():
+    """验证本地路径并返回文件信息。"""
+    try:
+        data = request.get_json()
+        path = data.get('path', '')
+        if not path:
+            return jsonify({'success': False, 'error': '路径不能为空'})
+
+        # 解码 URL 编码的路径
+        import urllib.parse
+        path = urllib.parse.unquote(path)
+
+        # 验证路径是否存在
+        if not os.path.exists(path):
+            return jsonify({'success': False, 'error': f'路径不存在: {path}'})
+
+        # 获取路径信息
+        if os.path.isfile(path):
+            filename = os.path.basename(path)
+            file_size = os.path.getsize(path)
+            lower_name = filename.lower()
+
+            # 判断文件类型
+            is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
+                          lower_name.endswith('.tar') or lower_name.endswith('.zip'))
+            is_log = lower_name.endswith('.log') or lower_name.endswith('.txt')
+
+            if not is_archive and not is_log:
+                return jsonify({'success': False, 'error': f'不支持的文件类型: {filename}'})
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'type': 'file',
+                    'path': path,
+                    'filename': filename,
+                    'size': file_size,
+                    'is_archive': is_archive
+                }
+            })
+        elif os.path.isdir(path):
+            # 目录模式
+            folder_name = os.path.basename(path) or os.path.basename(os.path.dirname(path))
+            # 查找目录中的日志文件
+            log_files = find_log_files_in_directory(path)
+            archive_files = []
+            for f in get_files_in_directory(path):
+                lower_f = f.lower()
+                if (lower_f.endswith('.tar.gz') or lower_f.endswith('.tgz') or
+                    lower_f.endswith('.tar') or lower_f.endswith('.zip')):
+                    archive_files.append(f)
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'type': 'directory',
+                    'path': path,
+                    'folder_name': folder_name,
+                    'log_count': len(log_files),
+                    'archive_count': len(archive_files)
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': '路径既不是文件也不是目录'})
+
+    except Exception as e:
+        logger.error(f"验证路径失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# 待分析路径（用于 IPC）
+_pending_analyze_path = None
+
+
+@analyze_bp.route('/api/trigger-analysis', methods=['POST'])
+def trigger_analysis():
+    """设置待分析路径，用于已运行服务接收分析请求。"""
+    global _pending_analyze_path
+    try:
+        data = request.get_json()
+        path = data.get('path', '')
+        if not path:
+            return jsonify({'success': False, 'error': '路径不能为空'})
+
+        _pending_analyze_path = path
+        logger.info(f"设置待分析路径: {path}")
+        return jsonify({'success': True, 'message': '分析请求已设置'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@analyze_bp.route('/api/pending-analysis', methods=['GET'])
+def get_pending_analysis():
+    """获取待分析路径。"""
+    global _pending_analyze_path
+    path = _pending_analyze_path
+    _pending_analyze_path = None  # 获取后清除
+    if path:
+        return jsonify({'success': True, 'data': {'path': path}})
+    return jsonify({'success': True, 'data': {'path': None}})
+
+
+@analyze_bp.route('/api/analyze/local-stream', methods=['POST'])
+def analyze_local_stream():
+    """对本地路径执行流式分析（支持文件和目录）。"""
+    def generate():
+        work_dir = None
+        batch_output_dir = None
+
+        try:
+            # 获取路径参数
+            data = request.get_json()
+            path = data.get('path', '')
+            plugins = data.get('plugins', [])
+            enable_ai = data.get('enable_ai', False)
+            ai_selection_mode = data.get('ai_selection_mode', False)
+            kb_id = data.get('kb_id', '').strip() or None
+            user_prompt = data.get('user_prompt', '').strip() or None
+            log_rules_id = data.get('log_rules_id', '').strip() or None
+
+            if not path:
+                yield generate_sse_event({'stage': 'error', 'message': '路径不能为空'})
+                return
+
+            # 验证路径
+            if not os.path.exists(path):
+                yield generate_sse_event({'stage': 'error', 'message': f'路径不存在: {path}'})
+                return
+
+            plugin_manager = get_plugin_manager_with_custom()
+            temp_base = get_data_dir('temp')
+
+            if os.path.isfile(path):
+                # 单文件分析
+                filename = os.path.basename(path)
+                lower_name = filename.lower()
+                is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
+                              lower_name.endswith('.tar') or lower_name.endswith('.zip'))
+
+                work_dir = create_work_directory(temp_base, filename)
+
+                if is_archive:
+                    # 解压压缩包
+                    extracted_files = extract_archive_recursive(path, work_dir)
+                    log_file_paths = find_log_files_in_directory(work_dir)
+                    analysis_path = work_dir
+                else:
+                    # 普通日志文件，复制到工作目录
+                    import shutil
+                    dest_path = os.path.join(work_dir, filename)
+                    shutil.copy2(path, dest_path)
+                    log_file_paths = [dest_path]
+                    analysis_path = dest_path
+
+                if not log_file_paths:
+                    yield generate_sse_event({'stage': 'error', 'message': '未找到日志文件'})
+                    return
+
+                # 读取日志内容用于 AI 分析
+                all_log_content = ""
+                for log_path in log_file_paths:
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        all_log_content += f.read() + "\n"
+
+                # 选择插件
+                selected_plugins = []
+                selected_log_files = log_file_paths
+                selection_result = None
+
+                if ai_selection_mode and enable_ai:
+                    yield generate_sse_event({
+                        'stage': 'selection',
+                        'status': 'start',
+                        'message': 'AI 正在智能选择插件...'
+                    })
+                    try:
+                        if log_rules_id:
+                            get_log_metadata_manager().set_active_rules(log_rules_id)
+                        selection_agent = SelectionAgent(
+                            config_manager=get_config_manager(),
+                            log_metadata_manager=get_log_metadata_manager(),
+                            plugin_manager=plugin_manager
+                        )
+                        selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
+                        selected_plugins = selection_result['selected_plugins']
+                        selected_log_files = selection_result['selected_files']
+                        yield generate_sse_event({
+                            'stage': 'selection',
+                            'status': 'complete',
+                            'result': selection_result
+                        })
+                    except Exception as e:
+                        yield generate_sse_event({
+                            'stage': 'selection',
+                            'status': 'error',
+                            'message': f'AI 选择失败: {str(e)}'
+                        })
+                        selected_plugins = [p.id for p in plugin_manager.get_all_plugins()]
+                        selected_log_files = log_file_paths
+                else:
+                    selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+                    selected_log_files = log_file_paths
+
+                # 插件分析
+                yield generate_sse_event({
+                    'stage': 'plugin',
+                    'status': 'start',
+                    'message': f'使用 {len(selected_plugins)} 个插件分析...'
+                })
+
+                combined_result = plugin_manager.run_analysis(
+                    selected_plugins, analysis_path,
+                    log_callback=log_callback
+                )
+
+                # 保存结果
+                plugin_output_base = get_data_dir('plugin_output')
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                clean_name = filename
+                for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
+                    if clean_name.lower().endswith(ext):
+                        clean_name = clean_name[:-len(ext)]
+                        break
+                dir_name = f"{timestamp}_{clean_name}"
+                plugin_output_dir = os.path.join(plugin_output_base, dir_name)
+                ensure_dir(plugin_output_dir)
+                plugin_output_file = os.path.join(plugin_output_dir, 'plugin_result.json')
+                with open(plugin_output_file, 'w', encoding='utf-8') as f:
+                    json.dump(combined_result, f, indent=4, ensure_ascii=False)
+
+                render_html(plugin_output_file)
+
+                yield generate_sse_event({
+                    'stage': 'plugin',
+                    'status': 'complete',
+                    'result': combined_result
+                })
+
+                # AI 分析
+                ai_result_data = None
+                if enable_ai:
+                    yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
+                    try:
+                        coordinator = AgentCoordinator(
+                            config_manager=get_config_manager(),
+                            kb_manager=get_kb_manager(),
+                            log_metadata_manager=get_log_metadata_manager()
+                        )
+                        html_result = coordinator.run_analysis(
+                            plugin_result=combined_result,
+                            log_files=selected_log_files,
+                            kb_id=kb_id,
+                            user_prompt=user_prompt,
+                            log_rules_id=log_rules_id,
+                            actual_log_paths=log_file_paths
+                        )
+                        ai_html_file = os.path.join(plugin_output_dir, 'ai_analysis.html')
+                        with open(ai_html_file, 'w', encoding='utf-8') as f:
+                            f.write(html_result)
+                        ai_html_relative = os.path.relpath(ai_html_file, get_project_root())
+                        ai_result_data = {
+                            'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'kb_id': kb_id,
+                            'html_path': ai_html_relative
+                        }
+                        yield generate_sse_event({
+                            'stage': 'ai',
+                            'status': 'complete',
+                            'html_path': ai_html_relative
+                        })
+                    except Exception as e:
+                        logger.error(f"AI分析失败: {str(e)}")
+                        yield generate_sse_event({
+                            'stage': 'ai',
+                            'status': 'error',
+                            'message': f'AI analysis error: {str(e)}'
+                        })
+
+                # 完成
+                root_dir = get_project_root()
+                html_relative_path = os.path.relpath(plugin_output_file.replace('.json', '.html'), root_dir)
+                complete_data = {
+                    'stage': 'complete',
+                    'message': 'Analysis complete',
+                    'work_dir': work_dir,
+                    'html_path': html_relative_path
+                }
+                if ai_result_data and ai_result_data.get('html_path'):
+                    complete_data['ai_html_path'] = ai_result_data['html_path']
+                yield generate_sse_event(complete_data)
+
+            elif os.path.isdir(path):
+                # 目录批量分析
+                folder_name = os.path.basename(path) or 'analysis_folder'
+                work_dir = create_batch_work_directory(temp_base, folder_name)
+                batch_output_dir = os.path.join(temp_base, '..', 'plugin_output')
+                batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                batch_dir_name = f"{batch_timestamp}_{folder_name}"
+                batch_output_dir = os.path.join(batch_output_dir, batch_dir_name)
+                ensure_dir(batch_output_dir)
+
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'start',
+                    'message': '开始批量分析...',
+                    'work_dir': work_dir
+                })
+
+                # 查找分析单元
+                analysis_units = []
+                for f in get_files_in_directory(path):
+                    lower_f = f.lower()
+                    is_archive = (lower_f.endswith('.tar.gz') or lower_f.endswith('.tgz') or
+                                  lower_f.endswith('.tar') or lower_f.endswith('.zip'))
+                    is_log = lower_f.endswith('.log') or lower_f.endswith('.txt')
+
+                    if is_archive:
+                        extract_dir_name = os.path.splitext(os.path.basename(f))[0]
+                        if lower_f.endswith('.tar.gz'):
+                            extract_dir_name = os.path.basename(f)[:-7]
+                        elif lower_f.endswith('.tgz'):
+                            extract_dir_name = os.path.basename(f)[:-4]
+                        extract_dir = os.path.join(work_dir, extract_dir_name)
+                        ensure_dir(extract_dir)
+                        extract_archive_recursive(f, extract_dir)
+                        analysis_units.append({
+                            'path': extract_dir,
+                            'name': extract_dir_name,
+                            'is_archive': True
+                        })
+                    elif is_log:
+                        import shutil
+                        dest_path = os.path.join(work_dir, os.path.basename(f))
+                        shutil.copy2(f, dest_path)
+                        analysis_units.append({
+                            'path': dest_path,
+                            'name': os.path.basename(f),
+                            'is_archive': False
+                        })
+
+                if not analysis_units:
+                    yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
+                    return
+
+                total_units = len(analysis_units)
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'files_found',
+                    'total': total_units,
+                    'message': f'发现 {total_units} 个分析单元'
+                })
+
+                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+                batch_results = {}
+
+                for idx, unit in enumerate(analysis_units):
+                    unit_name = unit['name']
+                    unit_path = unit['path']
+
+                    yield generate_sse_event({
+                        'stage': 'batch',
+                        'status': 'start_file',
+                        'current': idx + 1,
+                        'total': total_units,
+                        'file': unit_name,
+                        'message': f'分析: {unit_name} ({idx + 1}/{total_units})'
+                    })
+
+                    single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
+
+                    try:
+                        plugin_result = plugin_manager.run_analysis(
+                            selected_plugins, unit_path,
+                            log_callback=log_callback
+                        )
+                    except Exception as e:
+                        yield generate_sse_event({
+                            'stage': 'batch',
+                            'status': 'file_error',
+                            'file': unit_name,
+                            'message': f'插件分析失败: {str(e)}'
+                        })
+                        continue
+
+                    plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
+                    with open(plugin_output_file, 'w', encoding='utf-8') as f:
+                        json.dump(plugin_result, f, indent=4, ensure_ascii=False)
+                    render_html(plugin_output_file)
+
+                    root_dir = get_project_root()
+                    html_relative_path = os.path.relpath(
+                        plugin_output_file.replace('.json', '.html'), root_dir
+                    )
+
+                    log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
+
+                    ai_result = None
+                    if enable_ai:
+                        yield generate_sse_event({
+                            'stage': 'batch',
+                            'status': 'ai_start',
+                            'file': unit_name,
+                            'message': f'AI分析: {unit_name}'
+                        })
+                        try:
+                            coordinator = AgentCoordinator(
+                                config_manager=get_config_manager(),
+                                kb_manager=get_kb_manager(),
+                                log_metadata_manager=get_log_metadata_manager()
+                            )
+                            html_result = coordinator.run_analysis(
+                                plugin_result=plugin_result,
+                                log_files=log_files_in_unit,
+                                kb_id=kb_id,
+                                user_prompt=user_prompt,
+                                log_rules_id=log_rules_id,
+                                actual_log_paths=log_files_in_unit
+                            )
+                            ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
+                            with open(ai_html_file, 'w', encoding='utf-8') as f:
+                                f.write(html_result)
+                            ai_html_relative = os.path.relpath(ai_html_file, root_dir)
+                            ai_result = {
+                                'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                'kb_id': kb_id,
+                                'html_path': ai_html_relative
+                            }
+                            yield generate_sse_event({
+                                'stage': 'batch',
+                                'status': 'ai_complete',
+                                'file': unit_name
+                            })
+                        except Exception as e:
+                            yield generate_sse_event({
+                                'stage': 'batch',
+                                'status': 'ai_error',
+                                'file': unit_name,
+                                'message': f'AI分析失败: {str(e)}'
+                            })
+
+                    batch_results[unit_name] = {
+                        'output_dir': os.path.basename(single_output_dir),
+                        'plugin_result': plugin_result,
+                        'html_path': html_relative_path,
+                        'ai_result': ai_result
+                    }
+
+                    yield generate_sse_event({
+                        'stage': 'batch',
+                        'status': 'file_complete',
+                        'current': idx + 1,
+                        'total': total_units,
+                        'file': unit_name,
+                        'html_path': html_relative_path,
+                        'message': f'完成: {unit_name}'
+                    })
+
+                # 汇总
+                batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
+                summary_data = {
+                    'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'folder_name': folder_name,
+                    'total_files': total_units,
+                    'files': batch_results
+                }
+                with open(batch_summary_file, 'w', encoding='utf-8') as f:
+                    json.dump(summary_data, f, indent=4, ensure_ascii=False)
+
+                from plugins.renderer.html_renderer import render_batch_html
+                batch_html_path = render_batch_html(batch_summary_file)
+                batch_html_relative = os.path.relpath(batch_html_path, get_project_root())
+
+                frontend_files = []
+                for filename, file_data in batch_results.items():
+                    total_errors = 0
+                    total_warnings = 0
+                    plugin_result = file_data.get('plugin_result', {})
+                    for plugin_id, plugin_data in plugin_result.items():
+                        if isinstance(plugin_data, dict):
+                            sections = plugin_data.get('sections', [])
+                            counts = count_severity(sections)
+                            total_errors += counts['errors']
+                            total_warnings += counts['warnings']
+                    frontend_files.append({
+                        'filename': filename,
+                        'html_path': file_data.get('html_path', ''),
+                        'errors': total_errors,
+                        'warnings': total_warnings,
+                        'has_ai': file_data.get('ai_result') is not None
+                    })
+
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'complete',
+                    'html_path': batch_html_relative,
+                    'files': frontend_files,
+                    'message': f'批量分析完成，共 {total_units} 个分析单元'
+                })
+
+        except Exception as e:
+            logger.error(f"本地路径分析失败: {str(e)}")
+            yield generate_sse_event({'stage': 'error', 'message': str(e)})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
 @analyze_bp.route('/api/plugin-result/html/<path:html_path>')
 def get_plugin_result_html(html_path):
     """获取插件分析结果的HTML文件。"""

@@ -20,3 +20,8 @@ if getattr(sys, 'frozen', False):
     meipass = sys._MEIPASS
     if meipass not in sys.path:
         sys.path.insert(0, meipass)
+
+    # 确保data目录存在（用于锁文件、临时文件等）
+    data_dir = os.path.join(exe_dir, 'data')
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)

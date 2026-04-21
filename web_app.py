@@ -41,15 +41,19 @@ def create_app():
     """创建并配置 Flask 应用。"""
     # 获取项目根目录（支持打包）
     if getattr(sys, 'frozen', False):
+        # exe运行时，资源文件在 sys._MEIPASS 目录下
+        resource_dir = sys._MEIPASS
+        # exe所在目录用于外部文件（配置、日志等）
         root_dir = os.path.dirname(sys.executable)
     else:
-        root_dir = os.path.dirname(os.path.abspath(__file__))
+        resource_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = resource_dir
 
     # 创建 Flask 应用，设置模板和静态文件夹
     app = Flask(
         __name__,
-        template_folder=os.path.join(root_dir, 'src', 'web', 'templates'),
-        static_folder=os.path.join(root_dir, 'src', 'web', 'static')
+        template_folder=os.path.join(resource_dir, 'src', 'web', 'templates'),
+        static_folder=os.path.join(resource_dir, 'src', 'web', 'static')
     )
 
     # 配置

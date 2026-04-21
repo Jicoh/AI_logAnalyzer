@@ -90,7 +90,7 @@ a = Analysis(
     hookspath=[os.path.join(project_root, 'hooks')],
     hooksconfig={},
     runtime_hooks=[os.path.join(project_root, 'hooks/runtime_hook.py')],
-    # 排除不必要的模块以减小体积
+    # 排除不必要的模块以减小体积（注意：不要排除标准库核心模块）
     excludes=[
         'pytest',
         'unittest',
@@ -117,8 +117,9 @@ a = Analysis(
         'distutils.command',
         'setuptools',
         'pkg_resources',
-        'multiprocessing.pool',
-        'concurrent.futures.thread',
+        # 注意：以下模块不应排除，它们是标准库核心组件
+        # 'multiprocessing.pool',
+        # 'concurrent.futures.thread',
         'email.mime',
         'html.parser',
         'xml.dom',
@@ -128,7 +129,6 @@ a = Analysis(
         'pyarrow',
         'pandas',
         'sympy',
-        'notebook',
         'nbconvert',
         'nbformat',
         'jupyter_client',

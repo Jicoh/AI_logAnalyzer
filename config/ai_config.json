@@ -1,6 +1,6 @@
 {
     "api": {
-        "base_url": "https://127.0.0.1:10808/v1",
+        "base_url": "http://127.0.0.1:10808/v1",
         "api_key": "123",
         "model": "MiniMax-M2.5",
         "temperature": 0.7,
