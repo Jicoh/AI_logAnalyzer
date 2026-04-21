@@ -4,6 +4,7 @@ AI 选择 Agent
 """
 
 import json
+import os
 import re
 from typing import Dict, List, Any, Optional
 
@@ -202,7 +203,6 @@ class SelectionAgent:
 
     def get_filename(self, file_path: str) -> str:
         """获取文件名"""
-        import os
         return os.path.basename(file_path)
 
     def fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:

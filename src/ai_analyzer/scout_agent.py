@@ -92,7 +92,7 @@ class ScoutAgent:
                 - result: 侦察结果，包含 selected_content, selected_files, reason
                 - ai_interaction: AI交互记录，包含 prompt和response
         """
-        logger.debug(f"scout_and_extract开始, log_files数量: {len(log_files)}")
+        logger.info(f"Scout 开始侦察，日志文件数: {len(log_files)}")
         # 构建提示词
         prompt_template = self.load_prompt()
 
@@ -107,7 +107,6 @@ class ScoutAgent:
         log_content = "无日志内容"
         if log_files:
             log_content = self.extract_log_content(log_files, max_length=8000)
-        logger.debug(f"读取日志内容长度: {len(log_content)}")
 
         # 显示文件名（不是完整路径）
         log_file_names = [os.path.basename(f) for f in log_files] if log_files else []
@@ -122,9 +121,7 @@ class ScoutAgent:
         )
 
         # 调用 AI（收集完整响应）
-        logger.debug("开始调用AI")
         ai_prompt, response_text = self.call_ai(prompt)
-        logger.debug(f"AI响应长度: {len(response_text)}, 内容预览: {response_text[:100] if response_text else '空'}")
 
         # 解析 JSON 结果
         result = self.parse_response(response_text)

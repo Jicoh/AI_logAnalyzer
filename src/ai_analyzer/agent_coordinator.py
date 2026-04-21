@@ -125,8 +125,6 @@ class AgentCoordinator:
 
         return machine_info
 
-        return machine_info
-
     def get_plugin_log_files(self, plugin_result: Dict) -> List[str]:
         """
         获取插件分析涉及的日志文件列表
@@ -245,7 +243,7 @@ class AgentCoordinator:
                      kb_id: str = None, user_prompt: str = None,
                      log_rules_id: str = None, actual_log_paths: List[str] = None) -> str:
 
-        logger.debug(f"开始协调分析，日志文件数: {len(log_files)}")
+        logger.info(f"开始协调分析，日志文件数: {len(log_files)}")
 
         # 初始化AI交互记录
         ai_interactions = {
@@ -256,7 +254,6 @@ class AgentCoordinator:
 
         # 1. 从插件结果提取机器信息
         machine_info = self.extract_machine_info_from_plugins(plugin_result)
-        logger.debug(f"提取机器信息: {machine_info}")
 
         # 2. 获取插件分析的日志文件列表
         plugin_log_files = self.get_plugin_log_files(plugin_result)
@@ -268,12 +265,12 @@ class AgentCoordinator:
         plugin_summary = self.format_plugin_summary(plugin_result)
 
         # 5. Scout 侦察日志（使用实际日志路径）
-        logger.debug(f"准备调用Scout")
+        logger.info("Scout 开始侦察日志")
         try:
             scout_data = self.scout.scout_and_extract(
                 plugin_summary=plugin_summary,
                 machine_info_from_plugins=machine_info,
-                log_files=actual_log_paths or [],  # 传绝对路径，让 Scout 能读取内容
+                log_files=actual_log_paths or [],
                 file_descriptions=file_descriptions,
                 user_prompt=user_prompt or ""
             )
@@ -291,26 +288,21 @@ class AgentCoordinator:
 
         # 验证 scout_result 类型
         if not isinstance(scout_result, dict):
-            logger.error(f"scout_result类型错误: {type(scout_result)}, 值: {scout_result}")
+            logger.error(f"scout_result类型错误: {type(scout_result)}")
             scout_result = {"selected_content": "", "selected_files": [], "reason": "结果类型错误"}
 
         # 6. 提取日志内容
-        selected_files = scout_result.get('selected_files', [])
         selected_content = scout_result.get('selected_content', '')
-        logger.debug(f"Scout返回: selected_content长度={len(selected_content)}, selected_files={selected_files}")
 
         # 如果 Scout 没有返回内容，直接从实际文件读取
         if not selected_content and actual_log_paths:
             selected_content = self.scout.extract_log_content(actual_log_paths, 8000)
-            logger.debug(f"从实际文件读取日志内容，长度: {len(selected_content)}")
 
         # 7. 获取知识库内容
         knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
-        if knowledge_content:
-            logger.debug(f"知识库内容长度: {len(knowledge_content)}")
 
         # 8. Sage 分析
-        logger.debug("Sage开始深度分析")
+        logger.info("Sage 开始深度分析")
         sage_data = self.sage.analyze(
             plugin_result=plugin_result,
             log_content=selected_content,

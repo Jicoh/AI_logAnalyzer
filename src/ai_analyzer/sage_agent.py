@@ -138,6 +138,7 @@ class SageAgent:
         )
 
         # 调用 AI 获取 JSON 响应
+        logger.info("Sage 开始深度分析")
         ai_prompt, response_text, success, error_msg = self.call_ai(prompt)
 
         # 检查是否失败
@@ -219,10 +220,8 @@ class SageAgent:
         think_match = re.search(r'<think>[\s\S]*?</think>', text)
         if think_match:
             text = text.replace(think_match.group(0), '').strip()
-            logger.debug(f"移除think标签后的文本: {text[:200]}")
 
         # 移除控制字符（JSON只允许 \t \n \r，其他控制字符必须移除）
-        # 使用更可靠的方法：移除所有 ASCII 0-31 中除了 9,10,13 的字符
         cleaned_text = []
         for char in text:
             code = ord(char)
@@ -232,21 +231,17 @@ class SageAgent:
 
         # 尝试直接解析
         try:
-            result = json.loads(text)
-            logger.debug(f"直接解析成功")
-            return result
-        except json.JSONDecodeError as e:
-            logger.debug(f"直接解析失败: {str(e)}, 文本长度: {len(text)}")
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
 
         # 尝试提取 markdown 代码块中的 JSON
         code_block_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
         if code_block_match:
             try:
-                result = json.loads(code_block_match.group(1).strip())
-                logger.debug(f"从代码块解析成功")
-                return result
-            except json.JSONDecodeError as e:
-                logger.debug(f"代码块解析失败: {str(e)}")
+                return json.loads(code_block_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
 
         # 尝试提取 JSON 对象（使用括号计数法找到第一个完整JSON）
         start_idx = text.find('{')
@@ -279,25 +274,18 @@ class SageAgent:
             if end_idx > start_idx:
                 json_str = text[start_idx:end_idx + 1]
                 try:
-                    result = json.loads(json_str)
-                    logger.debug(f"括号计数法解析成功")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.warning(f"括号计数法解析失败: {str(e)}, JSON片段长度: {len(json_str)}")
-                    logger.warning(f"JSON片段前200字符: {json_str[:200]}")
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
                     # 尝试修复常见问题：末尾多余的逗号
                     json_str_fixed = re.sub(r',\s*}', '}', json_str)
                     json_str_fixed = re.sub(r',\s*]', ']', json_str_fixed)
                     try:
-                        result = json.loads(json_str_fixed)
-                        logger.debug(f"修复后解析成功")
-                        return result
+                        return json.loads(json_str_fixed)
                     except json.JSONDecodeError:
                         pass
 
-        # 解析失败，记录详细信息
-        logger.error(f"JSON解析完全失败，响应文本长度: {len(response_text)}")
-        logger.error(f"响应文本前500字符: {response_text[:500]}")
+        # 解析失败，返回默认结构
+        logger.error(f"JSON解析失败，响应文本长度: {len(response_text)}")
 
         # 返回默认结构
         return {
