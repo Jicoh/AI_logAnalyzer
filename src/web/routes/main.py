@@ -13,6 +13,12 @@ def index():
     return render_template('analyzer.html', active_page='analyzer')
 
 
+@main_bp.route('/log-viewer')
+def log_viewer():
+    """Log viewer page."""
+    return render_template('log_viewer.html', active_page='log_viewer')
+
+
 @main_bp.route('/knowledge-base')
 def knowledge_base():
     """Knowledge base management page."""

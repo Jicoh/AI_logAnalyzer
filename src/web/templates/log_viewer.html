@@ -1,0 +1,994 @@
+{% extends "base.html" %}
+
+{% block title %}日志查看 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" x-data="logViewerApp()">
+    <div class="row">
+        <!-- 左侧面板：文件树 + 时间筛选 -->
+        <div class="col-lg-3">
+            <!-- 路径信息 -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <i class="bi bi-folder"></i> 日志路径
+                </div>
+                <div class="card-body">
+                        <label class="form-label small">
+                            选择最近分析的日志文件
+                            <i class="bi bi-exclamation-circle text-muted ms-1"
+                               title="仅显示单文件分析记录，文件夹批量分析不在此列表"
+                               style="cursor: help;"></i>
+                        </label>
+                        <select class="form-select" x-model="currentPath" @change="onPathChange()">
+                            <template x-for="folder in tempFolders" :key="folder.path">
+                                <option :value="folder.path" x-text="folder.display_name"></option>
+                            </template>
+                        </select>
+                        <div x-show="currentPath" class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i>
+                                <span x-text="currentPath"></span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- 分析单元选择（文件夹分析专用） -->
+            <div class="card mb-3" x-show="analysisType === 'folder_batch'" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-list-ul"></i> 分析单元
+                </div>
+                <div class="card-body">
+                    <select class="form-select" x-model="selectedUnitPath" @change="onUnitChange()">
+                        <option value="">请选择分析单元...</option>
+                        <template x-for="unit in analysisUnits" :key="unit.path">
+                            <option :value="unit.path" x-text="unit.name + ' (' + unit.file_count + '个文件)'"></option>
+                        </template>
+                    </select>
+                    <div x-show="selectedUnitInfo" class="mt-2">
+                        <small class="text-muted" x-text="'包含 ' + selectedUnitInfo.file_count + ' 个日志文件'"></small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件树（单文件分析） -->
+            <div class="card mb-3 file-tree-card" x-show="analysisType === 'single_file' && fileTree.length > 0" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-files"></i> 文件列表
+                </div>
+                <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
+                    <template x-for="item in flattenTree(fileTree)" :key="item.path">
+                        <div class="tree-item"
+                             :style="'padding-left: ' + (item.depth * 16 + 8) + 'px'"
+                             :class="{'active': selectedFile === item.path}"
+                             @click="item.is_file ? selectFile(item.path) : toggleFolder(item.path)">
+                            <template x-if="!item.is_file">
+                                <i class="bi bi-chevron-right tree-folder-icon"
+                                   :class="{'expanded': expandedFolders[item.path]}"></i>
+                            </template>
+                            <template x-if="item.is_file">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </template>
+                            <span x-text="item.name"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 文件树（文件夹分析-选中单元后） -->
+            <div class="card mb-3 file-tree-card" x-show="analysisType === 'folder_batch' && selectedUnitPath && unitFileTree.length > 0" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-files"></i> 单元文件
+                </div>
+                <div class="card-body p-0" style="max-height: 200px; overflow-y: auto;">
+                    <template x-for="item in flattenTree(unitFileTree)" :key="item.path">
+                        <div class="tree-item"
+                             :style="'padding-left: ' + (item.depth * 16 + 8) + 'px'"
+                             :class="{'active': selectedFile === item.path}"
+                             @click="item.is_file ? selectFile(item.path) : toggleFolder(item.path)">
+                            <template x-if="!item.is_file">
+                                <i class="bi bi-chevron-right tree-folder-icon"
+                                   :class="{'expanded': expandedFolders[item.path]}"></i>
+                            </template>
+                            <template x-if="item.is_file">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </template>
+                            <span x-text="item.name"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 时间筛选 -->
+            <div class="card mb-3" x-show="canFilter" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-clock"></i> 时间筛选
+                    <span class="badge bg-info ms-1" x-show="isGlobalFilter" x-text="'共' + totalFiles + '个文件'"></span>
+                </div>
+                <div class="card-body">
+                    <!-- 时间格式提示 -->
+                    <div class="alert alert-info py-2 mb-3" x-show="detectedFormat">
+                        <small>
+                            <i class="bi bi-info-circle"></i>
+                            检测格式: <span x-text="formatDescription"></span>
+                            <span x-show="allFormats && allFormats.length > 1">
+                                <br>
+                                <span class="text-muted" x-text="'(其他格式: ' + allFormats.slice(1).map(f => f.description).join(', ') + ')'"></span>
+                            </span>
+                        </small>
+                    </div>
+
+                    <!-- 全局筛选提示 -->
+                    <div class="alert alert-warning py-2 mb-3" x-show="isGlobalFilter">
+                        <small>
+                            <i class="bi bi-info-circle"></i>
+                            同时筛选 <span x-text="totalFiles"></span> 个日志文件，结果按时间排序合并显示
+                        </small>
+                    </div>
+
+                    <!-- 筛选模式切换 -->
+                    <div class="btn-group w-100 mb-3">
+                        <button class="btn btn-outline-secondary btn-sm"
+                                :class="{'active': filterMode === 'none'}"
+                                @click="clearFilter()">
+                            无
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm"
+                                :class="{'active': filterMode === 'range'}"
+                                @click="switchFilterMode('range')">
+                            精确范围
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm"
+                                :class="{'active': filterMode === 'quick'}"
+                                @click="switchFilterMode('quick')">
+                            快捷选项
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm"
+                                :class="{'active': filterMode === 'center'}"
+                                @click="switchFilterMode('center')">
+                            时间点偏移
+                        </button>
+                    </div>
+
+                    <!-- 精确范围模式 -->
+                    <div x-show="filterMode === 'range'" class="mb-3">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small">开始时间</label>
+                                <input type="datetime-local" class="form-control form-control-sm"
+                                       x-model="startTime">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">结束时间</label>
+                                <input type="datetime-local" class="form-control form-control-sm"
+                                       x-model="endTime">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100 mt-2" @click="applyFilter()">
+                            <i class="bi bi-filter"></i> 开始筛选
+                        </button>
+                    </div>
+
+                    <!-- 快捷选项模式 -->
+                    <div x-show="filterMode === 'quick'" class="mb-3">
+                        <select class="form-select form-select-sm" x-model="quickOption">
+                            <option value="recent_1h">最近1小时</option>
+                            <option value="recent_24h">最近24小时</option>
+                            <option value="today">今天</option>
+                            <option value="recent_7d">最近7天</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm w-100 mt-2" @click="applyFilter()">
+                            <i class="bi bi-filter"></i> 开始筛选
+                        </button>
+                    </div>
+
+                    <!-- 时间点偏移模式 -->
+                    <div x-show="filterMode === 'center'" class="mb-3">
+                        <div class="mb-2">
+                            <label class="form-label small">中心时间点</label>
+                            <input type="datetime-local" class="form-control form-control-sm"
+                                   x-model="centerTime">
+                        </div>
+                        <div>
+                            <label class="form-label small">前后偏移</label>
+                            <select class="form-select form-select-sm" x-model="offsetMinutes">
+                                <option value="5">前后 5 分钟</option>
+                                <option value="30">前后 30 分钟</option>
+                                <option value="60">前后 1 小时</option>
+                                <option value="120">前后 2 小时</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100 mt-2" @click="applyFilter()">
+                            <i class="bi bi-filter"></i> 应用筛选
+                        </button>
+                    </div>
+
+                    <!-- 时间范围显示 -->
+                    <div x-show="filterStartTime || filterEndTime" class="text-muted small">
+                        <span x-text="'筛选范围: ' + (filterStartTime || '') + ' ~ ' + (filterEndTime || '')"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧面板：日志内容 -->
+        <div class="col-lg-9">
+            <!-- 状态栏 -->
+            <div class="card mb-3" x-show="loading || logLines.length > 0 || error">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge" :class="loading ? 'bg-primary' : (error ? 'bg-danger' : 'bg-success')">
+                                <span x-show="loading">
+                                    <i class="bi bi-hourglass-split"></i> 加载中...
+                                </span>
+                                <span x-show="!loading && !error">
+                                    <i class="bi bi-check-circle"></i> 已加载
+                                </span>
+                                <span x-show="error">
+                                    <i class="bi bi-x-circle"></i> 错误
+                                </span>
+                            </span>
+                            <span class="ms-2 text-muted" x-show="logLines.length > 0">
+                                显示 <span x-text="filteredLines"></span> 行
+                                <span x-show="isGlobalFilter">
+                                    (来自 <span x-text="Object.keys(fileStats || {}).length"></span> 个文件)
+                                </span>
+                            </span>
+                        </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <!-- 显示模式切换 -->
+                                <div x-show="filterApplied && logLines.length > 0" class="btn-group">
+                                    <button class="btn btn-outline-primary btn-sm"
+                                            :class="{'active': displayMode === 'merged'}"
+                                            @click="displayMode = 'merged'; selectedResultFile = ''">
+                                        <i class="bi bi-layer-forward"></i> 合并显示
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm"
+                                            :class="{'active': displayMode === 'separated'}"
+                                            @click="displayMode = 'separated'">
+                                        <i class="bi bi-list-ul"></i> 分开显示
+                                    </button>
+                                </div>
+                                <small class="text-muted" x-show="selectedFile" x-text="getFileName(selectedFile)"></small>
+                                <small class="text-muted" x-show="isGlobalFilter && !selectedFile">全局筛选结果</small>
+                            </div>
+                        </div>
+                </div>
+            </div>
+
+            <!-- 分开显示文件列表 -->
+            <div class="card mb-3" x-show="displayMode === 'separated' && fileStats" x-cloak>
+                <div class="card-header">
+                    <i class="bi bi-files"></i> 筛选结果文件
+                    <span class="badge bg-info" x-text="filteredLines + '行'"></span>
+                </div>
+                <div class="card-body p-0" style="max-height: 150px; overflow-y: auto;">
+                    <template x-for="[file, count] in Object.entries(fileStats)" :key="file">
+                        <div class="result-file-item"
+                             :class="{'active': selectedResultFile === file}"
+                             @click="selectResultFile(file)">
+                            <span x-text="file"></span>
+                            <span class="badge bg-secondary ms-auto" x-text="count + '行'"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 错误提示 -->
+            <div class="alert alert-danger" x-show="error" x-cloak>
+                <i class="bi bi-exclamation-triangle"></i>
+                <span x-text="error"></span>
+            </div>
+
+            <!-- 无分析记录提示 -->
+            <div class="card" x-show="!loading && !error && emptyMessage" x-cloak>
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-folder2-open display-4"></i>
+                    <p class="mt-3" x-text="emptyMessage"></p>
+                    <p class="small">请先进行日志分析</p>
+                </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div class="card" x-show="!loading && !error && !canFilter && !emptyMessage">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-folder2-open display-4"></i>
+                    <p class="mt-3">没有可用的日志数据</p>
+                    <p class="small">请先进行日志分析，或手动输入路径</p>
+                </div>
+            </div>
+
+            <!-- 等待选择分析单元 -->
+            <div class="card" x-show="!loading && !error && analysisType === 'folder_batch' && !selectedUnitPath">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-list-ul display-4"></i>
+                    <p class="mt-3">请选择分析单元</p>
+                    <p class="small">文件夹分析包含多个独立的分析结果</p>
+                </div>
+            </div>
+
+            <!-- 等待筛选 -->
+            <div class="card" x-show="!loading && !error && canFilter && logLines.length === 0 && filterMode !== 'none' && !filterApplied">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-clock display-4"></i>
+                    <p class="mt-3">请设置时间筛选参数</p>
+                    <p class="small">选择时间范围后点击应用筛选</p>
+                </div>
+            </div>
+
+            <!-- 筛选无结果 -->
+            <div class="card" x-show="!loading && !error && canFilter && logLines.length === 0 && filterMode !== 'none' && filterApplied">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-file-x display-4"></i>
+                    <p class="mt-3">无符合条件的日志</p>
+                    <p class="small" x-show="filterStartTime || filterEndTime">
+                        筛选范围: <span x-text="filterStartTime || ''"></span> ~ <span x-text="filterEndTime || ''"></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- 分开模式下未选中文件提示 -->
+            <div class="card" x-show="displayMode === 'separated' && logLines.length > 0 && !selectedResultFile" x-cloak>
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="bi bi-hand-index display-4"></i>
+                    <p class="mt-3">请在上方选择要查看的文件</p>
+                    <p class="small">共筛选出 <span x-text="filteredLines"></span> 行日志，分布在 <span x-text="Object.keys(fileStats || {}).length"></span> 个文件中</p>
+                </div>
+            </div>
+
+            <!-- 日志内容 -->
+            <div class="card" x-show="logLines.length > 0" x-cloak>
+                <div class="card-header">
+                    <span><i class="bi bi-list-ul"></i> 日志内容
+                        <span x-show="displayMode === 'separated' && selectedResultFile" class="text-muted small">
+                            - <span x-text="selectedResultFile"></span>
+                        </span>
+                    </span>
+                </div>
+                <div class="card-body p-0 log-content-container" id="logContentContainer">
+                    <table class="table table-sm log-table">
+                        <tbody>
+                            <template x-for="(line, index) in logLines" :key="index">
+                                <tr x-show="displayMode === 'merged' || (displayMode === 'separated' && line.source_file === selectedResultFile)"
+                                    :class="getLineClass(line.severity)">
+                                    <td x-show="displayMode === 'merged'" class="line-source">
+                                        <span class="badge bg-light text-dark small" x-text="line.source_file"></span>
+                                    </td>
+                                    <td x-show="displayMode === 'separated'" class="line-time-full" x-text="line.parsed_time || line.time_str"></td>
+                                    <td class="line-number text-muted" x-text="line.line_num"></td>
+                                    <td class="line-time" x-text="line.time_str"></td>
+                                    <td class="line-content">
+                                        <span x-html="formatLineContent(line.content, line.severity)"></span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function logViewerApp() {
+    return {
+        currentPath: '',
+        tempFolders: [],
+        displayInfo: '',
+        analysisType: '',  // 'single_file' or 'folder_batch'
+        analysisUnits: [],
+        selectedUnitPath: '',
+        selectedUnitInfo: null,
+        unitFileTree: [],
+        unitFileCount: 0,
+        fileTree: [],
+        totalFiles: 0,
+        expandedFolders: {},
+        selectedFile: '',
+        loading: false,
+        error: '',
+        emptyMessage: '',
+        logLines: [],
+        totalLines: 0,
+        filteredLines: 0,
+        detectedFormat: '',
+        formatDescription: '',
+        hasYear: false,
+        allFormats: [],
+        fileTimeRange: {},
+        fileStats: null,
+        filterMode: 'none',
+        startTime: '',
+        endTime: '',
+        quickOption: 'recent_1h',
+        centerTime: '',
+        offsetMinutes: '60',
+        filterStartTime: '',
+        filterEndTime: '',
+        filterApplied: false,
+        displayMode: 'merged',  // 'merged' 合并显示, 'separated' 分开显示
+        selectedResultFile: '',  // 分开模式下选中的结果文件
+        // 筛选缓存：存储各模式的筛选参数和结果
+        filterCache: {
+            range: { startTime: '', endTime: '', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' },
+            quick: { option: 'recent_1h', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' },
+            center: { centerTime: '', offsetMinutes: '60', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' }
+        },
+
+        init() {
+            this.loadTempFolders();
+        },
+
+        // 计算属性：是否可以进行时间筛选
+        get canFilter() {
+            if (this.analysisType === 'single_file') {
+                return this.fileTree.length > 0;
+            } else if (this.analysisType === 'folder_batch') {
+                return this.selectedUnitPath && this.unitFileTree.length > 0;
+            }
+            return false;
+        },
+
+        // 计算属性：是否是全局筛选模式（多个文件）
+        get isGlobalFilter() {
+            if (this.analysisType === 'single_file') {
+                return this.totalFiles > 1 && !this.selectedFile;
+            } else if (this.analysisType === 'folder_batch') {
+                return this.unitFileCount > 1 && !this.selectedFile;
+            }
+            return false;
+        },
+
+        // 计算属性：获取当前显示的日志行
+        get displayedLines() {
+            if (this.displayMode === 'merged') {
+                return this.logLines;
+            } else if (this.displayMode === 'separated') {
+                if (this.selectedResultFile) {
+                    return this.logLines.filter(line => line.source_file === this.selectedResultFile);
+                }
+                // 分开模式下未选中文件时，显示空（引导用户选择文件）
+                return [];
+            }
+            return this.logLines;
+        },
+
+        // 选择结果文件（分开显示模式）
+        selectResultFile(file) {
+            this.selectedResultFile = file;
+        },
+
+        // 清除筛选状态
+        clearFilter() {
+            this.filterMode = 'none';
+            this.filterApplied = false;
+            this.logLines = [];
+            this.fileStats = null;
+            this.displayMode = 'merged';
+            this.selectedResultFile = '';
+            this.filterStartTime = '';
+            this.filterEndTime = '';
+            this.selectedFile = '';
+        },
+
+        // 切换筛选模式（带缓存恢复）
+        switchFilterMode(mode) {
+            this.filterMode = mode;
+            this.filterApplied = false;
+
+            // 从缓存恢复参数
+            if (this.filterCache[mode]) {
+                const cache = this.filterCache[mode];
+                if (mode === 'range') {
+                    this.startTime = cache.startTime;
+                    this.endTime = cache.endTime;
+                } else if (mode === 'quick') {
+                    this.quickOption = cache.option;
+                } else if (mode === 'center') {
+                    this.centerTime = cache.centerTime;
+                    this.offsetMinutes = cache.offsetMinutes;
+                }
+
+                // 如果有缓存结果，直接显示
+                if (cache.lines && cache.lines.length > 0) {
+                    this.logLines = cache.lines;
+                    this.fileStats = cache.fileStats;
+                    this.filterStartTime = cache.filterStartTime;
+                    this.filterEndTime = cache.filterEndTime;
+                    this.filterApplied = true;
+                    this.displayMode = 'merged';
+                    this.selectedResultFile = '';
+                } else {
+                    // 无缓存，清空显示等待用户点击筛选
+                    this.logLines = [];
+                    this.fileStats = null;
+                }
+            }
+        },
+
+        flattenTree(tree, depth = 0) {
+            const result = [];
+            for (const item of tree) {
+                result.push({ ...item, depth });
+                if (!item.is_file && this.expandedFolders[item.path] && item.children) {
+                    result.push(...this.flattenTree(item.children, depth + 1));
+                }
+            }
+            return result;
+        },
+
+        async loadTempFolders() {
+            try {
+                const response = await fetch('/api/log-viewer/temp-folders');
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.length > 0) {
+                    // 只显示单文件分析的记录（排除文件夹批量分析）
+                    this.tempFolders = data.data.filter(f => f.analysis_type === 'single_file');
+                    if (this.tempFolders.length > 0) {
+                        // 默认选中第一个（最新的）
+                        this.currentPath = this.tempFolders[0].path;
+                        await this.loadPathData(this.currentPath);
+                    } else {
+                        this.emptyMessage = '暂无单文件分析记录';
+                    }
+                } else {
+                    this.emptyMessage = '暂无分析记录';
+                }
+            } catch (e) {
+                console.error('加载 temp 目录列表失败:', e);
+                this.error = '加载目录列表失败';
+            }
+        },
+
+        async onPathChange() {
+            if (!this.currentPath) return;
+            await this.loadPathData(this.currentPath);
+        },
+
+        async loadPathData(path) {
+            this.loading = true;
+            this.error = '';
+            this.fileTree = [];
+            this.analysisType = '';
+            this.analysisUnits = [];
+            this.selectedUnitPath = '';
+            this.selectedFile = '';
+            this.logLines = [];
+            this.fileStats = null;
+            this.expandedFolders = {};
+            this.filterApplied = false;
+            this.filterMode = 'none';
+
+            // 清空所有筛选缓存
+            this.filterCache = {
+                range: { startTime: '', endTime: '', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' },
+                quick: { option: 'recent_1h', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' },
+                center: { centerTime: '', offsetMinutes: '60', lines: null, fileStats: null, filterStartTime: '', filterEndTime: '' }
+            };
+
+            try {
+                // 直接加载文件树
+                await this.loadFileTree(path);
+                this.analysisType = 'single_file';
+                this.totalFiles = this.countFiles(this.fileTree);
+
+                // 获取路径信息
+                const folderInfo = this.tempFolders.find(f => f.path === path);
+                if (folderInfo) {
+                    this.displayInfo = folderInfo.display_name;
+                    if (folderInfo.analysis_type === 'folder_batch') {
+                        this.analysisType = 'folder_batch';
+                        // 需要加载分析单元
+                        const response = await fetch(`/api/log-viewer/recent-path`);
+                        const data = await response.json();
+                        if (data.success && data.data && data.data.path === path) {
+                            this.analysisUnits = data.data.analysis_units || [];
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('加载路径数据失败:', e);
+                this.error = '加载失败';
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadFileTree(path) {
+            try {
+                const response = await fetch(`/api/log-viewer/file-tree?path=${encodeURIComponent(path)}`);
+                const data = await response.json();
+                if (data.success) {
+                    this.fileTree = data.data;
+                    this.totalFiles = this.countFiles(this.fileTree);
+                }
+            } catch (e) {
+                console.error('加载文件树失败:', e);
+            }
+        },
+
+        async onUnitChange() {
+            if (!this.selectedUnitPath) {
+                this.unitFileTree = [];
+                this.unitFileCount = 0;
+                this.selectedUnitInfo = null;
+                this.logLines = [];
+                return;
+            }
+
+            this.loading = true;
+            this.error = '';
+            this.selectedFile = '';
+            this.logLines = [];
+
+            try {
+                const response = await fetch(`/api/log-viewer/analysis-unit-info?path=${encodeURIComponent(this.selectedUnitPath)}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    this.selectedUnitInfo = data.data;
+                    this.unitFileCount = data.data.file_count;
+
+                    // 加载单元文件树
+                    const treeResponse = await fetch(`/api/log-viewer/file-tree?path=${encodeURIComponent(this.selectedUnitPath)}`);
+                    const treeData = await treeResponse.json();
+                    if (treeData.success) {
+                        this.unitFileTree = treeData.data;
+                    }
+
+                    // 如果有多个文件，自动加载全局内容
+                    if (this.unitFileCount > 1) {
+                        await this.loadGlobalContent(data.data.log_file_paths);
+                    }
+                } else {
+                    this.error = data.error;
+                }
+            } catch (e) {
+                console.error('加载分析单元失败:', e);
+                this.error = '加载分析单元失败';
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        countFiles(tree) {
+            let count = 0;
+            for (const item of tree) {
+                if (item.is_file) {
+                    count++;
+                } else if (item.children) {
+                    count += this.countFiles(item.children);
+                }
+            }
+            return count;
+        },
+
+        toggleFolder(path) {
+            this.expandedFolders[path] = !this.expandedFolders[path];
+        },
+
+        async selectFile(path) {
+            // 先清除筛选状态，切换到"无"
+            this.filterMode = 'none';
+            this.filterApplied = false;
+            this.logLines = [];
+            this.fileStats = null;
+            this.displayMode = 'merged';
+            this.selectedResultFile = '';
+            this.selectedFile = path;
+            this.loading = true;
+            this.error = '';
+
+            try {
+                const rangeResponse = await fetch(`/api/log-viewer/file-time-range?path=${encodeURIComponent(path)}`);
+                const rangeData = await rangeResponse.json();
+
+                if (rangeData.success) {
+                    this.fileTimeRange = rangeData.data;
+                    this.detectedFormat = rangeData.data.detected_format;
+                    this.formatDescription = rangeData.data.format_description;
+                    this.hasYear = rangeData.data.has_year;
+                    this.allFormats = rangeData.data.all_formats || [];
+                }
+
+                await this.loadFileContent();
+            } catch (e) {
+                console.error('选择文件失败:', e);
+                this.error = '加载文件失败';
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadFileContent() {
+            if (!this.selectedFile) return;
+
+            let url = `/api/log-viewer/file-content?path=${encodeURIComponent(this.selectedFile)}`;
+
+            if (this.filterMode === 'range' && this.startTime && this.endTime) {
+                url += `&start_time=${this.formatDateTime(this.startTime)}&end_time=${this.formatDateTime(this.endTime)}`;
+            } else if (this.filterMode === 'quick') {
+                url += `&mode=${this.quickOption}`;
+            } else if (this.filterMode === 'center' && this.centerTime) {
+                url += `&center_time=${this.formatDateTime(this.centerTime)}&offset_minutes=${this.offsetMinutes}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    this.logLines = data.data.lines;
+                    this.totalLines = data.data.total_lines;
+                    this.filteredLines = data.data.filtered_lines;
+                    this.detectedFormat = data.data.detected_format;
+                    this.formatDescription = data.data.format_description;
+                    this.allFormats = data.data.all_formats || [];
+                    this.filterStartTime = data.data.filter_start_time || '';
+                    this.filterEndTime = data.data.filter_end_time || '';
+                } else {
+                    this.error = data.error;
+                    this.logLines = [];
+                }
+            } catch (e) {
+                console.error('加载内容失败:', e);
+                this.error = '加载内容失败';
+            }
+        },
+
+        async loadGlobalContent(filePaths) {
+            this.error = '';
+            this.logLines = [];
+            this.fileStats = null;
+            this.selectedFile = '';
+
+            let url = `/api/log-viewer/multi-file-content?dir_path=${encodeURIComponent(this.currentPath)}`;
+
+            if (this.analysisType === 'folder_batch' && this.selectedUnitPath) {
+                url = `/api/log-viewer/multi-file-content?dir_path=${encodeURIComponent(this.selectedUnitPath)}`;
+            }
+
+            if (this.filterMode === 'range' && this.startTime && this.endTime) {
+                url += `&start_time=${this.formatDateTime(this.startTime)}&end_time=${this.formatDateTime(this.endTime)}`;
+            } else if (this.filterMode === 'quick') {
+                url += `&mode=${this.quickOption}`;
+            } else if (this.filterMode === 'center' && this.centerTime) {
+                url += `&center_time=${this.formatDateTime(this.centerTime)}&offset_minutes=${this.offsetMinutes}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    this.logLines = data.data.lines;
+                    this.filteredLines = data.data.filtered_lines;
+                    this.fileStats = data.data.file_stats;
+                    this.filterStartTime = data.data.filter_start_time || '';
+                    this.filterEndTime = data.data.filter_end_time || '';
+                } else {
+                    this.error = data.error;
+                }
+            } catch (e) {
+                console.error('全局筛选失败:', e);
+                this.error = '全局筛选失败: ' + e.message;
+            }
+        },
+
+        async loadGlobalContentFromTree() {
+            const filePaths = this.extractFilePaths(this.fileTree);
+            await this.loadGlobalContent(filePaths);
+        },
+
+        extractFilePaths(tree) {
+            const paths = [];
+            for (const item of tree) {
+                if (item.is_file) {
+                    paths.push(item.path);
+                } else if (item.children) {
+                    paths.push(...this.extractFilePaths(item.children));
+                }
+            }
+            return paths;
+        },
+
+        async applyFilter() {
+            if (this.filterMode === 'none') {
+                this.clearFilter();
+                return;
+            }
+
+            this.loading = true;
+            this.error = '';
+            this.filterApplied = true;
+
+            // 清除文件选中状态，进行全局筛选
+            this.selectedFile = '';
+
+            // 始终使用全局筛选
+            await this.loadGlobalContentFromTree();
+
+            // 缓存筛选结果
+            const mode = this.filterMode;
+            this.filterCache[mode] = {
+                lines: this.logLines,
+                fileStats: this.fileStats,
+                filterStartTime: this.filterStartTime,
+                filterEndTime: this.filterEndTime
+            };
+
+            if (mode === 'range') {
+                this.filterCache[mode].startTime = this.startTime;
+                this.filterCache[mode].endTime = this.endTime;
+            } else if (mode === 'quick') {
+                this.filterCache[mode].option = this.quickOption;
+            } else if (mode === 'center') {
+                this.filterCache[mode].centerTime = this.centerTime;
+                this.filterCache[mode].offsetMinutes = this.offsetMinutes;
+            }
+
+            // 筛选后切换到合并模式显示结果
+            this.displayMode = 'merged';
+            this.selectedResultFile = '';
+
+            this.loading = false;
+        },
+
+        formatDateTime(dt) {
+            // datetime-local 返回格式: 2026-04-01T10:44
+            // 转换为后端期望格式: 2026-04-01 10:44
+            return dt ? dt.replace('T', ' ') : '';
+        },
+
+        formatSize(size) {
+            if (size < 1024) return size + ' B';
+            if (size < 1024 * 1024) return Math.round(size / 1024) + ' KB';
+            return Math.round(size / 1024 / 1024) + ' MB';
+        },
+
+        getFileName(path) {
+            return path.split(/[\\/]/).pop();
+        },
+
+        getLineClass(severity) {
+            if (severity === 'error') return 'log-line-error';
+            if (severity === 'warning') return 'log-line-warning';
+            return '';
+        },
+
+        formatLineContent(content, severity) {
+            let formatted = content.replace(/(\d{2}:\d{2}:\d{2})/g, '<span class="log-time">$1</span>');
+            if (severity === 'error') {
+                formatted = formatted.replace(/ERROR|FATAL|CRITICAL/gi, '<span class="log-error-keyword">$&</span>');
+            } else if (severity === 'warning') {
+                formatted = formatted.replace(/WARN|WARNING/gi, '<span class="log-warning-keyword">$&</span>');
+            }
+            return formatted;
+        },
+
+        scrollToTop() {
+            const container = document.getElementById('logContentContainer');
+            if (container) container.scrollTop = 0;
+        },
+
+        scrollToBottom() {
+            const container = document.getElementById('logContentContainer');
+            if (container) container.scrollTop = container.scrollHeight;
+        }
+    };
+}
+</script>
+
+<style>
+/* 文件列表卡片样式 */
+.file-tree-card {
+    border: none;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+.file-tree-card .card-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: #495057;
+}
+.file-tree-card .card-header i {
+    color: #6c757d;
+    margin-right: 0.5rem;
+}
+.file-tree-card .card-body {
+    background: #fff;
+}
+
+/* 文件项样式 */
+.tree-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    transition: all 0.15s ease;
+    font-size: 0.85rem;
+    color: #495057;
+}
+.tree-item:hover {
+    background: #f0f4f8;
+    color: #212529;
+}
+.tree-item.active {
+    background: linear-gradient(135deg, #e7f1ff 0%, #cce5ff 100%);
+    color: #0d6efd;
+    border-left: 3px solid #0d6efd;
+    padding-left: calc(var(--depth, 8) + 8px - 3px);
+}
+.tree-item.active i {
+    color: #0d6efd;
+}
+
+/* 文件图标样式 */
+.tree-item i.bi-file-earmark-text {
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+.tree-item:hover i.bi-file-earmark-text {
+    color: #495057;
+}
+.tree-item.active i.bi-file-earmark-text {
+    color: #0d6efd;
+}
+
+/* 文件夹图标样式 */
+.tree-folder-icon {
+    color: #868e96;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+.tree-folder-icon.expanded {
+    transform: rotate(90deg);
+    color: #495057;
+}
+
+/* 其他样式保持不变 */
+.file-tree { font-size: 0.875rem; }
+.file-tree-item { border-bottom: 1px solid #f0f0f0; }
+.file-item { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: background 0.2s; }
+.file-item:hover { background: #f8f9fa; }
+.file-item.active { background: #e7f1ff; border-left: 3px solid #0d6efd; }
+.folder-item { display: flex; align-items: center; gap: 0.25rem; cursor: pointer; font-weight: 500; }
+.folder-item:hover { background: #f8f9fa; }
+.folder-children { border-left: 2px solid #dee2e6; margin-left: 0.5rem; }
+.log-content-container { max-height: calc(100vh - 200px); overflow-y: auto; }
+.log-table { font-size: 0.85rem; font-family: 'Consolas', 'Monaco', monospace; text-align: left; }
+.log-table td { padding: 0.25rem 0.5rem; border: none; text-align: left; }
+.line-content { text-align: left; }
+.line-source { width: 150px; }
+.line-number { width: 60px; text-align: right; background: #f8f9fa; user-select: none; }
+.line-time { width: 80px; color: #0d6efd; }
+.log-line-error { background: #fff5f5; }
+.log-line-error .line-content { color: #dc3545; }
+.log-line-warning { background: #fffbeb; }
+.log-line-warning .line-content { color: #856404; }
+.log-time { color: #0d6efd; font-weight: 500; }
+.log-error-keyword { color: #dc3545; font-weight: 600; }
+.log-warning-keyword { color: #ffc107; font-weight: 600; }
+.result-file-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-bottom: 1px solid #f0f0f0;
+}
+.result-file-item:hover { background: #f8f9fa; }
+.result-file-item.active { background: #e7f1ff; border-left: 3px solid #0d6efd; }
+.line-time-full { width: 140px; color: #0d6efd; font-size: 0.85rem; }
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

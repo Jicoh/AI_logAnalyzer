@@ -21,6 +21,9 @@
                 <a href="{{ url_for('main.index') }}" class="nav-link {% if active_page == 'analyzer' %}active{% endif %}">
                     <i class="bi bi-search"></i> <span>日志分析</span>
                 </a>
+                <a href="{{ url_for('main.log_viewer') }}" class="nav-link {% if active_page == 'log_viewer' %}active{% endif %}">
+                    <i class="bi bi-file-text"></i> <span>日志查看</span>
+                </a>
                 <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
                     <i class="bi bi-database"></i> <span>知识库</span>
                 </a>

@@ -360,3 +360,132 @@ body {
     border-left-color: #0d6efd;
     color: #0d6efd;
 }
+
+/* 日志查看页面样式 */
+.tree-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.2s;
+}
+
+.tree-item:hover {
+    background: #f0f0f0;
+}
+
+.tree-item.active {
+    background: #e7f1ff;
+}
+
+.tree-folder-icon {
+    margin-right: 0.25rem;
+    transition: transform 0.1s;
+}
+
+.tree-folder-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.file-tree {
+    font-size: 0.875rem;
+}
+
+.file-tree-item {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.file-item:hover {
+    background: #f8f9fa;
+}
+
+.file-item.active {
+    background: #e7f1ff;
+    border-left: 3px solid #0d6efd;
+}
+
+.folder-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.folder-item:hover {
+    background: #f8f9fa;
+}
+
+.folder-children {
+    border-left: 2px solid #dee2e6;
+    margin-left: 0.5rem;
+}
+
+.log-content-container {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.log-table {
+    font-size: 0.85rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.log-table td {
+    padding: 0.25rem 0.5rem;
+    border: none;
+}
+
+.line-number {
+    width: 60px;
+    text-align: right;
+    background: #f8f9fa;
+    user-select: none;
+}
+
+.line-time {
+    width: 80px;
+    color: #0d6efd;
+}
+
+.log-line-error {
+    background: #fff5f5;
+}
+
+.log-line-error .line-content {
+    color: #dc3545;
+}
+
+.log-line-warning {
+    background: #fffbeb;
+}
+
+.log-line-warning .line-content {
+    color: #856404;
+}
+
+.log-time-highlight {
+    color: #0d6efd;
+    font-weight: 500;
+}
+
+.log-error-keyword {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.log-warning-keyword {
+    color: #ffc107;
+    font-weight: 600;
+}
