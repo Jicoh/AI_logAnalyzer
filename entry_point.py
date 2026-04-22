@@ -168,7 +168,7 @@ def main():
     analyze_parser.add_argument('--kb', '-k', help='知识库ID')
     analyze_parser.add_argument('--prompt', '-p', help='用户提示词')
     analyze_parser.add_argument('--ai', action='store_true', help='启用AI分析')
-    analyze_parser.add_argument('--ai-select', action='store_true', help='AI智能选择插件')
+    # analyze_parser.add_argument('--ai-select', action='store_true', help='AI智能选择插件')  # 已隐藏
 
     # plugin 子命令
     plugin_parser = subparsers.add_parser('plugin', help='插件管理')

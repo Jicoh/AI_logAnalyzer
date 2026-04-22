@@ -61,7 +61,7 @@ python web_app.py --no-debug
 python main.py analyze <path>                       # 插件分析（无AI）
 python main.py analyze <path> --ai                  # 插件分析+AI分析
 python main.py analyze <path> --ai --prompt <提示词>  # AI分析+提示词
-python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择
+# python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择（已隐藏）
 ```
 
 #### 插件管理

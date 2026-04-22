@@ -142,6 +142,8 @@
                         <label class="form-check-label" for="enableAi">启用 AI 分析</label>
                     </div>
 
+                    <!-- AI智能选择模式开关已隐藏 - 功能代码保留 -->
+                    <!--
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" id="aiSelectionMode"
                                x-model="aiSelectionMode" :disabled="!enableAi">
@@ -154,6 +156,7 @@
                     <div x-show="aiSelectionMode && enableAi" class="alert alert-info py-2 mb-3">
                         <small><i class="bi bi-lightbulb"></i> 启用后，AI 将自动选择插件和日志文件</small>
                     </div>
+                    -->
 
                     <div x-show="enableAi" x-cloak>
 

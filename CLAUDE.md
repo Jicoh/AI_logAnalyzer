@@ -24,7 +24,7 @@ python main.py kb create --name "Knowledge Base Name"
 python main.py kb add --kb-id <id> --file <document>
 python main.py analyze <path>                       # 插件分析（无AI）
 python main.py analyze <path> --ai                  # 插件分析+AI分析
-python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择
+# python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择（已隐藏）
 python main.py plugin list
 python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
 python main.py log-rules list  # 日志规则管理
@@ -250,3 +250,12 @@ Three retrieval modes supported via `retrieval.mode` config:
 3. **hybrid**: Combines BM25 + vector using RRF (Reciprocal Rank Fusion) algorithm
 
 RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+rank_vector)`
+
+## 已隐藏功能
+
+### AI智能选择模式 (SelectionAgent)
+- 功能代码保留在 `src/ai_analyzer/selection_agent.py`
+- Web UI开关已隐藏（`src/web/templates/analyzer.html`）
+- CLI选项 `--ai-select` 已隐藏（`entry_point.py`）
+- 后端API参数处理保留，可通过内部调用使用
+- 配置项保留：`config/plugin_selection.json` 中的 `ai_selection_mode`
