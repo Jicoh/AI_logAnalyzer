@@ -18,6 +18,7 @@ import sys
 def main():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dist_dir = os.path.join(project_root, 'dist', 'AI_Log_Analyzer')
+    exe_path = os.path.join(project_root, 'dist', 'ai_log_analyzer.exe')
 
     print("=" * 50)
     print("AI日志分析器打包脚本")
@@ -31,8 +32,15 @@ def main():
         print("安装 PyInstaller...")
         subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
 
+    # 清理PyInstaller缓存
+    print("\n[0/8] 清理PyInstaller缓存...")
+    cache_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'pyinstaller')
+    if cache_dir and os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+        print(f"  删除: {cache_dir}")
+
     # 2. 运行PyInstaller
-    print("\n[1/7] 运行PyInstaller...")
+    print("\n[1/8] 运行PyInstaller...")
     spec_file = os.path.join(project_root, 'scripts', 'ai_log_analyzer.spec')
     if not os.path.exists(spec_file):
         print(f"错误: 找不到spec文件 {spec_file}")
@@ -51,8 +59,19 @@ def main():
 
     print("PyInstaller 打包完成")
 
+    # 移动exe到最终目录
+    print("\n[2/8] 移动exe到最终目录...")
+    os.makedirs(dist_dir, exist_ok=True)
+    final_exe_path = os.path.join(dist_dir, 'ai_log_analyzer.exe')
+    if os.path.exists(exe_path):
+        shutil.move(exe_path, final_exe_path)
+        print(f"  移动: ai_log_analyzer.exe -> {final_exe_path}")
+    else:
+        print(f"  错误: 找不到exe文件 {exe_path}")
+        sys.exit(1)
+
     # 3. 复制用户可修改的配置文件到dist目录
-    print("\n[2/7] 复制配置文件...")
+    print("\n[3/8] 复制配置文件...")
     config_src = os.path.join(project_root, 'config')
     config_dst = os.path.join(dist_dir, 'config')
     os.makedirs(config_dst, exist_ok=True)
@@ -64,7 +83,7 @@ def main():
             print(f"  复制: {f}")
 
     # 4. 创建空的数据目录
-    print("\n[3/7] 创建数据目录...")
+    print("\n[4/8] 创建数据目录...")
     data_dirs = ['uploads', 'temp', 'analysis_output']
     for d in data_dirs:
         data_path = os.path.join(dist_dir, 'data', d)
@@ -72,7 +91,7 @@ def main():
         print(f"  创建: data/{d}")
 
     # 5. 创建空的document和custom_plugins目录
-    print("\n[4/7] 创建其他目录...")
+    print("\n[5/8] 创建其他目录...")
     os.makedirs(os.path.join(dist_dir, 'document'), exist_ok=True)
     print("  创建: document/")
 
@@ -86,7 +105,7 @@ def main():
     print("  创建: custom_plugins/")
 
     # 6. 复制bat脚本（使用中文文件名）
-    print("\n[5/7] 复制右键菜单脚本...")
+    print("\n[6/8] 复制右键菜单脚本...")
     scripts_dir = os.path.join(project_root, 'scripts')
 
     register_bat = os.path.join(scripts_dir, '注册右键菜单.bat')
@@ -104,12 +123,12 @@ def main():
         print("  警告: 找不到 取消右键菜单.bat")
 
     # 7. 创建使用说明
-    print("\n[6/7] 创建使用说明...")
+    print("\n[7/8] 创建使用说明...")
     create_usage_file(dist_dir)
     print("  创建: 使用说明.txt")
 
     # 8. 清理打包临时文件
-    print("\n[7/7] 清理临时文件...")
+    print("\n[8/8] 清理临时文件...")
     build_dir = os.path.join(project_root, 'build')
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
