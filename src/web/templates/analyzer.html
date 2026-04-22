@@ -81,6 +81,15 @@
                     </span>
                 </div>
                 <div class="card-body p-2">
+                    <!-- 当前类型提示 -->
+                    <div class="alert alert-info py-2 mb-2" x-show="activeCategory && !aiSelectionMode">
+                        <small><i class="bi bi-info-circle"></i> 当前分析类型: <strong x-text="activeCategory"></strong></small>
+                    </div>
+                    <!-- 未选择插件提示 -->
+                    <div class="alert alert-warning py-2 mb-2" x-show="activeCategory && !hasSelectedPluginsInActiveCategory && !aiSelectionMode">
+                        <small><i class="bi bi-exclamation-triangle"></i> 当前类型下未选择任何插件</small>
+                    </div>
+                    <!-- AI模式提示 -->
                     <div class="alert alert-info py-2 mb-2" x-show="aiSelectionMode">
                         <small><i class="bi bi-lock"></i> AI 模式启用时，插件将由 AI 自动选择</small>
                     </div>
@@ -191,7 +200,7 @@
             </div>
 
             <button class="btn btn-primary w-100" @click="startAnalysis()"
-                    :disabled="(uploadMode === 'single' && !logFile) || (uploadMode === 'folder' && folderFiles.length === 0) || analyzing">
+                    :disabled="(uploadMode === 'single' && !logFile) || (uploadMode === 'folder' && folderFiles.length === 0) || (!aiSelectionMode && !hasSelectedPluginsInActiveCategory) || analyzing">
                 <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
                 <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
             </button>
@@ -387,6 +396,7 @@ function analyzerApp() {
         localPathType: null,
         pluginCategories: {},
         expandedCategories: {},
+        activeCategory: null,
         selectedPlugins: ['log_parser'],
         kbList: [],
         selectedKbId: '',
@@ -425,6 +435,26 @@ function analyzerApp() {
             this.startPollingPendingAnalysis();
         },
 
+        startPollingPendingAnalysis() {
+            // 每30秒检查是否有新的待分析路径
+            this.pollingTimer = setInterval(async () => {
+                // 分析中时不轮询
+                if (this.analyzing) return;
+
+                try {
+                    const response = await fetch('/api/pending-analysis');
+                    const data = await response.json();
+                    if (data.success && data.data.path) {
+                        // 有新的分析请求，停止轮询并开始分析
+                        this.clearState();
+                        await this.validateAndStartLocalAnalysis(data.data.path);
+                    }
+                } catch (e) {
+                    // 忽略轮询错误
+                }
+            }, 2000);
+        },
+
         async checkAutoAnalyze() {
             // 检查 URL 参数 auto_analyze
             const urlParams = new URLSearchParams(window.location.search);
@@ -443,26 +473,6 @@ function analyzerApp() {
                 // 验证路径并触发分析
                 await this.validateAndStartLocalAnalysis(path);
             }
-        },
-
-        startPollingPendingAnalysis() {
-            // 每2秒检查是否有新的待分析路径
-            this.pollingTimer = setInterval(async () => {
-                // 分析中时不轮询
-                if (this.analyzing) return;
-
-                try {
-                    const response = await fetch('/api/pending-analysis');
-                    const data = await response.json();
-                    if (data.success && data.data.path) {
-                        // 有新的分析请求，停止轮询并开始分析
-                        this.clearState();
-                        await this.validateAndStartLocalAnalysis(data.data.path);
-                    }
-                } catch (e) {
-                    // 忽略轮询错误
-                }
-            }, 2000);
         },
 
         async validateAndStartLocalAnalysis(path) {
@@ -769,7 +779,24 @@ function analyzerApp() {
         },
 
         toggleCategory(category) {
-            this.expandedCategories[category] = !this.expandedCategories[category];
+            // 手风琴效果：折叠其他类别，展开当前类别
+            const wasExpanded = this.expandedCategories[category];
+            // 折叠所有类别
+            for (const cat of Object.keys(this.expandedCategories)) {
+                this.expandedCategories[cat] = false;
+            }
+            // 如果原来是折叠的，则展开
+            if (!wasExpanded) {
+                this.expandedCategories[category] = true;
+                this.activeCategory = category;
+                // 切换类别时，只保留当前类别的选中插件（保留原选择）
+                const categoryPlugins = this.pluginCategories[category]?.plugins || [];
+                const categoryIds = categoryPlugins.map(p => p.id);
+                this.selectedPlugins = this.selectedPlugins.filter(id => categoryIds.includes(id));
+            } else {
+                // 点击已展开的类别，折叠它
+                this.activeCategory = null;
+            }
         },
 
         selectAllInCategory(category) {
@@ -799,15 +826,30 @@ function analyzerApp() {
             return 'bg-primary';
         },
 
+        get hasSelectedPluginsInActiveCategory() {
+            if (!this.activeCategory) return false;
+            const categoryPlugins = this.pluginCategories[this.activeCategory]?.plugins || [];
+            const categoryIds = categoryPlugins.map(p => p.id);
+            return this.selectedPlugins.some(id => categoryIds.includes(id));
+        },
+
         async loadPlugins() {
             try {
                 const response = await fetch('/api/analyze/plugins/categories');
                 const data = await response.json();
                 if (data.success) {
                     this.pluginCategories = data.data;
-                    // Auto-expand all categories
+                    // 折叠所有类别
                     for (const cat of Object.keys(data.data)) {
-                        this.expandedCategories[cat] = true;
+                        this.expandedCategories[cat] = false;
+                    }
+                    // 只展开第一个有插件的类别
+                    for (const cat of Object.keys(data.data)) {
+                        if (data.data[cat].plugins.length > 0) {
+                            this.expandedCategories[cat] = true;
+                            this.activeCategory = cat;
+                            break;
+                        }
                     }
                     // Only auto-select if no saved state
                     if (this.selectedPlugins.length === 0) {
