@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 
 from .client import AIClient
 from src.utils import get_logger
+from src.utils.json_parser import parse_ai_json_response
 
 logger = get_logger('scout_agent')
 
@@ -227,7 +228,7 @@ class ScoutAgent:
 
     def parse_summary_response(self, response_text: str) -> Dict[str, Any]:
         """
-        解析摘要响应（新格式）
+        解析摘要响应
 
         Args:
             response_text: AI 响应文本
@@ -235,34 +236,14 @@ class ScoutAgent:
         Returns:
             dict: 解析后的摘要，或 None（解析失败时）
         """
-        if not response_text or not response_text.strip():
-            logger.warning("AI响应为空")
+        required_fields = ['files_overview', 'key_events']
+        result, error = parse_ai_json_response(response_text, required_fields)
+
+        if result is None:
+            logger.warning(f"JSON解析失败: {error}")
             return None
 
-        # 尝试提取 JSON
-        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
-        if json_match:
-            json_text = json_match.group(1)
-        else:
-            json_text = response_text
-
-        try:
-            result = json.loads(json_text.strip())
-
-            if not isinstance(result, dict):
-                logger.warning(f"AI响应不是字典类型: {type(result)}")
-                return None
-
-            # 检查必要字段（新格式）
-            if 'files_overview' not in result or 'key_events' not in result:
-                logger.warning(f"AI响应缺少必要字段: {result.keys()}")
-                return None
-
-            return result
-
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON解析失败: {str(e)}, 响应内容: {response_text[:200]}")
-            return None
+        return result
 
     def fallback_summary(self, log_files: List[str], plugin_summary: str) -> Dict[str, Any]:
         """

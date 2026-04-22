@@ -13,6 +13,7 @@ from jinja2 import Template
 
 from .client import AIClient
 from src.utils import get_logger
+from src.utils.json_parser import parse_ai_json_response
 
 logger = get_logger('sage_agent')
 
@@ -296,84 +297,27 @@ class SageAgent:
 
     def parse_json_response(self, response_text: str) -> Dict:
         """解析 AI 返回的 JSON 数据"""
-        text = response_text.strip()
+        result, error = parse_ai_json_response(response_text)
 
-        # 移除可能的思考标签
-        think_match = re.search(r'<think>[\s\S]*?</think>', text)
-        if think_match:
-            text = text.replace(think_match.group(0), '').strip()
+        if result is None:
+            logger.error(f"JSON解析失败: {error}")
+            return {
+                'machine_info': {},
+                'summary': {'errors': 0, 'warnings': 0, 'info': 0},
+                'problems': [{
+                    'title': 'AI 输出解析失败',
+                    'severity': 'error',
+                    'description': error
+                }],
+                'solutions': [],
+                'log_snippets': [{
+                    'title': 'AI原始响应',
+                    'content': response_text
+                }],
+                'risk': {'level': '未知', 'description': '无法解析 AI 响应'}
+            }
 
-        # 移除控制字符
-        cleaned_text = []
-        for char in text:
-            code = ord(char)
-            if code >= 32 or code in (9, 10, 13):
-                cleaned_text.append(char)
-        text = ''.join(cleaned_text)
-
-        # 尝试直接解析
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # 尝试提取 markdown 代码块
-        code_block_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
-        if code_block_match:
-            try:
-                return json.loads(code_block_match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
-
-        # 尝试提取 JSON 对象
-        start_idx = text.find('{')
-        if start_idx >= 0:
-            brace_count = 0
-            end_idx = start_idx
-            in_string = False
-            escape_next = False
-
-            for i, char in enumerate(text[start_idx:], start_idx):
-                if escape_next:
-                    escape_next = False
-                    continue
-                if char == '\\' and in_string:
-                    escape_next = True
-                    continue
-                if char == '"' and not escape_next:
-                    in_string = not in_string
-                    continue
-                if in_string:
-                    continue
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_idx = i
-                        break
-
-            if end_idx > start_idx:
-                json_str = text[start_idx:end_idx + 1]
-                try:
-                    return json.loads(json_str)
-                except json.JSONDecodeError:
-                    json_str_fixed = re.sub(r',\s*}', '}', json_str)
-                    json_str_fixed = re.sub(r',\s*]', ']', json_str_fixed)
-                    try:
-                        return json.loads(json_str_fixed)
-                    except json.JSONDecodeError:
-                        pass
-
-        logger.error(f"JSON解析失败")
-        return {
-            'machine_info': {},
-            'summary': {'errors': 0, 'warnings': 0, 'info': 0},
-            'problems': [{'title': 'AI 输出解析失败', 'severity': 'error', 'description': response_text[:500]}],
-            'solutions': [],
-            'log_snippets': [],
-            'risk': {'level': '未知', 'description': '无法解析 AI 响应'}
-        }
+        return result
 
     def render_html(self, data: Dict) -> str:
         """使用模板渲染 HTML"""
