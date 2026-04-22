@@ -1,6 +1,6 @@
 """
 Scout Agent - 侦察兵
-快速探索日志，筛选重要内容
+快速探索日志，生成结构化摘要
 """
 
 import os
@@ -15,9 +15,9 @@ logger = get_logger('scout_agent')
 
 
 class ScoutAgent:
-    """侦察兵 Agent - 快速探索日志、筛选情报"""
+    """侦察兵 Agent - 快速探索日志、生成摘要"""
 
-    DEFAULT_PROMPT = """你是一个敏捷的日志侦察兵 Scout。你的任务是快速探索日志，筛选出最重要的情报片段。
+    DEFAULT_PROMPT = """你是一个敏捷的日志侦察兵 Scout。你的任务是快速探索日志，生成结构化摘要供深度分析使用。
 
 ## 插件分析结果概要
 {plugin_summary}
@@ -38,14 +38,34 @@ class ScoutAgent:
 {user_prompt}
 
 请执行以下任务：
-1. 根据日志内容片段和插件分析结果，筛选出最关键的日志内容（可精简或保留原文）
-2. 如果日志内容过长，优先保留错误、警告相关的部分
-3. 不要自行提取机器信息，机器信息已从插件结果中获取
+1. 分析插件结果概要，理解已发现的问题类型和数量
+2. 根据日志内容和用户请求，识别需要深入分析的关键事件
+3. 为每个关键事件生成关键词引用（用于后续按需读取详细内容）
 
 请返回一个 JSON 对象（直接输出 JSON，不要包裹在代码块中），包含以下字段：
-- selected_content: 筛选的关键日志片段文本内容
-- selected_files: 选定的文件名列表
-- reason: 筛选原因说明"""
+
+- files_overview: 文件分析概览列表，每个元素包含：
+  - file: 文件名
+  - reason: 该文件需要分析的原因
+  - priority: 优先级（1-3，1最高）
+  - estimated_relevance: 预估相关性（high/medium/low）
+
+- key_events: 关键事件列表，每个元素包含：
+  - type: 事件类型（error/warning/info）
+  - title: 事件简述（一句话描述）
+  - file: 所在文件名
+  - search_context: 关键词定位信息：
+    - keyword: 用于定位的关键词或短语
+    - context_lines: 建议读取的上下文行数
+    - occurrence: 第几次出现（默认1）
+  - importance: 重要程度（high/medium/low）
+
+- overall_assessment: 整体问题评估
+
+注意：
+- keyword应该是日志中能唯一或较准确定位该事件的关键词
+- 优先关注error和warning级别的事件
+- 不要自行提取机器信息"""
 
     def __init__(self, config_manager, log_metadata_manager=None):
         """
@@ -74,11 +94,11 @@ class ScoutAgent:
                 return f.read()
         return self.DEFAULT_PROMPT
 
-    def scout_and_extract(self, plugin_summary: str, machine_info_from_plugins: Dict,
-                           log_files: List[str], file_descriptions: str,
-                           user_prompt: str) -> Dict[str, Any]:
+    def generate_summary(self, plugin_summary: str, machine_info_from_plugins: Dict,
+                         log_files: List[str], file_descriptions: str,
+                         user_prompt: str) -> Dict[str, Any]:
         """
-        执行侦察任务
+        执行侦察任务，生成结构化摘要
 
         Args:
             plugin_summary: 插件分析结果概要
@@ -88,12 +108,11 @@ class ScoutAgent:
             user_prompt: 用户提示词
 
         Returns:
-            dict: 包含result和ai_interaction两个字段
-                - result: 侦察结果，包含 selected_content, selected_files, reason
+            dict: 包含summary和ai_interaction两个字段
+                - summary: 结构化摘要，包含 files_overview, key_events, overall_assessment
                 - ai_interaction: AI交互记录，包含 prompt和response
         """
         logger.info(f"Scout 开始侦察，日志文件数: {len(log_files)}")
-        # 构建提示词
         prompt_template = self.load_prompt()
 
         # 格式化机器信息
@@ -103,10 +122,10 @@ class ScoutAgent:
                 f"- {k}: {v}" for k, v in machine_info_from_plugins.items()
             ])
 
-        # 先读取日志内容
+        # 快速扫描日志内容（减少长度）
         log_content = "无日志内容"
         if log_files:
-            log_content = self.extract_log_content(log_files, max_length=8000)
+            log_content = self.quick_scan_logs(log_files, max_length=4000)
 
         # 显示文件名（不是完整路径）
         log_file_names = [os.path.basename(f) for f in log_files] if log_files else []
@@ -124,16 +143,16 @@ class ScoutAgent:
         ai_prompt, response_text = self.call_ai(prompt)
 
         # 解析 JSON 结果
-        result = self.parse_response(response_text)
+        summary = self.parse_summary_response(response_text)
 
-        # 如果解析失败，使用默认筛选策略
-        if result is None:
+        # 如果解析失败，使用默认摘要策略
+        if summary is None:
             logger.warning("JSON解析失败，使用fallback策略")
-            result = self.fallback_selection(log_files, plugin_summary)
+            summary = self.fallback_summary(log_files, plugin_summary)
 
-        # 返回侦察结果和AI交互记录
+        # 返回摘要和AI交互记录
         return {
-            'result': result,
+            'summary': summary,
             'ai_interaction': {
                 'prompt': ai_prompt,
                 'response': response_text,
@@ -148,91 +167,13 @@ class ScoutAgent:
             }
         }
 
-    def call_ai(self, prompt: str) -> tuple:
+    def quick_scan_logs(self, log_files: List[str], max_length: int = 4000) -> str:
         """
-        调用 AI 获取完整响应
-
-        Args:
-            prompt: 提示词
-
-        Returns:
-            tuple: (提示词, AI响应文本)
-        """
-        messages = [{"role": "user", "content": prompt}]
-        full_response = ""
-
-        try:
-            for chunk in self.client.chat(messages):
-                full_response += chunk
-        except Exception as e:
-            logger.error(f"AI调用失败: {str(e)}")
-
-        return prompt, full_response
-
-    def parse_response(self, response_text: str) -> Dict[str, Any]:
-        """
-        解析 AI 响应
-
-        Args:
-            response_text: AI 响应文本
-
-        Returns:
-            dict: 解析后的结果，或 None（解析失败时）
-        """
-        if not response_text or not response_text.strip():
-            logger.warning("AI响应为空")
-            return None
-
-        # 尝试提取 JSON
-        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
-        if json_match:
-            json_text = json_match.group(1)
-        else:
-            # 尝试直接解析
-            json_text = response_text
-
-        try:
-            result = json.loads(json_text.strip())
-
-            if not isinstance(result, dict):
-                logger.warning(f"AI响应不是字典类型: {type(result)}, 内容: {result}")
-                return None
-
-            # 检查必要字段
-            if 'selected_content' not in result:
-                logger.warning(f"AI响应缺少selected_content字段: {result.keys()}")
-
-            return result
-
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON解析失败: {str(e)}, 响应内容: {response_text[:200]}")
-            return None
-
-    def fallback_selection(self, log_files: List[str], plugin_summary: str) -> Dict[str, Any]:
-        """
-        默认筛选策略（AI 解析失败时使用）
+        快速扫描日志文件，提取关键片段用于AI分析
 
         Args:
             log_files: 日志文件列表
-            plugin_summary: 插件分析结果概要
-
-        Returns:
-            dict: 默认筛选结果
-        """
-        # 简单策略：返回所有文件的简要摘要
-        return {
-            "selected_content": "无法智能筛选，建议检查全部日志内容",
-            "selected_files": log_files[:3] if log_files else [],
-            "reason": "AI 响应解析失败，使用默认策略"
-        }
-
-    def extract_log_content(self, log_files: List[str], max_length: int = 8000) -> str:
-        """
-        从日志文件提取内容
-
-        Args:
-            log_files: 日志文件列表
-            max_length: 最大字符长度
+            max_length: 最大字符长度（减少为4000）
 
         Returns:
             str: 合并后的日志内容
@@ -263,16 +204,137 @@ class ScoutAgent:
 
         return '\n\n'.join(content_parts)
 
+    def call_ai(self, prompt: str) -> tuple:
+        """
+        调用 AI 获取完整响应
+
+        Args:
+            prompt: 提示词
+
+        Returns:
+            tuple: (提示词, AI响应文本)
+        """
+        messages = [{"role": "user", "content": prompt}]
+        full_response = ""
+
+        try:
+            for chunk in self.client.chat(messages):
+                full_response += chunk
+        except Exception as e:
+            logger.error(f"AI调用失败: {str(e)}")
+
+        return prompt, full_response
+
+    def parse_summary_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        解析摘要响应（新格式）
+
+        Args:
+            response_text: AI 响应文本
+
+        Returns:
+            dict: 解析后的摘要，或 None（解析失败时）
+        """
+        if not response_text or not response_text.strip():
+            logger.warning("AI响应为空")
+            return None
+
+        # 尝试提取 JSON
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
+        if json_match:
+            json_text = json_match.group(1)
+        else:
+            json_text = response_text
+
+        try:
+            result = json.loads(json_text.strip())
+
+            if not isinstance(result, dict):
+                logger.warning(f"AI响应不是字典类型: {type(result)}")
+                return None
+
+            # 检查必要字段（新格式）
+            if 'files_overview' not in result or 'key_events' not in result:
+                logger.warning(f"AI响应缺少必要字段: {result.keys()}")
+                return None
+
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析失败: {str(e)}, 响应内容: {response_text[:200]}")
+            return None
+
+    def fallback_summary(self, log_files: List[str], plugin_summary: str) -> Dict[str, Any]:
+        """
+        默认摘要策略（AI 解析失败时使用）
+
+        Args:
+            log_files: 日志文件列表
+            plugin_summary: 插件分析结果概要
+
+        Returns:
+            dict: 默认摘要结果
+        """
+        log_file_names = [os.path.basename(f) for f in log_files] if log_files else []
+
+        return {
+            "files_overview": [
+                {
+                    "file": fname,
+                    "reason": "需要分析",
+                    "priority": 1,
+                    "estimated_relevance": "high"
+                }
+                for fname in log_file_names[:5]
+            ],
+            "key_events": [],
+            "overall_assessment": "AI摘要生成失败，建议全量分析"
+        }
+
+    # 保留旧方法以兼容现有调用
+    def scout_and_extract(self, plugin_summary: str, machine_info_from_plugins: Dict,
+                           log_files: List[str], file_descriptions: str,
+                           user_prompt: str) -> Dict[str, Any]:
+        """
+        执行侦察任务（兼容旧接口）
+
+        Returns:
+            dict: 包含result和ai_interaction两个字段
+        """
+        data = self.generate_summary(plugin_summary, machine_info_from_plugins,
+                                     log_files, file_descriptions, user_prompt)
+
+        # 将summary转换为旧格式result，便于兼容
+        summary = data['summary']
+        result = {
+            "files_overview": summary.get("files_overview", []),
+            "key_events": summary.get("key_events", []),
+            "overall_assessment": summary.get("overall_assessment", "")
+        }
+
+        return {
+            'result': result,
+            'ai_interaction': data['ai_interaction']
+        }
+
+    def extract_log_content(self, log_files: List[str], max_length: int = 8000) -> str:
+        """从日志文件提取内容（保留供外部使用）"""
+        return self.quick_scan_logs(log_files, max_length)
+
+    def fallback_selection(self, log_files: List[str], plugin_summary: str) -> Dict[str, Any]:
+        """默认筛选策略（兼容旧接口）"""
+        return self.fallback_summary(log_files, plugin_summary)
+
     def select_plugins(self, user_prompt: str, plugin_descriptions: str) -> Dict[str, Any]:
         """
-        模式2：根据用户提示词选择插件
+        根据用户提示词选择插件
 
         Args:
             user_prompt: 用户提示词
             plugin_descriptions: 插件描述信息
 
         Returns:
-            dict: 选择结果，包含 selected_plugins, fallback, reason
+            dict: 选择结果
         """
         selection_prompt = f"""
 你是一个预处理 Agent，负责根据用户请求选择合适的插件进行分析。
@@ -295,14 +357,13 @@ class ScoutAgent:
 ```
 
 判断规则：
-1. 如果用户请求与特定关键词匹配（如 "内存泄露"、"error"、"传感器" 等），选择相关插件
-2. 如果用户请求模糊或无明确分析目标，设置 fallback=true，表示需要全量分析
+1. 如果用户请求与特定关键词匹配，选择相关插件
+2. 如果用户请求模糊或无明确分析目标，设置 fallback=true
 3. 如果用户请求与任何插件能力都不匹配，设置 fallback=true
-4. fallback=true 时，selected_plugins 包含所有插件
 """
 
         response_text = self.call_ai(selection_prompt)
-        result = self.parse_response(response_text)
+        result = self.parse_summary_response(response_text)
 
         if result is None:
             return {

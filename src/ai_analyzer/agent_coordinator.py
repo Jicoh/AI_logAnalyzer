@@ -1,6 +1,6 @@
 """
 Agent Coordinator - Scout + Sage 协调器
-管理双 Agent 的流程协调
+管理双 Agent 的流程协调，支持渐进式披露
 """
 
 import json
@@ -58,11 +58,9 @@ class AgentCoordinator:
             'mac_address': '未知'
         }
 
-        # 检查常见的机器信息插件 ID
         info_plugin_ids = ['bmc_info', 'system_info', 'machine_info', 'hardware_info']
 
         for plugin_id, plugin_data in plugin_result.items():
-            # 检查是否是机器信息插件
             if plugin_id in info_plugin_ids or 'info' in plugin_id.lower():
                 sections = plugin_data.get('sections', [])
                 for section in sections:
@@ -72,7 +70,6 @@ class AgentCoordinator:
                             value = item.get('value', '')
 
                             if isinstance(value, str):
-                                # 根据标签匹配机器信息字段
                                 if '序列号' in label or 'Serial' in label:
                                     machine_info['serial_number'] = value
                                 elif '型号' in label or 'Model' in label or '机型' in label:
@@ -92,49 +89,38 @@ class AgentCoordinator:
                                 elif 'MAC' in label or 'mac_address' in label.lower():
                                     machine_info['mac_address'] = value
 
-            # 也检查卡片类型的数据
-            sections = plugin_data.get('sections', [])
-            for section in sections:
-                if section.get('type') == 'cards':
-                    for card in section.get('cards', []):
-                        card_title = card.get('title', '')
-                        content = card.get('content', {})
+                    if section.get('type') == 'cards':
+                        for card in section.get('cards', []):
+                            card_title = card.get('title', '')
+                            content = card.get('content', {})
 
-                        if '机器' in card_title or '系统' in card_title or 'BMC' in card_title:
-                            metrics = content.get('metrics', {})
-                            for key, val in metrics.items():
-                                if isinstance(val, str):
-                                    if '序列号' in key or 'Serial' in key:
-                                        machine_info['serial_number'] = val
-                                    elif '型号' in key or 'Model' in key or '机型' in key:
-                                        machine_info['model'] = val
-                                    elif '产品' in key or 'Product' in key:
-                                        machine_info['product_name'] = val
-                                    elif '主板' in key or 'Board' in key:
-                                        machine_info['board_type'] = val
-                                    elif 'BMC' in key and '版本' in key:
-                                        machine_info['bmc_version'] = val
-                                    elif 'BIOS' in key:
-                                        machine_info['bios_version'] = val
-                                    elif '固件' in key or 'Firmware' in key:
-                                        machine_info['firmware_version'] = val
-                                    elif 'IP' in key or 'ip_address' in key.lower():
-                                        machine_info['ip_address'] = val
-                                    elif 'MAC' in key or 'mac_address' in key.lower():
-                                        machine_info['mac_address'] = val
+                            if '机器' in card_title or '系统' in card_title or 'BMC' in card_title:
+                                metrics = content.get('metrics', {})
+                                for key, val in metrics.items():
+                                    if isinstance(val, str):
+                                        if '序列号' in key or 'Serial' in key:
+                                            machine_info['serial_number'] = val
+                                        elif '型号' in key or 'Model' in key or '机型' in key:
+                                            machine_info['model'] = val
+                                        elif '产品' in key or 'Product' in key:
+                                            machine_info['product_name'] = val
+                                        elif '主板' in key or 'Board' in key:
+                                            machine_info['board_type'] = val
+                                        elif 'BMC' in key and '版本' in key:
+                                            machine_info['bmc_version'] = val
+                                        elif 'BIOS' in key:
+                                            machine_info['bios_version'] = val
+                                        elif '固件' in key or 'Firmware' in key:
+                                            machine_info['firmware_version'] = val
+                                        elif 'IP' in key or 'ip_address' in key.lower():
+                                            machine_info['ip_address'] = val
+                                        elif 'MAC' in key or 'mac_address' in key.lower():
+                                            machine_info['mac_address'] = val
 
         return machine_info
 
     def get_plugin_log_files(self, plugin_result: Dict) -> List[str]:
-        """
-        获取插件分析涉及的日志文件列表
-
-        Args:
-            plugin_result: 插件分析结果
-
-        Returns:
-            list: 日志文件路径列表
-        """
+        """获取插件分析涉及的日志文件列表"""
         log_files = []
 
         for plugin_id, plugin_data in plugin_result.items():
@@ -143,21 +129,13 @@ class AgentCoordinator:
 
             if isinstance(files, list):
                 log_files.extend(files)
-            elif files:  # 兼容旧的单文件格式
+            elif files:
                 log_files.append(files)
 
-        return list(set(log_files))  # 去重
+        return list(set(log_files))
 
     def format_plugin_summary(self, plugin_result: Dict) -> str:
-        """
-        格式化插件分析结果概要
-
-        Args:
-            plugin_result: 插件分析结果
-
-        Returns:
-            str: 格式化后的概要文本
-        """
+        """格式化插件分析结果概要"""
         summary_lines = []
 
         for plugin_id, plugin_data in plugin_result.items():
@@ -172,36 +150,17 @@ class AgentCoordinator:
         return '\n'.join(summary_lines)
 
     def get_file_descriptions(self, log_files: List[str], log_rules_id: str = None) -> str:
-        """
-        获取文件描述信息
-
-        Args:
-            log_files: 日志文件列表
-            log_rules_id: 规则集 ID
-
-        Returns:
-            str: 文件描述文本
-        """
+        """获取文件描述信息"""
         if not self.log_metadata_manager or not log_rules_id:
             return "无文件描述规则"
 
         return self.log_metadata_manager.get_file_descriptions(log_files, log_rules_id)
 
     def get_knowledge_content(self, kb_id: str, plugin_result: Dict) -> str:
-        """
-        获取知识库内容
-
-        Args:
-            kb_id: 知识库 ID
-            plugin_result: 插件分析结果
-
-        Returns:
-            str: 知识库内容
-        """
+        """获取知识库内容"""
         if not self.kb_manager or not kb_id:
             return ""
 
-        # 根据插件结果中的错误和警告构建查询
         queries = []
 
         for plugin_id, plugin_data in plugin_result.items():
@@ -218,7 +177,6 @@ class AgentCoordinator:
         if not queries:
             return ""
 
-        # 搜索知识库
         results = []
         for query in queries[:5]:
             try:
@@ -227,7 +185,6 @@ class AgentCoordinator:
             except Exception:
                 continue
 
-        # 去重并合并
         seen = set()
         content_parts = []
         for result in results:
@@ -242,10 +199,27 @@ class AgentCoordinator:
     def run_analysis(self, plugin_result: Dict, log_files: List[str],
                      kb_id: str = None, user_prompt: str = None,
                      log_rules_id: str = None, actual_log_paths: List[str] = None) -> str:
+        """
+        执行渐进式披露分析流程
 
-        logger.info(f"开始协调分析，日志文件数: {len(log_files)}")
+        流程：
+        1. Scout快速扫描，生成结构化摘要（包含关键事件引用）
+        2. Sage根据摘要按需读取关键事件的日志内容
+        3. Sage进行深度分析，生成HTML报告
 
-        # 初始化AI交互记录
+        Args:
+            plugin_result: 插件分析结果
+            log_files: 日志文件列表（用于摘要）
+            kb_id: 知识库ID
+            user_prompt: 用户提示词
+            log_rules_id: 日志规则ID
+            actual_log_paths: 实际日志文件路径（用于按需读取）
+
+        Returns:
+            str: HTML分析报告
+        """
+        logger.info(f"开始渐进式分析，日志文件数: {len(log_files)}")
+
         ai_interactions = {
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'scout': None,
@@ -264,69 +238,59 @@ class AgentCoordinator:
         # 4. 格式化插件概要
         plugin_summary = self.format_plugin_summary(plugin_result)
 
-        # 5. Scout 侦察日志（使用实际日志路径）
-        logger.info("Scout 开始侦察日志")
+        # 5. Scout生成摘要（渐进式披露第一步）
+        logger.info("Scout 开始生成摘要")
         try:
-            scout_data = self.scout.scout_and_extract(
+            scout_data = self.scout.generate_summary(
                 plugin_summary=plugin_summary,
                 machine_info_from_plugins=machine_info,
                 log_files=actual_log_paths or [],
                 file_descriptions=file_descriptions,
                 user_prompt=user_prompt or ""
             )
-
         except Exception as e:
             logger.error(f"Scout调用异常: {type(e).__name__}: {str(e)}")
             raise
 
-        # 提取侦察结果和AI交互记录
-        scout_result = scout_data.get('result')
-        if scout_result is None:
-            logger.error("Scout返回的result为None")
-            scout_result = self.scout.fallback_selection(actual_log_paths or [], plugin_summary)
+        scout_summary = scout_data.get('summary')
+        if scout_summary is None:
+            logger.error("Scout返回的summary为None")
+            scout_summary = self.scout.fallback_summary(actual_log_paths or [], plugin_summary)
         ai_interactions['scout'] = scout_data.get('ai_interaction')
 
-        # 验证 scout_result 类型
-        if not isinstance(scout_result, dict):
-            logger.error(f"scout_result类型错误: {type(scout_result)}")
-            scout_result = {"selected_content": "", "selected_files": [], "reason": "结果类型错误"}
+        # 验证摘要格式
+        if not isinstance(scout_summary, dict):
+            logger.error(f"scout_summary类型错误: {type(scout_summary)}")
+            scout_summary = {
+                "files_overview": [],
+                "key_events": [],
+                "overall_assessment": "摘要生成失败"
+            }
 
-        # 6. 提取日志内容
-        selected_content = scout_result.get('selected_content', '')
-
-        # 如果 Scout 没有返回内容，直接从实际文件读取
-        if not selected_content and actual_log_paths:
-            selected_content = self.scout.extract_log_content(actual_log_paths, 8000)
-
-        # 7. 获取知识库内容
+        # 6. 获取知识库内容
         knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
 
-        # 8. Sage 分析
-        logger.info("Sage 开始深度分析")
-        sage_data = self.sage.analyze(
+        # 7. Sage渐进式分析（按摘要读取日志）
+        logger.info("Sage 开始渐进式深度分析")
+        sage_data = self.sage.analyze_with_summary(
+            scout_summary=scout_summary,
             plugin_result=plugin_result,
-            log_content=selected_content,
             machine_info=machine_info,
+            log_files=actual_log_paths or [],
             knowledge_content=knowledge_content,
             user_prompt=user_prompt or ""
         )
 
-        # 提取HTML结果和AI交互记录
         html_result = sage_data['html']
         ai_interactions['sage'] = sage_data['ai_interaction']
 
-        # 9. 保存AI交互记录到临时目录
+        # 8. 保存AI交互记录
         self.save_ai_temp(ai_interactions)
 
         return html_result
 
     def save_ai_temp(self, ai_interactions: Dict[str, Any]):
-        """
-        保存AI交互记录到临时目录
-
-        Args:
-            ai_interactions: AI交互记录数据
-        """
+        """保存AI交互记录到临时目录"""
         try:
             ai_temp_dir = get_ai_temp_dir()
             output_file = os.path.join(ai_temp_dir, 'ai_analysis.json')
