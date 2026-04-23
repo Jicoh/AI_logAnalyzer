@@ -16,7 +16,8 @@ from src.utils.file_utils import (
 from src.utils.log_time_parser import (
     detect_time_format, get_file_time_range, read_log_lines,
     filter_log_by_time, filter_log_by_center_time, filter_log_by_quick_mode,
-    filter_multi_files_by_time, filter_multi_files_by_center_time, filter_multi_files_by_quick_mode
+    filter_multi_files_by_time, filter_multi_files_by_center_time, filter_multi_files_by_quick_mode,
+    parse_user_input_time
 )
 from src.utils import get_logger
 
@@ -405,25 +406,23 @@ def get_file_content():
             )
         # 时间点偏移模式
         elif center_time_str:
-            try:
-                center_time = datetime.strptime(center_time_str, '%Y-%m-%d %H:%M')
-                offset = int(offset_minutes)
-                lines = filter_log_by_center_time(path, center_time, offset, format_info, max_lines)
-                filter_start_time = center_time - timedelta(minutes=offset)
-                filter_end_time = center_time + timedelta(minutes=offset)
-            except ValueError as e:
-                return jsonify({'success': False, 'error': f'时间格式错误: {e}'})
+            center_time = parse_user_input_time(center_time_str)
+            if not center_time:
+                return jsonify({'success': False, 'error': f'时间格式无法解析: {center_time_str}'})
+            offset = int(offset_minutes)
+            lines = filter_log_by_center_time(path, center_time, offset, format_info, max_lines)
+            filter_start_time = center_time - timedelta(minutes=offset)
+            filter_end_time = center_time + timedelta(minutes=offset)
 
         # 精确时间范围模式
         elif start_time_str and end_time_str:
-            try:
-                start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M')
-                end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M')
-                lines = filter_log_by_time(path, start_time, end_time, format_info, max_lines)
-                filter_start_time = start_time
-                filter_end_time = end_time
-            except ValueError as e:
-                return jsonify({'success': False, 'error': f'时间格式错误: {e}'})
+            start_time = parse_user_input_time(start_time_str)
+            end_time = parse_user_input_time(end_time_str)
+            if not start_time or not end_time:
+                return jsonify({'success': False, 'error': f'时间格式无法解析: start={start_time_str}, end={end_time_str}'})
+            lines = filter_log_by_time(path, start_time, end_time, format_info, max_lines)
+            filter_start_time = start_time
+            filter_end_time = end_time
 
         # 无筛选，返回全部内容
         else:
@@ -541,27 +540,25 @@ def get_multi_file_content():
             )
         # 时间点偏移模式
         elif center_time_str:
-            try:
-                center_time = datetime.strptime(center_time_str, '%Y-%m-%d %H:%M')
-                offset = int(offset_minutes)
-                lines, filter_start_time, filter_end_time = filter_multi_files_by_center_time(
-                    log_files, center_time, offset, max_total_lines=max_total_lines
-                )
-            except ValueError as e:
-                return jsonify({'success': False, 'error': f'时间格式错误: {e}'})
+            center_time = parse_user_input_time(center_time_str)
+            if not center_time:
+                return jsonify({'success': False, 'error': f'时间格式无法解析: {center_time_str}'})
+            offset = int(offset_minutes)
+            lines, filter_start_time, filter_end_time = filter_multi_files_by_center_time(
+                log_files, center_time, offset, max_total_lines=max_total_lines
+            )
 
         # 精确时间范围模式
         elif start_time_str and end_time_str:
-            try:
-                start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M')
-                end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M')
-                lines = filter_multi_files_by_time(
-                    log_files, start_time, end_time, max_total_lines=max_total_lines
-                )
-                filter_start_time = start_time
-                filter_end_time = end_time
-            except ValueError as e:
-                return jsonify({'success': False, 'error': f'时间格式错误: {e}'})
+            start_time = parse_user_input_time(start_time_str)
+            end_time = parse_user_input_time(end_time_str)
+            if not start_time or not end_time:
+                return jsonify({'success': False, 'error': f'时间格式无法解析: start={start_time_str}, end={end_time_str}'})
+            lines = filter_multi_files_by_time(
+                log_files, start_time, end_time, max_total_lines=max_total_lines
+            )
+            filter_start_time = start_time
+            filter_end_time = end_time
 
         else:
             return jsonify({'success': False, 'error': '请指定时间筛选参数'})

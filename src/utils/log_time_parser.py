@@ -11,21 +11,40 @@ from src.utils import get_logger
 
 logger = get_logger('log_time_parser')
 
+# 警告打印计数器（避免刷屏）
+_warning_print_count = 0
+MAX_WARNING_PRINTS = 5  # 最多打印5次警告
+
 
 # 时间格式定义：正则表达式 + strftime格式 + 描述
 TIME_FORMATS = [
-    # ISO格式（最常见）
+    # ISO格式（空格分隔）
     {
-        'regex': r'(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})',
+        'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
         'format': '%Y-%m-%d %H:%M:%S',
-        'description': 'ISO格式 (2026-04-14 09:00:30)',
+        'description': 'ISO格式空格 (2026-04-14 09:00:30)',
         'has_year': True
     },
-    # ISO带毫秒
+    # ISO格式（T分隔）
     {
-        'regex': r'(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}\.\d+)',
+        'regex': r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})',
+        'format': '%Y-%m-%dT%H:%M:%S',
+        'description': 'ISO格式T分隔 (2026-04-14T09:00:30)',
+        'has_year': True
+    },
+    # ISO带毫秒（空格分隔）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)',
         'format': '%Y-%m-%d %H:%M:%S',
         'description': 'ISO格式带毫秒 (2026-04-14 09:00:30.123)',
+        'has_year': True,
+        'strip_ms': True
+    },
+    # ISO带毫秒（T分隔）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)',
+        'format': '%Y-%m-%dT%H:%M:%S',
+        'description': 'ISO格式T分隔带毫秒 (2026-04-14T09:00:30.123)',
         'has_year': True,
         'strip_ms': True
     },
@@ -175,6 +194,8 @@ def parse_line_time(line: str, format_info: Dict, reference_year: int = None) ->
             if fmt.get('regex') and fmt not in formats_to_try:
                 formats_to_try.append(fmt)
 
+    time_str = None  # 初始化，避免 regex 都不匹配时报错
+
     for fmt_info in formats_to_try:
         match = re.search(fmt_info['regex'], line)
         if not match:
@@ -195,8 +216,14 @@ def parse_line_time(line: str, format_info: Dict, reference_year: int = None) ->
 
             return dt
         except ValueError as e:
-            logger.debug(f"时间解析失败: {time_str} - {e}")
+            logger.debug(f"时间解析尝试失败: '{time_str}' - {e}")
             continue
+
+    # 所有格式都失败时打印 warning，最多打印5次避免刷屏
+    global _warning_print_count
+    if time_str and _warning_print_count < MAX_WARNING_PRINTS:
+        _warning_print_count += 1
+        logger.warning(f"日志时间格式不支持: '{time_str}'，请检查 TIME_FORMATS 配置")
 
     return None
 
@@ -549,3 +576,37 @@ def filter_multi_files_by_quick_mode(file_paths: List[str], mode: str,
     lines = filter_multi_files_by_time(file_paths, start_time, end_time,
                                        max_lines_per_file, max_total_lines)
     return lines, start_time, end_time
+
+
+# 用户输入时间格式定义（用于时间筛选界面）
+USER_INPUT_TIME_FORMATS = [
+    '%Y-%m-%d %H:%M:%S',  # 2025-09-03 02:01:30
+    '%Y-%m-%d %H:%M',     # 2025-09-03 02:01
+    '%Y-%m-%dT%H:%M:%S',  # 2025-09-03T02:01:30
+    '%Y-%m-%dT%H:%M',     # 2025-09-03T02:01
+    '%Y/%m/%d %H:%M:%S',  # 2025/09/03 02:01:30
+    '%Y/%m/%d %H:%M',     # 2025/09/03 02:01
+]
+
+
+def parse_user_input_time(time_str: str) -> Optional[datetime]:
+    """
+    解析用户输入的时间字符串，自动适配多种格式
+
+    Args:
+        time_str: 用户输入的时间字符串
+
+    Returns:
+        datetime: 解析后的时间，如果解析失败返回 None
+    """
+    if not time_str:
+        return None
+
+    for fmt in USER_INPUT_TIME_FORMATS:
+        try:
+            return datetime.strptime(time_str, fmt)
+        except ValueError:
+            continue
+
+    logger.warning(f"用户输入时间格式不支持: '{time_str}'，支持的格式: {USER_INPUT_TIME_FORMATS}")
+    return None
