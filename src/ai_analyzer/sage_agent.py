@@ -56,12 +56,38 @@ class SageAgent:
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'sage_prompt.txt')
 
+    def get_html_prompt_path(self):
+        """获取HTML生成prompt文件路径"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        return os.path.join(project_root, 'config', 'sage_html_prompt.txt')
+
     def load_prompt(self):
         """加载提示词"""
         if os.path.exists(self.prompt_path):
             with open(self.prompt_path, 'r', encoding='utf-8') as f:
                 return f.read()
         return self.DEFAULT_PROMPT
+
+    def load_html_prompt(self):
+        """加载HTML生成prompt（降级方案使用）"""
+        html_prompt_path = self.get_html_prompt_path()
+        if os.path.exists(html_prompt_path):
+            with open(html_prompt_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        # 如果文件不存在，使用内置简化版本
+        return self.DEFAULT_HTML_PROMPT
+
+    DEFAULT_HTML_PROMPT = """你之前的JSON响应无法被正确解析，请直接生成HTML报告。
+
+## 分析数据
+- 机器信息: {machine_info}
+- 插件结果: {plugin_result}
+- 日志内容: {log_content}
+- 知识库: {knowledge_content}
+- 用户请求: {user_prompt}
+
+请直接输出完整的HTML代码，从<!DOCTYPE html>开始。"""
 
     def read_by_keyword(self, file_path: str, keyword: str,
                         context_lines: int = 20, occurrence: int = 1) -> str:
@@ -280,10 +306,43 @@ class SageAgent:
             }
 
         # 解析 JSON 数据
-        analysis_data = self.parse_json_response(response_text)
+        result, error = parse_ai_json_response(response_text)
 
-        # 使用模板渲染 HTML
-        html_result = self.render_html(analysis_data)
+        if result is None:  # JSON解析失败，启用降级方案
+            logger.warning(f"JSON解析失败，启用HTML直接生成降级方案: {error}")
+
+            # 格式化机器信息（用于降级方案）
+            machine_info_str = "暂无机器信息"
+            if machine_info:
+                machine_info_str = "\n".join([
+                    f"- {k}: {v}" for k, v in machine_info.items()
+                ])
+
+            # 降级方案：让AI直接生成HTML
+            html_result, fallback_interaction = self.generate_html_directly(
+                plugin_result=plugin_result,
+                log_content=log_content,
+                machine_info=machine_info_str,
+                knowledge_content=knowledge_content,
+                user_prompt=user_prompt,
+                original_response=response_text
+            )
+
+            return {
+                'html': html_result,
+                'ai_interaction': {
+                    'first_attempt': {
+                        'prompt': ai_prompt,
+                        'response': response_text,
+                        'success': True,
+                        'error': error
+                    },
+                    'fallback': fallback_interaction
+                }
+            }
+
+        # JSON解析成功，使用模板渲染 HTML
+        html_result = self.render_html(result)
 
         return {
             'html': html_result,
@@ -291,9 +350,90 @@ class SageAgent:
                 'prompt': ai_prompt,
                 'response': response_text,
                 'success': True,
-                'parsed_result': analysis_data
+                'parsed_result': result
             }
         }
+
+    def generate_html_directly(self, plugin_result: Dict, log_content: str,
+                               machine_info: str, knowledge_content: str,
+                               user_prompt: str, original_response: str) -> tuple:
+        """
+        降级方案：让AI直接生成HTML
+        当JSON解析失败时，把HTML模板发给AI，让它直接输出HTML
+
+        Args:
+            plugin_result: 插件分析结果
+            log_content: 日志内容
+            machine_info: 格式化的机器信息字符串
+            knowledge_content: 知识库内容
+            user_prompt: 用户提示词
+            original_response: AI第一次的响应（供参考）
+
+        Returns:
+            tuple: (html_result, ai_interaction_dict)
+        """
+        html_prompt_template = self.load_html_prompt()
+
+        prompt = html_prompt_template.format(
+            machine_info=machine_info,
+            plugin_result=self.format_plugin_result(plugin_result),
+            log_content=log_content[:5000] if log_content else "无日志内容",
+            knowledge_content=knowledge_content[:2000] if knowledge_content else "无知识库内容",
+            user_prompt=user_prompt or "无用户提示词",
+            original_response=original_response[:2000]
+        )
+
+        logger.info("Sage 降级方案：直接生成HTML")
+        ai_prompt, response_text, success, error_msg = self.call_ai(prompt)
+
+        if success and response_text.strip():
+            html = self.extract_html(response_text)
+            return html, {
+                'prompt': ai_prompt,
+                'response': response_text,
+                'success': True,
+                'mode': 'html_direct'
+            }
+
+        # 如果降级方案也失败，返回错误HTML
+        error_html = self.generate_error_html("HTML生成失败", error_msg)
+        return error_html, {
+            'prompt': ai_prompt,
+            'response': response_text,
+            'success': False,
+            'error': error_msg,
+            'mode': 'html_direct'
+        }
+
+    def extract_html(self, response_text: str) -> str:
+        """
+        从AI响应中提取HTML内容
+        处理可能被markdown代码块包裹的情况
+
+        Args:
+            response_text: AI的响应文本
+
+        Returns:
+            str: 提取的HTML内容
+        """
+        text = response_text.strip()
+
+        # 尝试从```html代码块提取
+        match = re.search(r'```html\s*\n?([\s\S]*?)\n?```', text)
+        if match:
+            return match.group(1).strip()
+
+        # 尝试从普通代码块提取
+        match = re.search(r'```\s*\n?([\s\S]*?)\n?```', text)
+        if match and '<!DOCTYPE' in match.group(1):
+            return match.group(1).strip()
+
+        # 直接返回（假设AI直接输出了HTML）
+        if '<!DOCTYPE' in text or '<html' in text.lower():
+            return text
+
+        # 包装成简单HTML
+        return f"<html><body><pre>{text}</pre></body></html>"
 
     def parse_json_response(self, response_text: str) -> Dict:
         """解析 AI 返回的 JSON 数据"""
