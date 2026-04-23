@@ -223,71 +223,89 @@ class AgentCoordinator:
         ai_interactions = {
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'scout': None,
-            'sage': None
+            'sage': None,
+            'error': None
         }
 
-        # 1. 从插件结果提取机器信息
-        machine_info = self.extract_machine_info_from_plugins(plugin_result)
-
-        # 2. 获取插件分析的日志文件列表
-        plugin_log_files = self.get_plugin_log_files(plugin_result)
-
-        # 3. 获取文件描述信息
-        file_descriptions = self.get_file_descriptions(plugin_log_files, log_rules_id)
-
-        # 4. 格式化插件概要
-        plugin_summary = self.format_plugin_summary(plugin_result)
-
-        # 5. Scout生成摘要（渐进式披露第一步）
-        logger.info("Scout 开始生成摘要")
         try:
-            scout_data = self.scout.generate_summary(
-                plugin_summary=plugin_summary,
-                machine_info_from_plugins=machine_info,
-                log_files=actual_log_paths or [],
-                file_descriptions=file_descriptions,
-                user_prompt=user_prompt or ""
-            )
+            # 1. 从插件结果提取机器信息
+            machine_info = self.extract_machine_info_from_plugins(plugin_result)
+
+            # 2. 获取插件分析的日志文件列表
+            plugin_log_files = self.get_plugin_log_files(plugin_result)
+
+            # 3. 获取文件描述信息
+            file_descriptions = self.get_file_descriptions(plugin_log_files, log_rules_id)
+
+            # 4. 格式化插件概要
+            plugin_summary = self.format_plugin_summary(plugin_result)
+
+            # 5. Scout生成摘要（渐进式披露第一步）
+            logger.info("Scout 开始生成摘要")
+            try:
+                scout_data = self.scout.generate_summary(
+                    plugin_summary=plugin_summary,
+                    machine_info_from_plugins=machine_info,
+                    log_files=actual_log_paths or [],
+                    file_descriptions=file_descriptions,
+                    user_prompt=user_prompt or ""
+                )
+            except Exception as e:
+                logger.error(f"Scout调用异常: {type(e).__name__}: {str(e)}")
+                ai_interactions['error'] = f"Scout调用异常: {str(e)}"
+                scout_summary = self.scout.fallback_summary(actual_log_paths or [], plugin_summary)
+                scout_data = {'summary': scout_summary, 'ai_interaction': None}
+
+            scout_summary = scout_data.get('summary')
+            if scout_summary is None:
+                logger.error("Scout返回的summary为None")
+                scout_summary = self.scout.fallback_summary(actual_log_paths or [], plugin_summary)
+            ai_interactions['scout'] = scout_data.get('ai_interaction')
+
+            # Scout完成后立即保存（增量保存）
+            self.save_ai_temp(ai_interactions)
+
+            # 验证摘要格式
+            if not isinstance(scout_summary, dict):
+                logger.error(f"scout_summary类型错误: {type(scout_summary)}")
+                scout_summary = {
+                    "files_overview": [],
+                    "key_events": [],
+                    "overall_assessment": "摘要生成失败"
+                }
+
+            # 6. 获取知识库内容
+            knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
+
+            # 7. Sage渐进式分析（按摘要读取日志）
+            logger.info("Sage 开始渐进式深度分析")
+            try:
+                sage_data = self.sage.analyze_with_summary(
+                    scout_summary=scout_summary,
+                    plugin_result=plugin_result,
+                    machine_info=machine_info,
+                    log_files=actual_log_paths or [],
+                    knowledge_content=knowledge_content,
+                    user_prompt=user_prompt or ""
+                )
+                html_result = sage_data['html']
+                ai_interactions['sage'] = sage_data['ai_interaction']
+            except Exception as e:
+                logger.error(f"Sage调用异常: {type(e).__name__}: {str(e)}")
+                ai_interactions['error'] = f"Sage调用异常: {str(e)}"
+                html_result = self.sage.generate_error_html("AI分析异常", str(e))
+
+            # 8. 保存AI交互记录
+            self.save_ai_temp(ai_interactions)
+
+            return html_result
+
         except Exception as e:
-            logger.error(f"Scout调用异常: {type(e).__name__}: {str(e)}")
-            raise
-
-        scout_summary = scout_data.get('summary')
-        if scout_summary is None:
-            logger.error("Scout返回的summary为None")
-            scout_summary = self.scout.fallback_summary(actual_log_paths or [], plugin_summary)
-        ai_interactions['scout'] = scout_data.get('ai_interaction')
-
-        # 验证摘要格式
-        if not isinstance(scout_summary, dict):
-            logger.error(f"scout_summary类型错误: {type(scout_summary)}")
-            scout_summary = {
-                "files_overview": [],
-                "key_events": [],
-                "overall_assessment": "摘要生成失败"
-            }
-
-        # 6. 获取知识库内容
-        knowledge_content = self.get_knowledge_content(kb_id, plugin_result)
-
-        # 7. Sage渐进式分析（按摘要读取日志）
-        logger.info("Sage 开始渐进式深度分析")
-        sage_data = self.sage.analyze_with_summary(
-            scout_summary=scout_summary,
-            plugin_result=plugin_result,
-            machine_info=machine_info,
-            log_files=actual_log_paths or [],
-            knowledge_content=knowledge_content,
-            user_prompt=user_prompt or ""
-        )
-
-        html_result = sage_data['html']
-        ai_interactions['sage'] = sage_data['ai_interaction']
-
-        # 8. 保存AI交互记录
-        self.save_ai_temp(ai_interactions)
-
-        return html_result
+            # 捕获其他未处理的异常，确保保存已有数据
+            logger.error(f"run_analysis异常: {type(e).__name__}: {str(e)}")
+            ai_interactions['error'] = f"run_analysis异常: {str(e)}"
+            self.save_ai_temp(ai_interactions)
+            return self.sage.generate_error_html("分析流程异常", str(e))
 
     def save_ai_temp(self, ai_interactions: Dict[str, Any]):
         """保存AI交互记录到临时目录"""

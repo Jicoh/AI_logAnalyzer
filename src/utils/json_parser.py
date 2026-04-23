@@ -57,6 +57,18 @@ def parse_ai_json_response(response_text: str, required_fields: list = None) -> 
         except json.JSONDecodeError as e:
             errors.append(f"修复中文标点后仍失败: {str(e)}")
 
+    # 策略1.6：尝试修复未转义双引号后解析
+    fixed_text = fix_unescaped_quotes(cleaned_text)
+    if fixed_text != cleaned_text:
+        logger.debug(f"修复未转义双引号: 原长度{len(cleaned_text)} -> {len(fixed_text)}")
+        try:
+            result = json.loads(fixed_text)
+            if validate_result(result, required_fields, errors):
+                logger.info("修复未转义双引号后解析成功")
+                return result, None
+        except json.JSONDecodeError as e:
+            errors.append(f"修复未转义双引号后仍失败: {str(e)}")
+
     # 策略2：尝试提取markdown代码块
     result, code_block_error = try_code_block(cleaned_text, required_fields)
     if result:
@@ -237,6 +249,8 @@ def try_fix_trailing_commas(json_str: str, required_fields: list) -> dict:
     fixed = re.sub(r',\s*]', ']', fixed)
     # 修复中文标点
     fixed = fix_chinese_punctuation(fixed)
+    # 修复未转义双引号
+    fixed = fix_unescaped_quotes(fixed)
 
     if fixed != json_str:
         logger.debug(f"修复后长度: {len(json_str)} -> {len(fixed)}")
@@ -248,3 +262,79 @@ def try_fix_trailing_commas(json_str: str, required_fields: list) -> dict:
     except json.JSONDecodeError as e:
         logger.debug(f"修复后仍失败: {e}")
         return None
+
+
+def fix_unescaped_quotes(json_str: str) -> str:
+    """
+    修复JSON字符串内部未转义的双引号
+
+    遍历JSON字符串，检测字符串值内部未转义的双引号并修复。
+    判断逻辑：如果双引号后面紧跟结构字符（: , } ] 或空白），则它是字符串结束符；
+    否则它是字符串内容中的未转义引号，需要转义。
+
+    Args:
+        json_str: JSON字符串
+
+    Returns:
+        str: 修复后的JSON字符串
+    """
+    result_chars = []
+    i = 0
+    length = len(json_str)
+    in_string = False
+    escape_next = False
+
+    while i < length:
+        char = json_str[i]
+
+        if escape_next:
+            # 当前字符被转义，直接保留
+            result_chars.append(char)
+            escape_next = False
+            i += 1
+            continue
+
+        if char == '\\' and in_string:
+            # 在字符串内部遇到反斜杠，标记下一个字符被转义
+            result_chars.append(char)
+            escape_next = True
+            i += 1
+            continue
+
+        if char == '"':
+            if not in_string:
+                # 进入字符串
+                in_string = True
+                result_chars.append(char)
+            else:
+                # 在字符串内部遇到双引号，需要判断是结束符还是内容
+                # 查看后续字符来判断
+                next_char_pos = i + 1
+                # 跳过空白字符找到下一个有效字符
+                while next_char_pos < length and json_str[next_char_pos] in ' \t\n\r':
+                    next_char_pos += 1
+
+                if next_char_pos < length:
+                    next_char = json_str[next_char_pos]
+                    # 结构字符表示这是字符串结束符
+                    structural_chars = ':', ',', '}', ']', '\n', '\r', '\t', ' '
+                    if next_char in structural_chars:
+                        # 这是字符串结束符
+                        in_string = False
+                        result_chars.append(char)
+                    else:
+                        # 这是字符串内容中的未转义双引号，需要转义
+                        result_chars.append('\\')
+                        result_chars.append(char)
+                        logger.debug(f"修复未转义双引号，位置: {i}")
+                else:
+                    # 后面没有字符了，这是字符串结束符
+                    in_string = False
+                    result_chars.append(char)
+        else:
+            # 普通字符
+            result_chars.append(char)
+
+        i += 1
+
+    return ''.join(result_chars)

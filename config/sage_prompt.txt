@@ -33,5 +33,19 @@
 5. log_snippets: 相关日志片段列表，每个片段包含 title（可选）、content
 6. risk: 风险评估，包含 level（高/中/低）、description
 
-直接输出 JSON 对象，不要包含代码块标记或其他解释内容。输出格式示例：
+直接输出 JSON 对象，不要包含代码块标记或其他解释内容。
+
+## JSON格式要求（必须严格遵守）
+
+1. 输出必须是有效的JSON对象，不能包含任何JSON之外的文本
+2. 所有字符串值必须用英文双引号包裹
+3. 字符串中如需包含特殊字符，必须转义：
+   - 双引号使用 \" 而不是直接写 "
+   - 反斜杠使用 \\
+   - 换行符使用 \n 而不是真实的换行
+4. 不能在JSON中插入注释或说明文本
+5. 确保所有花括号 {{}} 和方括号 [] 正确配对
+6. 数组和对象最后一项后不要加逗号
+
+输出格式示例：
 {{"machine_info": {{\"serial_number\": \"未知\", \"product_name\": \"未知\", \"board_id\": \"未知\", \"board_type\": \"未知\", \"bmc_version\": \"未知\", \"bios_version\": \"未知\", \"bme_version\": \"未知\", \"bmc_ip_address\": \"未知\"}}, "summary": {{\"errors\": 0, \"warnings\": 0, \"info\": 0}}, "problems": [], "solutions": [], "log_snippets": [], "risk": {{\"level\": \"低\", \"description\": \"\"}}}}

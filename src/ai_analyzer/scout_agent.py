@@ -68,6 +68,13 @@ class ScoutAgent:
 - 优先关注error和warning级别的事件
 - 不要自行提取机器信息"""
 
+    @staticmethod
+    def _escape_braces(text: str) -> str:
+        """转义花括号，防止 format 解析为占位符"""
+        if not text:
+            return ""
+        return text.replace('{', '{{').replace('}', '}}')
+
     def __init__(self, config_manager, log_metadata_manager=None):
         """
         初始化侦察兵 Agent
@@ -97,9 +104,10 @@ class ScoutAgent:
 
     def generate_summary(self, plugin_summary: str, machine_info_from_plugins: Dict,
                          log_files: List[str], file_descriptions: str,
-                         user_prompt: str) -> Dict[str, Any]:
+                         user_prompt: str, max_retries: int = 2) -> Dict[str, Any]:
         """
         执行侦察任务，生成结构化摘要
+        支持JSON解析失败时的重试机制
 
         Args:
             plugin_summary: 插件分析结果概要
@@ -107,6 +115,7 @@ class ScoutAgent:
             log_files: 日志文件列表
             file_descriptions: 文件描述信息
             user_prompt: 用户提示词
+            max_retries: JSON解析失败时的最大重试次数（默认2次）
 
         Returns:
             dict: 包含summary和ai_interaction两个字段
@@ -132,12 +141,12 @@ class ScoutAgent:
         log_file_names = [os.path.basename(f) for f in log_files] if log_files else []
 
         prompt = prompt_template.format(
-            plugin_summary=plugin_summary,
-            machine_info_from_plugins=machine_info_str,
-            file_descriptions=file_descriptions or "无文件描述规则",
-            log_files="\n".join(log_file_names) if log_file_names else "无日志文件",
-            log_content=log_content,
-            user_prompt=user_prompt or "无用户提示词"
+            plugin_summary=self._escape_braces(plugin_summary),
+            machine_info_from_plugins=self._escape_braces(machine_info_str),
+            file_descriptions=self._escape_braces(file_descriptions or "无文件描述规则"),
+            log_files=self._escape_braces("\n".join(log_file_names) if log_file_names else "无日志文件"),
+            log_content=self._escape_braces(log_content),
+            user_prompt=self._escape_braces(user_prompt or "无用户提示词")
         )
 
         # 调用 AI（收集完整响应）
@@ -146,27 +155,85 @@ class ScoutAgent:
         # 解析 JSON 结果
         summary = self.parse_summary_response(response_text)
 
-        # 如果解析失败，使用默认摘要策略
+        # 重试机制：JSON解析失败时，让AI修正后重新输出
+        retry_interactions = []
+        retry_count = 0
+        while summary is None and retry_count < max_retries:
+            retry_count += 1
+            logger.warning(f"JSON解析失败(第{retry_count}次重试)")
+
+            # 获取上次的解析错误信息
+            result, parse_error = parse_ai_json_response(response_text, ['files_overview', 'key_events'])
+
+            # 记录本次失败的交互
+            retry_interactions.append({
+                'attempt': retry_count,
+                'response': response_text,
+                'error': parse_error
+            })
+
+            # 构建重试提示词
+            retry_prompt = self.build_retry_json_prompt(prompt, response_text, parse_error)
+            ai_prompt, response_text = self.call_ai(retry_prompt)
+
+            # 重新尝试解析
+            summary = self.parse_summary_response(response_text)
+
+        # 重试全部失败后，使用fallback策略
         if summary is None:
-            logger.warning("JSON解析失败，使用fallback策略")
+            logger.warning(f"JSON解析重试{max_retries}次后仍失败，使用fallback策略")
             summary = self.fallback_summary(log_files, plugin_summary)
 
         # 返回摘要和AI交互记录
-        return {
-            'summary': summary,
-            'ai_interaction': {
-                'prompt': ai_prompt,
-                'response': response_text,
-                'params': {
-                    'plugin_summary': plugin_summary,
-                    'machine_info_from_plugins': machine_info_from_plugins,
-                    'log_files': log_files,
-                    'file_descriptions': file_descriptions,
-                    'user_prompt': user_prompt,
-                    'log_content_preview': log_content[:500] if log_content else ""
-                }
+        ai_interaction = {
+            'prompt': ai_prompt,
+            'response': response_text,
+            'params': {
+                'plugin_summary': plugin_summary,
+                'machine_info_from_plugins': machine_info_from_plugins,
+                'log_files': log_files,
+                'file_descriptions': file_descriptions,
+                'user_prompt': user_prompt,
+                'log_content_preview': log_content[:500] if log_content else ""
             }
         }
+        if retry_interactions:
+            ai_interaction['retries'] = retry_interactions
+
+        return {
+            'summary': summary,
+            'ai_interaction': ai_interaction
+        }
+
+    def build_retry_json_prompt(self, original_prompt: str, failed_response: str, error: str) -> str:
+        """
+        构建JSON重试提示词，告诉AI其JSON格式错误并要求修正
+
+        Args:
+            original_prompt: 原始提示词
+            failed_response: AI失败的响应
+            error: 解析错误信息
+
+        Returns:
+            str: 重试提示词
+        """
+        error_preview = failed_response[:2000] if len(failed_response) > 2000 else failed_response
+
+        return f"""你之前的JSON响应无法被正确解析，请检查并修正格式后重新输出。
+
+## 解析错误信息
+{error}
+
+## 你之前的响应（有格式错误）
+{error_preview}
+
+## 请修正以下问题后重新输出JSON
+1. 检查字符串中的特殊字符是否正确转义（双引号用\"，换行用\\n）
+2. 确保所有花括号和方括号正确配对
+3. 移除任何JSON之外的多余文本或注释
+4. 数组和对象最后一项后不要加逗号
+
+请直接输出修正后的完整JSON对象，不要包含任何解释或代码块标记。"""
 
     def quick_scan_logs(self, log_files: List[str], max_length: int = 4000) -> str:
         """

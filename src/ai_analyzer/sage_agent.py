@@ -89,6 +89,13 @@ class SageAgent:
 
 请直接输出完整的HTML代码，从<!DOCTYPE html>开始。"""
 
+    @staticmethod
+    def _escape_braces(text: str) -> str:
+        """转义花括号，防止 format 解析为占位符"""
+        if not text:
+            return ""
+        return text.replace('{', '{{').replace('}', '}}')
+
     def read_by_keyword(self, file_path: str, keyword: str,
                         context_lines: int = 20, occurrence: int = 1) -> str:
         """
@@ -243,9 +250,10 @@ class SageAgent:
                             knowledge_content, user_prompt)
 
     def analyze(self, plugin_result: Dict, log_content: str, machine_info: Dict,
-                knowledge_content: str, user_prompt: str) -> Dict[str, Any]:
+                knowledge_content: str, user_prompt: str, max_retries: int = 2) -> Dict[str, Any]:
         """
         执行分析任务，输出 HTML 报告
+        支持JSON解析失败时的重试机制
 
         Args:
             plugin_result: 插件分析结果
@@ -253,6 +261,7 @@ class SageAgent:
             machine_info: 机器信息
             knowledge_content: 知识库内容
             user_prompt: 用户提示词
+            max_retries: JSON解析失败时的最大重试次数（默认2次）
 
         Returns:
             dict: 包含html和ai_interaction两个字段
@@ -270,11 +279,11 @@ class SageAgent:
             ])
 
         prompt = prompt_template.format(
-            machine_info=machine_info_str,
-            plugin_result=plugin_result_str,
-            log_content=log_content[:8000] if log_content else "无日志内容",
-            knowledge_content=knowledge_content or "无知识库内容",
-            user_prompt=user_prompt or "无用户提示词"
+            machine_info=self._escape_braces(machine_info_str),
+            plugin_result=self._escape_braces(plugin_result_str),
+            log_content=self._escape_braces(log_content[:8000] if log_content else "无日志内容"),
+            knowledge_content=self._escape_braces(knowledge_content or "无知识库内容"),
+            user_prompt=self._escape_braces(user_prompt or "无用户提示词")
         )
 
         # 调用 AI 获取 JSON 响应
@@ -306,10 +315,36 @@ class SageAgent:
             }
 
         # 解析 JSON 数据
-        result, error = parse_ai_json_response(response_text)
+        result, parse_error = parse_ai_json_response(response_text)
 
-        if result is None:  # JSON解析失败，启用降级方案
-            logger.warning(f"JSON解析失败，启用HTML直接生成降级方案: {error}")
+        # 重试机制：JSON解析失败时，让AI修正后重新输出
+        retry_interactions = []
+        retry_count = 0
+        while result is None and retry_count < max_retries:
+            retry_count += 1
+            logger.warning(f"JSON解析失败(第{retry_count}次重试)，错误: {parse_error}")
+
+            # 记录本次失败的交互
+            retry_interactions.append({
+                'attempt': retry_count,
+                'response': response_text,
+                'error': parse_error
+            })
+
+            # 构建重试提示词，告诉AI格式错误
+            retry_prompt = self.build_retry_json_prompt(prompt, response_text, parse_error)
+            ai_prompt, response_text, success, error_msg = self.call_ai(retry_prompt)
+
+            if not success or not response_text.strip():
+                logger.warning(f"重试{retry_count}次AI调用失败")
+                continue
+
+            # 重新尝试解析
+            result, parse_error = parse_ai_json_response(response_text)
+
+        # 重试全部失败后，启用降级方案
+        if result is None:
+            logger.warning(f"JSON解析重试{max_retries}次后仍失败，启用HTML直接生成降级方案")
 
             # 格式化机器信息（用于降级方案）
             machine_info_str = "暂无机器信息"
@@ -335,8 +370,9 @@ class SageAgent:
                         'prompt': ai_prompt,
                         'response': response_text,
                         'success': True,
-                        'error': error
+                        'error': parse_error
                     },
+                    'retries': retry_interactions,
                     'fallback': fallback_interaction
                 }
             }
@@ -344,15 +380,50 @@ class SageAgent:
         # JSON解析成功，使用模板渲染 HTML
         html_result = self.render_html(result)
 
+        ai_interaction = {
+            'prompt': ai_prompt,
+            'response': response_text,
+            'success': True,
+            'parsed_result': result
+        }
+        if retry_interactions:
+            ai_interaction['retries'] = retry_interactions
+
         return {
             'html': html_result,
-            'ai_interaction': {
-                'prompt': ai_prompt,
-                'response': response_text,
-                'success': True,
-                'parsed_result': result
-            }
+            'ai_interaction': ai_interaction
         }
+
+    def build_retry_json_prompt(self, original_prompt: str, failed_response: str, error: str) -> str:
+        """
+        构建JSON重试提示词，告诉AI其JSON格式错误并要求修正
+
+        Args:
+            original_prompt: 原始提示词
+            failed_response: AI失败的响应
+            error: 解析错误信息
+
+        Returns:
+            str: 重试提示词
+        """
+        # 截取错误位置附近的内容
+        error_preview = failed_response[:2000] if len(failed_response) > 2000 else failed_response
+
+        return f"""你之前的JSON响应无法被正确解析，请检查并修正格式后重新输出。
+
+## 解析错误信息
+{error}
+
+## 你之前的响应（有格式错误）
+{error_preview}
+
+## 请修正以下问题后重新输出JSON
+1. 检查字符串中的特殊字符是否正确转义（双引号用\"，换行用\\n）
+2. 确保所有花括号和方括号正确配对
+3. 移除任何JSON之外的多余文本或注释
+4. 数组和对象最后一项后不要加逗号
+
+请直接输出修正后的完整JSON对象，不要包含任何解释或代码块标记。"""
 
     def generate_html_directly(self, plugin_result: Dict, log_content: str,
                                machine_info: str, knowledge_content: str,
@@ -360,6 +431,7 @@ class SageAgent:
         """
         降级方案：让AI直接生成HTML
         当JSON解析失败时，把HTML模板发给AI，让它直接输出HTML
+        添加异常捕获确保始终返回有效HTML
 
         Args:
             plugin_result: 插件分析结果
@@ -372,43 +444,57 @@ class SageAgent:
         Returns:
             tuple: (html_result, ai_interaction_dict)
         """
-        html_prompt_template = self.load_html_prompt()
+        try:
+            html_prompt_template = self.load_html_prompt()
 
-        prompt = html_prompt_template.format(
-            machine_info=machine_info,
-            plugin_result=self.format_plugin_result(plugin_result),
-            log_content=log_content[:5000] if log_content else "无日志内容",
-            knowledge_content=knowledge_content[:2000] if knowledge_content else "无知识库内容",
-            user_prompt=user_prompt or "无用户提示词",
-            original_response=original_response[:2000]
-        )
+            # 安全格式化，防止参数为 None 导致异常
+            prompt = html_prompt_template.format(
+                machine_info=self._escape_braces(machine_info or "暂无机器信息"),
+                plugin_result=self._escape_braces(self.format_plugin_result(plugin_result) if plugin_result else "无插件结果"),
+                log_content=self._escape_braces(log_content[:5000] if log_content else "无日志内容"),
+                knowledge_content=self._escape_braces(knowledge_content[:2000] if knowledge_content else "无知识库内容"),
+                user_prompt=self._escape_braces(user_prompt or "无用户提示词"),
+                original_response=self._escape_braces(original_response[:2000] if original_response else "")
+            )
 
-        logger.info("Sage 降级方案：直接生成HTML")
-        ai_prompt, response_text, success, error_msg = self.call_ai(prompt)
+            logger.info("Sage 降级方案：直接生成HTML")
+            ai_prompt, response_text, success, error_msg = self.call_ai(prompt)
 
-        if success and response_text.strip():
-            html = self.extract_html(response_text)
-            return html, {
+            if success and response_text.strip():
+                html = self.extract_html(response_text)
+                logger.info(f"降级方案 HTML 生成成功，长度: {len(html)}")
+                return html, {
+                    'prompt': ai_prompt,
+                    'response': response_text,
+                    'success': True,
+                    'mode': 'html_direct'
+                }
+
+            # 降级方案 AI 调用失败，返回错误 HTML
+            logger.warning(f"降级方案 AI 调用失败: {error_msg}")
+            error_html = self.generate_error_html("HTML生成失败", error_msg)
+            return error_html, {
                 'prompt': ai_prompt,
                 'response': response_text,
-                'success': True,
+                'success': False,
+                'error': error_msg,
                 'mode': 'html_direct'
             }
 
-        # 如果降级方案也失败，返回错误HTML
-        error_html = self.generate_error_html("HTML生成失败", error_msg)
-        return error_html, {
-            'prompt': ai_prompt,
-            'response': response_text,
-            'success': False,
-            'error': error_msg,
-            'mode': 'html_direct'
-        }
+        except Exception as e:
+            # 捕获所有异常，确保返回有效的错误 HTML
+            logger.error(f"降级方案执行异常: {str(e)}")
+            error_html = self.generate_error_html("降级分析异常", str(e))
+            return error_html, {
+                'success': False,
+                'error': str(e),
+                'mode': 'html_direct_fallback'
+            }
 
     def extract_html(self, response_text: str) -> str:
         """
         从AI响应中提取HTML内容
-        处理可能被markdown代码块包裹的情况
+        处理可能被markdown代码块包裹的情况，增强边缘情况处理
 
         Args:
             response_text: AI的响应文本
@@ -418,22 +504,53 @@ class SageAgent:
         """
         text = response_text.strip()
 
-        # 尝试从```html代码块提取
+        # 空响应处理
+        if not text:
+            logger.warning("AI返回空响应")
+            return self.generate_fallback_html({
+                'machine_info': {},
+                'summary': {'errors': 1, 'warnings': 0, 'info': 0},
+                'problems': [{'title': 'AI返回空内容', 'severity': 'error'}],
+                'solutions': [],
+                'log_snippets': [],
+                'risk': {'level': '未知', 'description': ''}
+            })
+
+        # 策略1：从```html代码块提取
         match = re.search(r'```html\s*\n?([\s\S]*?)\n?```', text)
         if match:
+            logger.debug("从```html代码块提取成功")
             return match.group(1).strip()
 
-        # 尝试从普通代码块提取
+        # 策略2：从普通代码块提取（包含DOCTYPE）
         match = re.search(r'```\s*\n?([\s\S]*?)\n?```', text)
         if match and '<!DOCTYPE' in match.group(1):
+            logger.debug("从普通代码块提取成功（包含DOCTYPE）")
             return match.group(1).strip()
 
-        # 直接返回（假设AI直接输出了HTML）
+        # 策略3：直接返回（包含DOCTYPE或html标签）
         if '<!DOCTYPE' in text or '<html' in text.lower():
+            logger.debug("直接返回HTML（包含DOCTYPE或html标签）")
             return text
 
-        # 包装成简单HTML
-        return f"<html><body><pre>{text}</pre></body></html>"
+        # 策略4：尝试查找第一个HTML标签开始的内容
+        html_start = text.find('<')
+        if html_start >= 0:
+            potential_html = text[html_start:]
+            if '<html' in potential_html.lower() or '<body' in potential_html.lower():
+                logger.debug("从第一个HTML标签开始提取")
+                return potential_html
+
+        # 策略5：包装成简单HTML（保留原始内容）
+        logger.warning("未识别到HTML格式，包装为简单HTML")
+        return self.generate_fallback_html({
+            'machine_info': {},
+            'summary': {'errors': 1, 'warnings': 0, 'info': 0},
+            'problems': [{'title': 'AI原始响应', 'severity': 'info', 'description': text[:500]}],
+            'solutions': [],
+            'log_snippets': [],
+            'risk': {'level': '未知', 'description': 'AI响应格式异常'}
+        })
 
     def parse_json_response(self, response_text: str) -> Dict:
         """解析 AI 返回的 JSON 数据"""
