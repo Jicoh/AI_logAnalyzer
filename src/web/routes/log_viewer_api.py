@@ -11,10 +11,11 @@ from typing import Tuple, List, Dict
 from flask import Blueprint, request, jsonify
 from src.utils.file_utils import (
     find_log_files_in_directory, get_files_in_directory, is_valid_log_file,
-    get_project_root, get_data_dir
+    get_project_root, get_data_dir,
+    is_text_readable_file, find_text_files_in_directory
 )
 from src.utils.log_time_parser import (
-    detect_time_format, get_file_time_range, read_log_lines,
+    detect_time_format, get_file_time_range as get_log_time_range, read_log_lines,
     filter_log_by_time, filter_log_by_center_time, filter_log_by_quick_mode,
     filter_multi_files_by_time, filter_multi_files_by_center_time, filter_multi_files_by_quick_mode,
     parse_user_input_time
@@ -60,14 +61,14 @@ def determine_analysis_type(work_dir: str) -> Tuple[str, List]:
         return 'folder_batch', units
 
     # 单文件分析
-    # 检查直接是否有日志文件
-    direct_log_files = [f for f in items if is_valid_log_file(os.path.join(work_dir, f))]
+    # 检查直接是否有可读文件
+    direct_files = [f for f in items if is_text_readable_file(os.path.join(work_dir, f))]
 
     # 检查子目录
     subdirs = [f for f in items if os.path.isdir(os.path.join(work_dir, f))]
 
-    if direct_log_files:
-        return 'single_file', [os.path.join(work_dir, f) for f in direct_log_files]
+    if direct_files:
+        return 'single_file', [os.path.join(work_dir, f) for f in direct_files]
     elif len(subdirs) == 1:
         subdir_path = os.path.join(work_dir, subdirs[0])
         log_files = find_log_files_in_directory(subdir_path)
@@ -153,9 +154,36 @@ def get_all_temp_folders():
     return result
 
 
+def is_file_text_readable(file_path: str) -> bool:
+    """
+    检测文件是否为可读取的文本格式
+    通过检查文件开头是否有二进制特征来判断
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            sample = f.read(8192)
+            # 检测常见二进制特征
+            if b'\x00' in sample:  # NULL字节
+                return False
+            # 检测常见二进制文件头
+            binary_headers = [
+                b'\xff\xd8\xff',  # JPEG
+                b'\x89PNG',       # PNG
+                b'PK',            # ZIP/Office
+                b'\x00\x00\x01',  # MP4/MOV等
+                b'GIF87a', b'GIF89a',  # GIF
+            ]
+            for header in binary_headers:
+                if sample.startswith(header):
+                    return False
+        return True
+    except Exception:
+        return False
+
+
 def build_file_tree(dir_path: str, max_depth: int = 3) -> list:
     """
-    构建文件树结构
+    构建文件树结构（只显示可读的文本文件）
 
     Args:
         dir_path: 目录路径
@@ -176,8 +204,8 @@ def build_file_tree(dir_path: str, max_depth: int = 3) -> list:
         item_path = os.path.join(dir_path, item)
 
         if os.path.isfile(item_path):
-            # 只显示日志文件
-            if is_valid_log_file(item_path) or item.lower().endswith('.json'):
+            # 只显示非压缩且可读的文本文件
+            if is_text_readable_file(item_path) and is_file_text_readable(item_path):
                 result.append({
                     'name': item,
                     'path': item_path,
@@ -296,10 +324,10 @@ def validate_path():
 
         if os.path.isfile(abs_path):
             filename = os.path.basename(abs_path)
-            is_log = is_valid_log_file(abs_path)
+            is_readable = is_text_readable_file(abs_path)
 
-            if not is_log:
-                return jsonify({'success': False, 'error': '不是有效的日志文件'})
+            if not is_readable:
+                return jsonify({'success': False, 'error': '该文件类型不支持查看（压缩文件）'})
 
             return jsonify({
                 'success': True,
@@ -312,7 +340,7 @@ def validate_path():
             })
 
         elif os.path.isdir(abs_path):
-            log_files = find_log_files_in_directory(abs_path)
+            files = find_text_files_in_directory(abs_path)
 
             return jsonify({
                 'success': True,
@@ -320,7 +348,7 @@ def validate_path():
                     'path': abs_path,
                     'is_folder': True,
                     'folder_name': os.path.basename(abs_path) or 'root',
-                    'files_count': len(log_files)
+                    'files_count': len(files)
                 }
             })
 
@@ -391,6 +419,10 @@ def get_file_content():
 
         if not os.path.isfile(path):
             return jsonify({'success': False, 'error': '路径不是文件'})
+
+        # 检测是否为可读的文本文件
+        if not is_file_text_readable(path):
+            return jsonify({'success': False, 'error': '无法解析该文件（非文本格式）'})
 
         # 检测时间格式
         format_info = detect_time_format(path)
@@ -474,7 +506,7 @@ def get_file_time_range():
         if not os.path.isfile(path):
             return jsonify({'success': False, 'error': '路径不是文件'})
 
-        min_time, max_time, format_info = get_file_time_range(path)
+        min_time, max_time, format_info = get_log_time_range(path)
 
         result = {
             'detected_format': format_info.get('format'),
@@ -508,6 +540,7 @@ def get_multi_file_content():
     """获取多个日志文件的内容（同一时间段筛选）"""
     try:
         dir_path = request.args.get('dir_path', '')
+        file_paths_json = request.args.get('file_paths', '')
         start_time_str = request.args.get('start_time', '')
         end_time_str = request.args.get('end_time', '')
         center_time_str = request.args.get('center_time', '')
@@ -515,19 +548,23 @@ def get_multi_file_content():
         mode = request.args.get('mode', '')  # quick mode
         max_total_lines = int(request.args.get('max_total_lines', '20000'))
 
-        if not dir_path:
-            return jsonify({'success': False, 'error': '目录路径不能为空'})
+        # 如果传递了file_paths参数，直接使用；否则从目录查找
+        if file_paths_json:
+            log_files = json.loads(urllib.parse.unquote(file_paths_json))
+        else:
+            if not dir_path:
+                return jsonify({'success': False, 'error': '目录路径不能为空'})
 
-        dir_path = urllib.parse.unquote(dir_path)
+            dir_path = urllib.parse.unquote(dir_path)
 
-        if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
-            return jsonify({'success': False, 'error': '路径不存在或不是目录'})
+            if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+                return jsonify({'success': False, 'error': '路径不存在或不是目录'})
 
-        # 获取目录下所有日志文件
-        log_files = find_log_files_in_directory(dir_path)
+            # 获取目录下所有可读文件
+            log_files = find_text_files_in_directory(dir_path)
 
         if not log_files:
-            return jsonify({'success': False, 'error': '目录中没有日志文件'})
+            return jsonify({'success': False, 'error': '目录中没有可读文件'})
 
         lines = []
         filter_start_time = None
@@ -602,7 +639,7 @@ def get_analysis_unit_info():
         if not os.path.exists(path) or not os.path.isdir(path):
             return jsonify({'success': False, 'error': '路径不存在或不是目录'})
 
-        log_files = find_log_files_in_directory(path)
+        log_files = find_text_files_in_directory(path)
 
         return jsonify({
             'success': True,

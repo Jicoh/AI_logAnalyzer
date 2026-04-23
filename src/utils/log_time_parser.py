@@ -18,11 +18,49 @@ MAX_WARNING_PRINTS = 5  # 最多打印5次警告
 
 # 时间格式定义：正则表达式 + strftime格式 + 描述
 TIME_FORMATS = [
-    # ISO格式（空格分隔）
+    # ISO格式带时区（T分隔，如 2025-09-09T17:11:11+8:00）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{1,2}:\d{2})',
+        'format': '%Y-%m-%dT%H:%M:%S%z',
+        'description': 'ISO格式带时区 (2025-09-09T17:11:11+8:00)',
+        'has_year': True,
+        'timezone_colon': True  # 需要处理时区冒号
+    },
+    # ISO格式带时区（无冒号，如 2025-09-09T17:11:11+0800）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4})',
+        'format': '%Y-%m-%dT%H:%M:%S%z',
+        'description': 'ISO格式带时区无冒号 (2025-09-09T17:11:11+0800)',
+        'has_year': True
+    },
+    # ISO格式空格带时区（只有小时，如 2025-08-30 15:15:15+08）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[+-]\d{2})',
+        'format': '%Y-%m-%d %H:%M:%S%z',
+        'description': 'ISO格式空格带时区 (2025-08-30 15:15:15+08)',
+        'has_year': True,
+        'timezone_only_hour': True  # 需要补齐为4位
+    },
+    # ISO格式空格带时区（有冒号，如 2025-08-30 15:15:15+8:00）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[+-]\d{1,2}:\d{2})',
+        'format': '%Y-%m-%d %H:%M:%S%z',
+        'description': 'ISO格式空格带时区冒号 (2025-08-30 15:15:15+8:00)',
+        'has_year': True,
+        'timezone_colon': True
+    },
+    # ISO格式空格带时区（无冒号4位，如 2025-08-30 15:15:15+0800）
+    {
+        'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[+-]\d{4})',
+        'format': '%Y-%m-%d %H:%M:%S%z',
+        'description': 'ISO格式空格带时区无冒号 (2025-08-30 15:15:15+0800)',
+        'has_year': True
+    },
+    # ISO格式（空格分隔，无时区）
     {
         'regex': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
         'format': '%Y-%m-%d %H:%M:%S',
-        'description': 'ISO格式空格 (2026-04-14 09:00:30)',
+        'description': 'ISO格式空格 (2025-08-30 15:15:15)',
         'has_year': True
     },
     # ISO格式（T分隔）
@@ -57,21 +95,21 @@ TIME_FORMATS = [
     },
     # 英文月份格式
     {
-        'regex': r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}',
+        'regex': r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})',
         'format': '%b %d %H:%M:%S',
-        'description': '英文月份格式 (Apr 14 09:00:30)',
+        'description': '英文月份格式 (Sep 19 20:10:33)',
         'has_year': False
     },
-    # 紧凑格式
+    # 紧凑格式（限制年份1900-2099，月份01-12）
     {
-        'regex': r'(\d{14})',
+        'regex': r'(?<!\d)((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d[0-5]\d)(?!\d)',
         'format': '%Y%m%d%H%M%S',
         'description': '紧凑格式 (20260414090030)',
         'has_year': True
     },
-    # 短格式（月-日 时间）
+    # 短格式（限制月份01-12，日期01-31，小时00-23）
     {
-        'regex': r'(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
+        'regex': r'((?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\s+(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d)',
         'format': '%m-%d %H:%M:%S',
         'description': '短格式 (04-14 09:00:30)',
         'has_year': False
@@ -83,16 +121,16 @@ TIME_FORMATS = [
         'description': '方括号ISO格式 [2026-04-14T09:00:30]',
         'has_year': True
     },
-    # 方括号时间格式
+    # 方括号时间格式（限制小时00-23，分钟秒00-59）
     {
-        'regex': r'\[(\d{2}:\d{2}:\d{2})\]',
+        'regex': r'\[((?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d)\]',
         'format': '%H:%M:%S',
         'description': '方括号时间格式 [09:00:30]',
         'has_year': False
     },
-    # 仅时间格式（放在最后，优先级最低）
+    # 仅时间格式（限制小时00-23，排除毫秒部分）
     {
-        'regex': r'(\d{2}:\d{2}:\d{2})',
+        'regex': r'(?<![:\d])((?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d)(?!\.\d)',
         'format': '%H:%M:%S',
         'description': '仅时间格式 (09:00:30)',
         'has_year': False,
@@ -175,24 +213,27 @@ def parse_line_time(line: str, format_info: Dict, reference_year: int = None) ->
 
     Args:
         line: 日志行内容
-        format_info: 格式信息（包含 regex, format 等）
+        format_info: 格式信息（包含 regex, format 等），如果为 None 则尝试所有格式
         reference_year: 参考年份（用于无年份格式）
 
     Returns:
         datetime: 解析后的时间，如果解析失败返回 None
     """
-    if not format_info:
-        return None
-
-    # 获取所有可尝试的格式（主要格式 + 其他格式）
+    # 获取所有可尝试的格式
     formats_to_try = []
-    if format_info.get('regex'):
-        formats_to_try.append(format_info)
-    # 如果有多种格式，依次尝试
-    if format_info.get('all_formats'):
-        for fmt in format_info['all_formats']:
-            if fmt.get('regex') and fmt not in formats_to_try:
-                formats_to_try.append(fmt)
+
+    if format_info:
+        # 有指定的格式信息
+        if format_info.get('regex'):
+            formats_to_try.append(format_info)
+        # 如果有多种格式，依次尝试
+        if format_info.get('all_formats'):
+            for fmt in format_info['all_formats']:
+                if fmt.get('regex') and fmt not in formats_to_try:
+                    formats_to_try.append(fmt)
+    else:
+        # 无指定格式，尝试所有已知格式（排除低优先级格式）
+        formats_to_try = [f for f in TIME_FORMATS if not f.get('low_priority')]
 
     time_str = None  # 初始化，避免 regex 都不匹配时报错
 
@@ -206,6 +247,20 @@ def parse_line_time(line: str, format_info: Dict, reference_year: int = None) ->
         # 处理毫秒（去掉）
         if fmt_info.get('strip_ms'):
             time_str = time_str.split('.')[0]
+
+        # 处理时区冒号（如 +8:00 -> +0800）
+        if fmt_info.get('timezone_colon'):
+            # 匹配时区部分 +HH:MM 或 -HH:MM，去掉冒号
+            time_str = re.sub(r'([+-])(\d{1,2}):(\d{2})$', r'\1\2\3', time_str)
+            # 补齐为4位数字（如 +800 -> +0800）
+            tz_match = re.search(r'[+-](\d+)$', time_str)
+            if tz_match and len(tz_match.group(1)) == 3:
+                time_str = re.sub(r'[+-](\d{3})$', r'+0\1' if time_str[-4] == '+' else r'-0\1', time_str)
+
+        # 处理时区只有小时（如 +08 -> +0800）
+        if fmt_info.get('timezone_only_hour'):
+            # 直接在末尾补00：+08 -> +0800
+            time_str = time_str + '00'
 
         try:
             dt = datetime.strptime(time_str, fmt_info['format'])
@@ -255,6 +310,9 @@ def get_file_time_range(file_path: str, sample_lines: int = 1000) -> Tuple[Optio
             for line in f:
                 dt = parse_line_time(line, format_info, reference_year)
                 if dt:
+                    # 如果带时区，转换为naive datetime（去掉时区信息）
+                    if dt.tzinfo is not None:
+                        dt = dt.replace(tzinfo=None)
                     if min_time is None or dt < min_time:
                         min_time = dt
                     if max_time is None or dt > max_time:
@@ -373,15 +431,19 @@ def filter_log_by_time(file_path: str, start_time: datetime, end_time: datetime,
                 content = line.rstrip('\n\r')
                 dt = parse_line_time(content, format_info, reference_year)
 
-                if dt and start_time <= dt <= end_time:
-                    time_str = dt.strftime('%H:%M:%S') if dt else ''
-                    lines.append({
-                        'line_num': line_num,
-                        'content': content,
-                        'time_str': time_str,
-                        'severity': get_line_severity(content),
-                        'parsed_time': dt.strftime('%Y-%m-%d %H:%M:%S')
-                    })
+                if dt:
+                    # 如果带时区，转换为naive datetime
+                    if dt.tzinfo is not None:
+                        dt = dt.replace(tzinfo=None)
+                    if start_time <= dt <= end_time:
+                        time_str = dt.strftime('%H:%M:%S') if dt else ''
+                        lines.append({
+                            'line_num': line_num,
+                            'content': content,
+                            'time_str': time_str,
+                            'severity': get_line_severity(content),
+                            'parsed_time': dt.strftime('%Y-%m-%d %H:%M:%S')
+                        })
 
                 line_num += 1
     except Exception as e:
@@ -489,17 +551,21 @@ def filter_multi_files_by_time(file_paths: List[str], start_time: datetime, end_
                     content = line.rstrip('\n\r')
                     dt = parse_line_time(content, format_info, reference_year)
 
-                    if dt and start_time <= dt <= end_time:
-                        all_lines.append({
-                            'line_num': line_num,
-                            'content': content,
-                            'time_str': dt.strftime('%H:%M:%S'),
-                            'severity': get_line_severity(content),
-                            'parsed_time': dt.strftime('%Y-%m-%d %H:%M:%S'),
-                            'source_file': file_name,
-                            'datetime': dt  # 用于排序
-                        })
-                        file_lines_count += 1
+                    if dt:
+                        # 如果带时区，转换为naive datetime
+                        if dt.tzinfo is not None:
+                            dt = dt.replace(tzinfo=None)
+                        if start_time <= dt <= end_time:
+                            all_lines.append({
+                                'line_num': line_num,
+                                'content': content,
+                                'time_str': dt.strftime('%H:%M:%S'),
+                                'severity': get_line_severity(content),
+                                'parsed_time': dt.strftime('%Y-%m-%d %H:%M:%S'),
+                                'source_file': file_name,
+                                'datetime': dt  # 用于排序
+                            })
+                            file_lines_count += 1
 
                     line_num += 1
         except Exception as e:

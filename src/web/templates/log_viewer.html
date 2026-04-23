@@ -55,6 +55,24 @@
             <div class="card mb-3 file-tree-card" x-show="analysisType === 'single_file' && fileTree.length > 0" x-cloak>
                 <div class="card-header">
                     <i class="bi bi-files"></i> 文件列表
+                    <span class="badge bg-info ms-1" x-text="'已选 ' + selectedFiles.length + '/' + totalFiles"></span>
+                </div>
+                <!-- 文件筛选说明和操作按钮 -->
+                <div class="card-body py-2 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            勾选文件参与时间筛选，未勾选的文件不参与
+                        </small>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" @click="selectAllFiles()">
+                                <i class="bi bi-check-all"></i> 全选
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @click="deselectAllFiles()">
+                                <i class="bi bi-x"></i> 取消
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
                     <template x-for="item in flattenTree(fileTree)" :key="item.path">
@@ -70,6 +88,15 @@
                                 <i class="bi bi-file-earmark-text"></i>
                             </template>
                             <span x-text="item.name"></span>
+                            <!-- 文件复选框 -->
+                            <template x-if="item.is_file">
+                                <input type="checkbox"
+                                       class="form-check-input ms-auto"
+                                       :checked="selectedFiles.includes(item.path)"
+                                       @click.stop
+                                       @change="toggleFileSelection(item.path)"
+                                       title="勾选参与时间筛选">
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -79,6 +106,24 @@
             <div class="card mb-3 file-tree-card" x-show="analysisType === 'folder_batch' && selectedUnitPath && unitFileTree.length > 0" x-cloak>
                 <div class="card-header">
                     <i class="bi bi-files"></i> 单元文件
+                    <span class="badge bg-info ms-1" x-text="'已选 ' + selectedFiles.length + '/' + unitFileCount"></span>
+                </div>
+                <!-- 文件筛选说明和操作按钮 -->
+                <div class="card-body py-2 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            勾选文件参与时间筛选，未勾选的文件不参与
+                        </small>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" @click="selectAllFiles()">
+                                <i class="bi bi-check-all"></i> 全选
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @click="deselectAllFiles()">
+                                <i class="bi bi-x"></i> 取消
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body p-0" style="max-height: 200px; overflow-y: auto;">
                     <template x-for="item in flattenTree(unitFileTree)" :key="item.path">
@@ -94,6 +139,15 @@
                                 <i class="bi bi-file-earmark-text"></i>
                             </template>
                             <span x-text="item.name"></span>
+                            <!-- 文件复选框 -->
+                            <template x-if="item.is_file">
+                                <input type="checkbox"
+                                       class="form-check-input ms-auto"
+                                       :checked="selectedFiles.includes(item.path)"
+                                       @click.stop
+                                       @change="toggleFileSelection(item.path)"
+                                       title="勾选参与时间筛选">
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -352,12 +406,7 @@
                             <template x-for="(line, index) in logLines" :key="index">
                                 <tr x-show="displayMode === 'merged' || (displayMode === 'separated' && line.source_file === selectedResultFile)"
                                     :class="getLineClass(line.severity)">
-                                    <td x-show="displayMode === 'merged'" class="line-source">
-                                        <span class="badge bg-light text-dark small" x-text="line.source_file"></span>
-                                    </td>
-                                    <td x-show="displayMode === 'separated'" class="line-time-full" x-text="line.parsed_time || line.time_str"></td>
                                     <td class="line-number text-muted" x-text="line.line_num"></td>
-                                    <td class="line-time" x-text="line.time_str"></td>
                                     <td class="line-content">
                                         <span x-html="formatLineContent(line.content, line.severity)"></span>
                                     </td>
@@ -389,6 +438,7 @@ function logViewerApp() {
         totalFiles: 0,
         expandedFolders: {},
         selectedFile: '',
+        selectedFiles: [],  // 用户选中的参与筛选的文件列表
         loading: false,
         error: '',
         emptyMessage: '',
@@ -475,6 +525,27 @@ function logViewerApp() {
             this.selectedFile = '';
         },
 
+        // 全选所有文件
+        selectAllFiles() {
+            const tree = this.analysisType === 'single_file' ? this.fileTree : this.unitFileTree;
+            this.selectedFiles = this.extractFilePaths(tree);
+        },
+
+        // 取消所有选择
+        deselectAllFiles() {
+            this.selectedFiles = [];
+        },
+
+        // 切换文件选择状态
+        toggleFileSelection(path) {
+            const index = this.selectedFiles.indexOf(path);
+            if (index === -1) {
+                this.selectedFiles.push(path);
+            } else {
+                this.selectedFiles.splice(index, 1);
+            }
+        },
+
         // 切换筛选模式（带缓存恢复）
         switchFilterMode(mode) {
             this.filterMode = mode;
@@ -558,6 +629,7 @@ function logViewerApp() {
             this.analysisUnits = [];
             this.selectedUnitPath = '';
             this.selectedFile = '';
+            this.selectedFiles = [];  // 清空选中文件
             this.logLines = [];
             this.fileStats = null;
             this.expandedFolders = {};
@@ -576,6 +648,9 @@ function logViewerApp() {
                 await this.loadFileTree(path);
                 this.analysisType = 'single_file';
                 this.totalFiles = this.countFiles(this.fileTree);
+
+                // 自动全选所有文件
+                this.selectedFiles = this.extractFilePaths(this.fileTree);
 
                 // 获取路径信息
                 const folderInfo = this.tempFolders.find(f => f.path === path);
@@ -617,6 +692,7 @@ function logViewerApp() {
                 this.unitFileTree = [];
                 this.unitFileCount = 0;
                 this.selectedUnitInfo = null;
+                this.selectedFiles = [];
                 this.logLines = [];
                 return;
             }
@@ -624,6 +700,7 @@ function logViewerApp() {
             this.loading = true;
             this.error = '';
             this.selectedFile = '';
+            this.selectedFiles = [];
             this.logLines = [];
 
             try {
@@ -639,11 +716,8 @@ function logViewerApp() {
                     const treeData = await treeResponse.json();
                     if (treeData.success) {
                         this.unitFileTree = treeData.data;
-                    }
-
-                    // 如果有多个文件，自动加载全局内容
-                    if (this.unitFileCount > 1) {
-                        await this.loadGlobalContent(data.data.log_file_paths);
+                        // 自动全选所有文件
+                        this.selectedFiles = this.extractFilePaths(this.unitFileTree);
                     }
                 } else {
                     this.error = data.error;
@@ -747,11 +821,8 @@ function logViewerApp() {
             this.fileStats = null;
             this.selectedFile = '';
 
-            let url = `/api/log-viewer/multi-file-content?dir_path=${encodeURIComponent(this.currentPath)}`;
-
-            if (this.analysisType === 'folder_batch' && this.selectedUnitPath) {
-                url = `/api/log-viewer/multi-file-content?dir_path=${encodeURIComponent(this.selectedUnitPath)}`;
-            }
+            // 传递选中的文件列表给API
+            let url = `/api/log-viewer/multi-file-content?file_paths=${encodeURIComponent(JSON.stringify(filePaths))}`;
 
             if (this.filterMode === 'range' && this.startTime && this.endTime) {
                 url += `&start_time=${this.formatDateTime(this.startTime)}&end_time=${this.formatDateTime(this.endTime)}`;
@@ -803,6 +874,12 @@ function logViewerApp() {
                 return;
             }
 
+            // 验证是否选择了文件
+            if (this.selectedFiles.length === 0) {
+                this.error = '请先选择要筛选的日志文件';
+                return;
+            }
+
             this.loading = true;
             this.error = '';
             this.filterApplied = true;
@@ -810,8 +887,8 @@ function logViewerApp() {
             // 清除文件选中状态，进行全局筛选
             this.selectedFile = '';
 
-            // 始终使用全局筛选
-            await this.loadGlobalContentFromTree();
+            // 使用选中的文件进行筛选
+            await this.loadGlobalContent(this.selectedFiles);
 
             // 缓存筛选结果
             const mode = this.filterMode;
@@ -945,6 +1022,18 @@ function logViewerApp() {
     color: #0d6efd;
 }
 
+/* 文件复选框样式 */
+.tree-item .form-check-input {
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+}
+.tree-item .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
 /* 文件夹图标样式 */
 .tree-folder-icon {
     color: #868e96;
@@ -968,9 +1057,7 @@ function logViewerApp() {
 .log-table { font-size: 0.85rem; font-family: 'Consolas', 'Monaco', monospace; text-align: left; }
 .log-table td { padding: 0.25rem 0.5rem; border: none; text-align: left; }
 .line-content { text-align: left; }
-.line-source { width: 150px; }
 .line-number { width: 60px; text-align: right; background: #f8f9fa; user-select: none; }
-.line-time { width: 80px; color: #0d6efd; }
 .log-line-error { background: #fff5f5; }
 .log-line-error .line-content { color: #dc3545; }
 .log-line-warning { background: #fffbeb; }
@@ -988,7 +1075,6 @@ function logViewerApp() {
 }
 .result-file-item:hover { background: #f8f9fa; }
 .result-file-item.active { background: #e7f1ff; border-left: 3px solid #0d6efd; }
-.line-time-full { width: 140px; color: #0d6efd; font-size: 0.85rem; }
 [x-cloak] { display: none !important; }
 </style>
 {% endblock %}

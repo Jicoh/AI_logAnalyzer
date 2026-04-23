@@ -139,6 +139,35 @@ def is_valid_log_file(file_path):
     return lower_path.endswith('.txt') or lower_path.endswith('.log')
 
 
+def is_text_readable_file(file_path):
+    """
+    检查是否为可尝试读取的文本文件（用于日志查看器）
+    排除压缩文件，其他所有文件都可尝试打开
+    """
+    return not is_archive_file(file_path)
+
+
+def find_text_files_in_directory(dir_path):
+    """
+    递归查找目录中的所有非压缩文件（用于日志查看器）
+
+    Args:
+        dir_path: 目录路径
+
+    Returns:
+        list: 非压缩文件路径列表
+    """
+    if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+        return []
+    files = []
+    for root, dirs, filenames in os.walk(dir_path):
+        for f in filenames:
+            file_path = os.path.join(root, f)
+            if not is_archive_file(file_path):
+                files.append(file_path)
+    return files
+
+
 def get_files_in_directory(dir_path):
     """获取目录下一级文件列表（仅一级目录，不递归）"""
     if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
