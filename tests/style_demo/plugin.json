@@ -1,0 +1,7 @@
+{
+    "id": "style_demo",
+    "name": "样式展示Demo",
+    "version": "1.0.0",
+    "description": "展示所有插件输出样式的示例",
+    "plugin_type": "CloudBMC"
+}
