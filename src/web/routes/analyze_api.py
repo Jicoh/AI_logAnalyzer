@@ -182,8 +182,9 @@ def open_log_viewer(work_dir: str):
         if tool_type == 'notepad++':
             # Notepad++: 新窗口 + 工程模式打开
             # -multiInst: 强制新开窗口
+            # -nosession: 不加载之前的会话（避免继承已有标签页）
             # -openFoldersAsWorkspace: 以工程形式打开文件夹
-            subprocess.Popen([exe_path, '-multiInst', '-openFoldersAsWorkspace', work_dir], shell=False)
+            subprocess.Popen([exe_path, '-multiInst', '-nosession', '-openFoldersAsWorkspace', work_dir], shell=False)
             logger.info(f"使用 Notepad++ 工程模式打开: {work_dir}")
         else:
             subprocess.Popen([exe_path, work_dir], shell=False)
@@ -1136,7 +1137,7 @@ def test_log_viewer():
 
         try:
             if tool_type == 'notepad++':
-                subprocess.Popen([exe_path, '-multiInst', '-openFoldersAsWorkspace', temp_dir], shell=False)
+                subprocess.Popen([exe_path, '-multiInst', '-nosession', '-openFoldersAsWorkspace', temp_dir], shell=False)
             else:
                 subprocess.Popen([exe_path, temp_dir], shell=False)
             return jsonify({'success': True, 'message': f'已使用 {tool_type} 打开 temp 目录'})

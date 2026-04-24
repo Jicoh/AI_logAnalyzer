@@ -789,10 +789,6 @@ function analyzerApp() {
             if (!wasExpanded) {
                 this.expandedCategories[category] = true;
                 this.activeCategory = category;
-                // 切换类别时，只保留当前类别的选中插件（保留原选择）
-                const categoryPlugins = this.pluginCategories[category]?.plugins || [];
-                const categoryIds = categoryPlugins.map(p => p.id);
-                this.selectedPlugins = this.selectedPlugins.filter(id => categoryIds.includes(id));
             } else {
                 // 点击已展开的类别，折叠它
                 this.activeCategory = null;
