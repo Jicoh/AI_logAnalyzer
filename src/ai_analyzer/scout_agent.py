@@ -104,7 +104,7 @@ class ScoutAgent:
 
     def generate_summary(self, plugin_summary: str, machine_info_from_plugins: Dict,
                          log_files: List[str], file_descriptions: str,
-                         user_prompt: str, max_retries: int = 2) -> Dict[str, Any]:
+                         user_prompt: str, max_retries: int = 4) -> Dict[str, Any]:
         """
         执行侦察任务，生成结构化摘要
         支持JSON解析失败时的重试机制
@@ -160,7 +160,7 @@ class ScoutAgent:
         retry_count = 0
         while summary is None and retry_count < max_retries:
             retry_count += 1
-            logger.warning(f"JSON解析失败(第{retry_count}次重试)")
+            logger.debug(f"JSON解析失败(第{retry_count}次重试)")
 
             # 获取上次的解析错误信息
             result, parse_error = parse_ai_json_response(response_text, ['files_overview', 'key_events'])

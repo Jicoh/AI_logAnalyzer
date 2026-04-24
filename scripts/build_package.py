@@ -41,7 +41,11 @@ def update_spec_file(spec_file, plugin_deps):
         new_imports = existing_imports.rstrip()
         for dep in plugin_deps:
             if dep not in existing_imports:
-                new_imports += f",\n        '{dep}'"
+                # 检查最后一项是否已有逗号
+                if new_imports.rstrip().endswith(','):
+                    new_imports += f"\n        '{dep}'"
+                else:
+                    new_imports += f",\n        '{dep}'"
         content = content.replace(match.group(0), f"hiddenimports=[{new_imports}]")
 
     # 从 excludes 移除插件依赖

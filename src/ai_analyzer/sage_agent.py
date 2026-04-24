@@ -250,7 +250,7 @@ class SageAgent:
                             knowledge_content, user_prompt)
 
     def analyze(self, plugin_result: Dict, log_content: str, machine_info: Dict,
-                knowledge_content: str, user_prompt: str, max_retries: int = 2) -> Dict[str, Any]:
+                knowledge_content: str, user_prompt: str, max_retries: int = 4) -> Dict[str, Any]:
         """
         执行分析任务，输出 HTML 报告
         支持JSON解析失败时的重试机制
@@ -322,7 +322,7 @@ class SageAgent:
         retry_count = 0
         while result is None and retry_count < max_retries:
             retry_count += 1
-            logger.warning(f"JSON解析失败(第{retry_count}次重试)，错误: {parse_error}")
+            logger.debug(f"JSON解析失败(第{retry_count}次重试)")
 
             # 记录本次失败的交互
             retry_interactions.append({

@@ -16,7 +16,7 @@ def get_logger(name: str = 'ai_log_analyzer') -> logging.Logger:
     """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter('[%(levelname)s] %(asctime)s %(name)s: %(message)s')
         handler.setFormatter(formatter)

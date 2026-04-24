@@ -4,7 +4,6 @@
 
 import os
 import json
-import tempfile
 import subprocess
 from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
@@ -110,7 +109,6 @@ def allowed_log_file(filename):
 def resolve_shortcut(lnk_path: str) -> str:
     """解析 Windows 快捷方式(.lnk)文件，获取实际目标路径。"""
     try:
-        import subprocess
         result = subprocess.run(
             ['powershell', '-command',
              f"(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk_path}').TargetPath"],
@@ -246,7 +244,6 @@ def analyze_stream():
 
             # 根据文件类型处理，确定分析路径
             file_category = get_file_category(filename)
-            all_log_content = ""
             log_file_paths = []  # 用于AI分析读取日志内容
             analysis_path = None  # 用于插件分析的路径
 
@@ -279,11 +276,6 @@ def analyze_stream():
                 log_file_paths = [uploaded_file_path]
                 # 插件分析使用文件路径
                 analysis_path = uploaded_file_path
-
-            # 读取所有日志内容（用于AI分析）
-            for log_path in log_file_paths:
-                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    all_log_content += f.read() + "\n"
 
             # Get plugin manager
             plugin_manager = get_plugin_manager_with_custom()
@@ -625,12 +617,6 @@ def analyze_local_stream():
                 if not log_file_paths:
                     yield generate_sse_event({'stage': 'error', 'message': '未找到日志文件'})
                     return
-
-                # 读取日志内容用于 AI 分析
-                all_log_content = ""
-                for log_path in log_file_paths:
-                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        all_log_content += f.read() + "\n"
 
                 # 选择插件
                 selected_plugins = []

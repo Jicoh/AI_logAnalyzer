@@ -14,7 +14,8 @@ python web_app.py --port 9000 --host 0.0.0.0  # Custom port/host
 python web_app.py --no-debug         # Disable debug mode
 
 # Run tests
-pytest tests/
+pytest tests/                          # Run all tests
+pytest tests/test_json_parser.py -v    # Run single test with verbose output
 
 # CLI usage
 python main.py config set api.base_url <url>
@@ -46,6 +47,13 @@ The AI analysis uses a two-stage agent system:
 - **Sage Agent** (`sage_agent.py`): Deep analysis - generates comprehensive HTML report with problem analysis and solutions
 - **Agent Coordinator** (`agent_coordinator.py`): Orchestrates Scout → Sage flow, extracts plugin summary, manages knowledge retrieval
 
+#### AI Retry & Fallback Mechanism
+Both agents implement robust error handling:
+- **JSON Retry**: When AI returns malformed JSON, agents retry up to 4 times with correction prompts
+- **Scout Fallback**: If all retries fail, generates default summary analyzing all files
+- **Sage Degradation**: If JSON parsing fails after retries, falls back to direct HTML generation mode
+- **Error HTML**: Both agents can generate error HTML reports when analysis fails completely
+
 ### Key Modules
 
 | Module | Location | Purpose |
@@ -64,6 +72,9 @@ The AI analysis uses a two-stage agent system:
 | Custom Plugins | `custom_plugins/` | User-defined plugins |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
 
+#### SSE Streaming
+Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`), allowing real-time progress updates during long-running AI analysis.
+
 ### Plugin System
 - Plugins extend log analysis capabilities
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
@@ -73,6 +84,16 @@ The AI analysis uses a two-stage agent system:
 - `log_path` can be a file path or a directory path (for archives)
 - Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
+
+#### Section Types
+Plugins can return multiple section types in `AnalysisResult.sections`:
+- `stats` - Statistics overview with items (label, value, unit, severity)
+- `table` - Data table with columns and rows
+- `timeline` - Chronological events
+- `cards` - Card-based display for grouped info
+- `chart` - Bar/pie/line charts
+- `search_box` - Searchable data list
+- `raw` - Custom JSON data
 
 #### Plugin Development
 

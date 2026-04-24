@@ -23,6 +23,10 @@ import json
 import urllib.request
 import urllib.parse
 
+from src.utils import get_logger
+
+logger = get_logger('entry_point')
+
 # 添加路径
 if getattr(sys, 'frozen', False):
     # exe运行时
@@ -71,7 +75,7 @@ def write_lock_file(port, pid):
                 'timestamp': time.time()
             }, f)
     except Exception as e:
-        print(f"写入锁文件失败: {e}")
+        logger.warning(f"写入锁文件失败: {e}")
 
 
 def remove_lock_file():
@@ -260,7 +264,7 @@ def run_web(args):
             try:
                 webbrowser.open(url)
             except Exception as e:
-                print(f"打开浏览器失败: {e}")
+                logger.warning(f"打开浏览器失败: {e}")
 
         threading.Thread(target=open_browser, daemon=True).start()
 
@@ -285,7 +289,7 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        print(f"启动失败: {e}")
+        logger.error(f"启动失败: {e}")
         import traceback
         traceback.print_exc()
         # 如果是打包后运行，等待用户按键
