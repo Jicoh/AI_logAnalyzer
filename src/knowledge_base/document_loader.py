@@ -6,6 +6,17 @@
 import os
 import re
 
+# 顶层导入，确保 PyInstaller 正确打包
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
+
 
 class DocumentLoader:
     """文档加载器，支持多种格式"""
@@ -62,9 +73,7 @@ class DocumentLoader:
 
     def load_pdf(self, file_path):
         """加载PDF文件"""
-        try:
-            from pypdf import PdfReader
-        except ImportError:
+        if PdfReader is None:
             raise ImportError("请安装pypdf: pip install pypdf")
 
         reader = PdfReader(file_path)
@@ -77,9 +86,7 @@ class DocumentLoader:
 
     def load_docx(self, file_path):
         """加载Word文档"""
-        try:
-            from docx import Document
-        except ImportError:
+        if Document is None:
             raise ImportError("请安装python-docx: pip install python-docx")
 
         doc = Document(file_path)
