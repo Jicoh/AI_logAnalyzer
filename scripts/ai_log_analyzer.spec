@@ -31,6 +31,7 @@ a = Analysis(
         (os.path.join(project_root, 'plugins/builtin'), 'plugins/builtin'),
         (os.path.join(project_root, 'plugins/renderer'), 'plugins/renderer'),
         (os.path.join(project_root, 'plugins/README.md'), 'plugins'),
+        (os.path.join(project_root, 'plugins/plugin_dependencies.json'), 'plugins'),
         # 自定义插件目录（空目录占位）
         (os.path.join(project_root, 'custom_plugins/__init__.py'), 'custom_plugins'),
     ],

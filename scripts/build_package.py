@@ -13,6 +13,51 @@ import os
 import shutil
 import subprocess
 import sys
+import json
+import re
+
+
+def load_plugin_dependencies(project_root):
+    """读取插件依赖配置"""
+    deps_file = os.path.join(project_root, 'plugins', 'plugin_dependencies.json')
+    if os.path.exists(deps_file):
+        with open(deps_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            return config.get('dependencies', [])
+    return []
+
+
+def update_spec_file(spec_file, plugin_deps):
+    """动态更新 .spec 文件，添加插件依赖到 hiddenimports，从 excludes 移除"""
+    with open(spec_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 添加插件依赖到 hiddenimports
+    hiddenimports_pattern = r'hiddenimports=\[(.*?)\]'
+    match = re.search(hiddenimports_pattern, content, re.DOTALL)
+    if match:
+        existing_imports = match.group(1)
+        # 添加新依赖（避免重复）
+        new_imports = existing_imports.rstrip()
+        for dep in plugin_deps:
+            if dep not in existing_imports:
+                new_imports += f",\n        '{dep}'"
+        content = content.replace(match.group(0), f"hiddenimports=[{new_imports}]")
+
+    # 从 excludes 移除插件依赖
+    excludes_pattern = r'excludes=\[(.*?)\]'
+    match = re.search(excludes_pattern, content, re.DOTALL)
+    if match:
+        existing_excludes = match.group(1)
+        # 移除插件依赖
+        new_excludes = existing_excludes
+        for dep in plugin_deps:
+            # 移除单行模式
+            new_excludes = re.sub(rf"^\s*'{dep}',?\s*\n", '', new_excludes, flags=re.MULTILINE)
+        content = content.replace(match.group(0), f"excludes=[{new_excludes}]")
+
+    with open(spec_file, 'w', encoding='utf-8') as f:
+        f.write(content)
 
 
 def main():
@@ -33,15 +78,27 @@ def main():
         subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
 
     # 清理PyInstaller缓存
-    print("\n[0/8] 清理PyInstaller缓存...")
+    print("\n[0/9] 清理PyInstaller缓存...")
     cache_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'pyinstaller')
     if cache_dir and os.path.exists(cache_dir):
         shutil.rmtree(cache_dir)
         print(f"  删除: {cache_dir}")
 
-    # 2. 运行PyInstaller
-    print("\n[1/8] 运行PyInstaller...")
     spec_file = os.path.join(project_root, 'scripts', 'ai_log_analyzer.spec')
+
+    # 读取插件依赖并更新 .spec 文件
+    print("\n[1/9] 读取插件依赖配置...")
+    plugin_deps = load_plugin_dependencies(project_root)
+    if plugin_deps:
+        print(f"  发现依赖: {plugin_deps}")
+        print("  更新 .spec 文件...")
+        update_spec_file(spec_file, plugin_deps)
+        print("  已添加到 hiddenimports 并从 excludes 移除")
+    else:
+        print("  无额外插件依赖")
+
+    # 2. 运行PyInstaller
+    print("\n[2/9] 运行PyInstaller...")
     if not os.path.exists(spec_file):
         print(f"错误: 找不到spec文件 {spec_file}")
         sys.exit(1)
@@ -60,7 +117,7 @@ def main():
     print("PyInstaller 打包完成")
 
     # 移动exe到最终目录
-    print("\n[2/8] 移动exe到最终目录...")
+    print("\n[3/9] 移动exe到最终目录...")
     os.makedirs(dist_dir, exist_ok=True)
     final_exe_path = os.path.join(dist_dir, 'ai_log_analyzer.exe')
     if os.path.exists(exe_path):
@@ -71,7 +128,7 @@ def main():
         sys.exit(1)
 
     # 3. 复制用户可修改的配置文件到dist目录
-    print("\n[3/8] 复制配置文件...")
+    print("\n[4/9] 复制配置文件...")
     config_src = os.path.join(project_root, 'config')
     config_dst = os.path.join(dist_dir, 'config')
     os.makedirs(config_dst, exist_ok=True)
@@ -83,7 +140,7 @@ def main():
             print(f"  复制: {f}")
 
     # 4. 创建空的数据目录
-    print("\n[4/8] 创建数据目录...")
+    print("\n[5/9] 创建数据目录...")
     data_dirs = ['uploads', 'temp', 'analysis_output']
     for d in data_dirs:
         data_path = os.path.join(dist_dir, 'data', d)
@@ -91,7 +148,7 @@ def main():
         print(f"  创建: data/{d}")
 
     # 5. 创建空的document和custom_plugins目录
-    print("\n[5/8] 创建其他目录...")
+    print("\n[6/9] 创建其他目录...")
     os.makedirs(os.path.join(dist_dir, 'document'), exist_ok=True)
     print("  创建: document/")
 
@@ -105,7 +162,7 @@ def main():
     print("  创建: custom_plugins/")
 
     # 6. 复制bat脚本（使用中文文件名）
-    print("\n[6/8] 复制右键菜单脚本...")
+    print("\n[7/9] 复制右键菜单脚本...")
     scripts_dir = os.path.join(project_root, 'scripts')
 
     register_bat = os.path.join(scripts_dir, '注册右键菜单.bat')
@@ -123,12 +180,12 @@ def main():
         print("  警告: 找不到 取消右键菜单.bat")
 
     # 7. 创建使用说明
-    print("\n[7/8] 创建使用说明...")
+    print("\n[8/9] 创建使用说明...")
     create_usage_file(dist_dir)
     print("  创建: 使用说明.txt")
 
     # 8. 清理打包临时文件
-    print("\n[8/8] 清理临时文件...")
+    print("\n[9/9] 清理临时文件...")
     build_dir = os.path.join(project_root, 'build')
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
@@ -220,6 +277,13 @@ def create_usage_file(dist_dir):
     "description": "插件描述",
     "plugin_type": "CloudBMC"
 }
+
+【重要】插件依赖声明:
+如果插件需要额外的Python模块（如 pandas、numpy 等），需要在打包前声明依赖：
+1. 编辑 plugins/plugin_dependencies.json 文件
+2. 在 dependencies 数组中添加需要的模块名
+   例如: {"dependencies": ["pandas", "numpy", "openpyxl"]}
+3. 运行打包脚本，依赖模块会被自动包含在 exe 中
 
 ================================================================================
 五、知识库
