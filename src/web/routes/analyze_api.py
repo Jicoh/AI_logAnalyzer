@@ -1210,6 +1210,8 @@ def update_plugin_selection():
             manager.set('enable_ai', data['enable_ai'])
         if 'ai_selection_mode' in data:
             manager.set('ai_selection_mode', data['ai_selection_mode'])
+        if 'last_selected_category' in data:
+            manager.set('last_selected_category', data['last_selected_category'])
 
         manager.save()
 

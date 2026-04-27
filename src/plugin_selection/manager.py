@@ -11,11 +11,12 @@ class PluginSelectionManager:
     """插件选择和AI设置管理器"""
 
     DEFAULT_CONFIG = {
-        "selected_plugins": ["log_parser"],
+        "selected_plugins": [],
         "selected_kb_id": "",
         "selected_log_rules_id": "",
         "enable_ai": True,
-        "ai_selection_mode": False
+        "ai_selection_mode": False,
+        "last_selected_category": ""
     }
 
     def __init__(self, config_path=None):
@@ -30,7 +31,12 @@ class PluginSelectionManager:
         """加载配置文件"""
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                config = json.load(f)
+            # 合并缺失的默认字段
+            for key, value in self.DEFAULT_CONFIG.items():
+                if key not in config:
+                    config[key] = value
+            return config
         return self.create_default_config()
 
     def create_default_config(self):

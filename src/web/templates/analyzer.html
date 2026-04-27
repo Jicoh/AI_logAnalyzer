@@ -82,12 +82,20 @@
                 </div>
                 <div class="card-body p-2">
                     <!-- 当前类型提示 -->
-                    <div class="alert alert-info py-2 mb-2" x-show="activeCategory && !aiSelectionMode">
-                        <small><i class="bi bi-info-circle"></i> 当前分析类型: <strong x-text="activeCategory"></strong></small>
+                    <div class="alert alert-info py-2 mb-2" x-show="lastSelectedCategory && !aiSelectionMode">
+                        <small>
+                            <i class="bi bi-info-circle"></i>
+                            当前分析类型: <strong x-text="lastSelectedCategory"></strong>
+                            <span class="ms-1" x-text="'(' + selectedPlugins.length + '个插件)'"></span>
+                        </small>
                     </div>
                     <!-- 未选择插件提示 -->
-                    <div class="alert alert-warning py-2 mb-2" x-show="activeCategory && !hasSelectedPluginsInActiveCategory && !aiSelectionMode">
+                    <div class="alert alert-warning py-2 mb-2" x-show="lastSelectedCategory && !hasSelectedPluginsInActiveCategory && !aiSelectionMode">
                         <small><i class="bi bi-exclamation-triangle"></i> 当前类型下未选择任何插件</small>
+                    </div>
+                    <!-- 无选中类型提示 -->
+                    <div class="alert alert-warning py-2 mb-2" x-show="!lastSelectedCategory && selectedPlugins.length === 0 && !aiSelectionMode">
+                        <small><i class="bi bi-exclamation-triangle"></i> 请选择插件类型并勾选插件</small>
                     </div>
                     <!-- AI模式提示 -->
                     <div class="alert alert-info py-2 mb-2" x-show="aiSelectionMode">
@@ -123,7 +131,8 @@
                                                :id="'plugin-' + plugin.id"
                                                :value="plugin.id"
                                                :disabled="aiSelectionMode"
-                                               x-model="selectedPlugins">
+                                               x-model="selectedPlugins"
+                                               @change="onPluginCheckboxChange(category)">
                                         <label class="form-check-label d-inline-block" :for="'plugin-' + plugin.id"
                                                style="max-width: calc(100% - 20px);">
                                             <span x-text="plugin.name" class="fw-medium"></span>
@@ -199,18 +208,23 @@
                 </div>
             </div>
 
-            <button class="btn btn-primary w-100" @click="startAnalysis()"
-                    :disabled="(uploadMode === 'single' && !logFile) || (uploadMode === 'folder' && folderFiles.length === 0) || (!aiSelectionMode && !hasSelectedPluginsInActiveCategory) || analyzing">
-                <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
-                <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
-            </button>
-        </div>
+            <!-- 静态分析按钮区域（原始位置） -->
+            <div class="mb-4" id="staticActionBar" x-show="!completed || analyzing">
+                <button class="btn btn-primary w-100" @click="startAnalysis()"
+                        :disabled="(uploadMode === 'single' && !logFile && !localPath) ||
+                                   (uploadMode === 'folder' && folderFiles.length === 0 && !localPath) ||
+                                   (!aiSelectionMode && !hasSelectedPluginsInActiveCategory) ||
+                                   analyzing">
+                    <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
+                    <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
+                </button>
+            </div>
 
-        <!-- Right Panel: Results -->
-        <div class="col-lg-9">
-            <!-- Status -->
-            <div class="card mb-4" x-show="analyzing || completed || wasInterrupted" x-cloak>
-                <div class="card-header d-flex justify-content-between align-items-center">
+            <!-- Right Panel: Results -->
+            <div class="col-lg-9">
+                <!-- Status -->
+                <div class="card mb-4" x-show="analyzing || completed || wasInterrupted" x-cloak>
+                    <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-activity"></i> 分析状态</span>
                     <span class="badge" :class="statusBadgeClass" x-text="statusText"></span>
                 </div>
@@ -365,14 +379,24 @@
                 </div>
             </div>
 
-            <!-- Empty State -->
-            <div class="card" x-show="!analyzing && !completed">
-                <div class="card-body text-center py-5 text-muted">
-                    <i class="bi bi-file-earmark-text display-4"></i>
-                    <p class="mt-3">请上传日志文件并点击"开始分析"</p>
-                </div>
-            </div>
-        </div>
+                    </div>
+    </div>
+
+    <!-- 悬浮分析按钮（仅当静态按钮不在视口时显示） -->
+    <div class="floating-action-bar"
+         id="floatingActionBar"
+         x-show="(!completed || analyzing) && showFloatingButton"
+         x-transition:enter="fade-in"
+         x-transition:leave="fade-out"
+         :style="floatingButtonStyle">
+        <button class="btn btn-primary" @click="startAnalysis()"
+                :disabled="(uploadMode === 'single' && !logFile && !localPath) ||
+                           (uploadMode === 'folder' && folderFiles.length === 0 && !localPath) ||
+                           (!aiSelectionMode && !hasSelectedPluginsInActiveCategory) ||
+                           analyzing">
+            <span x-show="analyzing" class="spinner-border spinner-border-sm"></span>
+            <span x-text="analyzing ? '分析中...' : '开始分析'"></span>
+        </button>
     </div>
 </div>
 {% endblock %}
@@ -397,7 +421,8 @@ function analyzerApp() {
         pluginCategories: {},
         expandedCategories: {},
         activeCategory: null,
-        selectedPlugins: ['log_parser'],
+        lastSelectedCategory: '',
+        selectedPlugins: [],
         kbList: [],
         selectedKbId: '',
         logRulesList: [],
@@ -424,6 +449,10 @@ function analyzerApp() {
         aiResultFullscreen: false,
         batchModalFullscreen: false,
         pollingTimer: null,
+        // 悬浮按钮状态
+        showFloatingButton: false,
+        intersectionObserver: null,
+        floatingButtonStyle: {},
 
         init() {
             this.loadPlugins();
@@ -433,10 +462,52 @@ function analyzerApp() {
             this.restoreState();
             this.checkAutoAnalyze();
             this.startPollingPendingAnalysis();
+            // 延迟初始化 IntersectionObserver，确保 DOM 已渲染
+            setTimeout(() => this.initIntersectionObserver(), 100);
+            // 监听窗口resize更新悬浮按钮位置
+            window.addEventListener('resize', () => this.updateFloatingButtonPosition());
+        },
+
+        updateFloatingButtonPosition() {
+            // 获取左侧配置面板的位置（col-lg-3）
+            const leftPanel = document.querySelector('.col-lg-3');
+            if (!leftPanel) return;
+
+            const rect = leftPanel.getBoundingClientRect();
+            this.floatingButtonStyle = {
+                position: 'fixed',
+                bottom: '20px',
+                left: rect.left + 'px',
+                width: rect.width + 'px'
+            };
+        },
+
+        initIntersectionObserver() {
+            const staticBar = document.getElementById('staticActionBar');
+            if (!staticBar) return;
+
+            // 先更新位置
+            this.updateFloatingButtonPosition();
+
+            this.intersectionObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    // 静态按钮在视口内时，隐藏悬浮按钮
+                    this.showFloatingButton = !entry.isIntersecting;
+                    // 每次显示悬浮按钮时更新位置
+                    if (this.showFloatingButton) {
+                        this.updateFloatingButtonPosition();
+                    }
+                });
+            }, {
+                threshold: 0.1,
+                rootMargin: '0px 0px -60px 0px'
+            });
+
+            this.intersectionObserver.observe(staticBar);
         },
 
         startPollingPendingAnalysis() {
-            // 每30秒检查是否有新的待分析路径
+            // 每2秒检查是否有新的待分析路径
             this.pollingTimer = setInterval(async () => {
                 // 分析中时不轮询
                 if (this.analyzing) return;
@@ -663,11 +734,12 @@ function analyzerApp() {
                 const data = await response.json();
                 if (data.success) {
                     const config = data.data;
-                    this.selectedPlugins = config.selected_plugins || ['log_parser'];
+                    this.selectedPlugins = config.selected_plugins || [];
                     this.selectedKbId = config.selected_kb_id || '';
                     this.selectedLogRulesId = config.selected_log_rules_id || '';
                     this.enableAi = config.enable_ai !== undefined ? config.enable_ai : true;
                     this.aiSelectionMode = config.ai_selection_mode !== undefined ? config.ai_selection_mode : false;
+                    this.lastSelectedCategory = config.last_selected_category || '';
                 }
             } catch (error) {
                 console.error('Failed to load plugin selection:', error);
@@ -684,7 +756,8 @@ function analyzerApp() {
                         selected_kb_id: this.selectedKbId,
                         selected_log_rules_id: this.selectedLogRulesId,
                         enable_ai: this.enableAi,
-                        ai_selection_mode: this.aiSelectionMode
+                        ai_selection_mode: this.aiSelectionMode,
+                        last_selected_category: this.lastSelectedCategory
                     })
                 });
                 const data = await response.json();
@@ -785,12 +858,14 @@ function analyzerApp() {
             for (const cat of Object.keys(this.expandedCategories)) {
                 this.expandedCategories[cat] = false;
             }
-            // 如果原来是折叠的，则展开
+            // 如果原来是折叠的，则展开并更新 lastSelectedCategory
             if (!wasExpanded) {
                 this.expandedCategories[category] = true;
                 this.activeCategory = category;
+                this.lastSelectedCategory = category;
+                this.savePluginSelection();
             } else {
-                // 点击已展开的类别，折叠它
+                // 点击已展开的类别，折叠它但保留 lastSelectedCategory
                 this.activeCategory = null;
             }
         },
@@ -802,12 +877,22 @@ function analyzerApp() {
                     this.selectedPlugins.push(p.id);
                 }
             });
+            this.lastSelectedCategory = category;
+            this.savePluginSelection();
         },
 
         deselectAllInCategory(category) {
             const plugins = this.pluginCategories[category]?.plugins || [];
             const ids = plugins.map(p => p.id);
             this.selectedPlugins = this.selectedPlugins.filter(id => !ids.includes(id));
+        },
+
+        onPluginCheckboxChange(category) {
+            // 当勾选插件时更新 lastSelectedCategory
+            if (this.selectedPlugins.length > 0) {
+                this.lastSelectedCategory = category;
+                this.savePluginSelection();
+            }
         },
 
         get statusBadgeClass() {
@@ -823,8 +908,8 @@ function analyzerApp() {
         },
 
         get hasSelectedPluginsInActiveCategory() {
-            if (!this.activeCategory) return false;
-            const categoryPlugins = this.pluginCategories[this.activeCategory]?.plugins || [];
+            if (!this.lastSelectedCategory) return false;
+            const categoryPlugins = this.pluginCategories[this.lastSelectedCategory]?.plugins || [];
             const categoryIds = categoryPlugins.map(p => p.id);
             return this.selectedPlugins.some(id => categoryIds.includes(id));
         },
@@ -839,19 +924,27 @@ function analyzerApp() {
                     for (const cat of Object.keys(data.data)) {
                         this.expandedCategories[cat] = false;
                     }
-                    // 只展开第一个有插件的类别
-                    for (const cat of Object.keys(data.data)) {
-                        if (data.data[cat].plugins.length > 0) {
-                            this.expandedCategories[cat] = true;
-                            this.activeCategory = cat;
-                            break;
+                    // 如果有 lastSelectedCategory，展开该类型
+                    if (this.lastSelectedCategory && data.data[this.lastSelectedCategory]) {
+                        this.expandedCategories[this.lastSelectedCategory] = true;
+                        this.activeCategory = this.lastSelectedCategory;
+                    } else if (this.selectedPlugins.length > 0) {
+                        // 如果有选中插件但没有 lastSelectedCategory，根据选中插件推断类型
+                        for (const [cat, catData] of Object.entries(data.data)) {
+                            const catPluginIds = catData.plugins.map(p => p.id);
+                            if (this.selectedPlugins.some(id => catPluginIds.includes(id))) {
+                                this.expandedCategories[cat] = true;
+                                this.activeCategory = cat;
+                                this.lastSelectedCategory = cat;
+                                break;
+                            }
                         }
-                    }
-                    // Only auto-select if no saved state
-                    if (this.selectedPlugins.length === 0) {
-                        for (const cat of Object.values(data.data)) {
-                            if (cat.plugins.length > 0) {
-                                this.selectedPlugins.push(cat.plugins[0].id);
+                    } else {
+                        // 没有选中插件，展开第一个有插件的类别
+                        for (const cat of Object.keys(data.data)) {
+                            if (data.data[cat].plugins.length > 0) {
+                                this.expandedCategories[cat] = true;
+                                this.activeCategory = cat;
                                 break;
                             }
                         }
@@ -1322,5 +1415,32 @@ function analyzerApp() {
     border-radius: 0.25rem;
 }
 [x-cloak] { display: none !important; }
+
+/* 悬浮分析按钮 - 无背景，与静态按钮位置一致 */
+.floating-action-bar {
+    z-index: 1050;
+}
+
+.floating-action-bar .btn {
+    width: 100%;
+}
+
+/* 悬浮按钮进入/离开动画 */
+.fade-in {
+    animation: fadeIn 0.2s ease-out;
+}
+.fade-out {
+    animation: fadeOut 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(10px); }
+}
 </style>
 {% endblock %}
