@@ -15,6 +15,7 @@ def register_routes(app):
     from src.web.routes.log_viewer_api import log_viewer_bp
     from src.web.routes.auth_api import auth_bp
     from src.web.routes.admin_api import admin_bp
+    from src.web.routes.feedback_api import feedback_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(kb_bp)
@@ -25,3 +26,4 @@ def register_routes(app):
     app.register_blueprint(log_viewer_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(feedback_bp)

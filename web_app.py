@@ -67,6 +67,7 @@ def create_app():
 
     # 初始化数据库
     from src.models.user import db
+    from src.models.feedback import Feedback  # 确保 Feedback 表被创建
     db.init_app(app)
 
     # 初始化 Flask-Login

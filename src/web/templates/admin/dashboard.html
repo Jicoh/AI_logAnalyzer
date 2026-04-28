@@ -39,8 +39,8 @@
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
-                    <h5 class="card-title text-muted">总存储使用</h5>
-                    <h2 x-text="stats.storage?.total_users_storage_formatted || '0 B'">0 B</h2>
+                    <h5 class="card-title text-muted">待处理意见</h5>
+                    <h2 class="text-warning" x-text="feedbackStats.pending || 0">0</h2>
                 </div>
             </div>
         </div>
@@ -107,6 +107,46 @@
         </div>
     </div>
 
+    <!-- 意见管理 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-chat-dots"></i> 意见管理
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>用户</th>
+                        <th>意见内容</th>
+                        <th>提交时间</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="fb in feedbacks" :key="fb.id">
+                        <tr>
+                            <td x-text="fb.employee_id"></td>
+                            <td>
+                                <span x-text="fb.content.length > 50 ? fb.content.substring(0, 50) + '...' : fb.content"></span>
+                            </td>
+                            <td x-text="fb.created_at"></td>
+                            <td>
+                                <span class="badge" :class="fb.status === 'replied' ? 'bg-success' : 'bg-warning'"
+                                      x-text="fb.status === 'replied' ? '已回复' : '待处理'"></span>
+                            </td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm" @click="showReplyModal(fb)">
+                                    <i class="bi bi-reply"></i> 回复
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- 新增用户模态框 -->
     <div class="modal" :class="showCreateModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog">
@@ -161,6 +201,45 @@
         </div>
     </div>
 
+    <!-- 回复意见模态框 -->
+    <div class="modal" :class="showFeedbackReplyModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">回复意见</h5>
+                    <button type="button" class="btn-close" @click="showFeedbackReplyModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>用户: <strong x-text="selectedFeedback?.employee_id"></strong></p>
+                    <p>提交时间: <span x-text="selectedFeedback?.created_at"></span></p>
+                    <div class="border rounded p-3 mb-3">
+                        <strong>原意见：</strong>
+                        <br>
+                        <span x-text="selectedFeedback?.content"></span>
+                    </div>
+                    <div x-show="selectedFeedback?.status === 'replied'" class="alert alert-info">
+                        <strong>已回复：</strong>
+                        <br>
+                        <span x-text="selectedFeedback?.admin_reply"></span>
+                        <br>
+                        <small class="text-muted" x-text="'回复时间: ' + selectedFeedback?.replied_at"></small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">回复内容</label>
+                        <textarea class="form-control" x-model="feedbackReplyContent" rows="4" placeholder="请输入回复内容..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showFeedbackReplyModal = false">取消</button>
+                    <button class="btn btn-primary" @click="replyFeedback()" :disabled="feedbackReplySubmitting">
+                        <span x-show="feedbackReplySubmitting" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="feedbackReplySubmitting ? '提交中...' : '提交回复'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
@@ -180,16 +259,23 @@ function adminApp() {
     return {
         users: [],
         stats: {},
+        feedbacks: [],
+        feedbackStats: {},
         showCreateModal: false,
         showQuotaModal: false,
+        showFeedbackReplyModal: false,
         newUser: { employee_id: '', password: '123456', is_admin: false },
         selectedUser: null,
         newQuotaMb: 300,
+        selectedFeedback: null,
+        feedbackReplyContent: '',
+        feedbackReplySubmitting: false,
         toast: { show: false, type: '', title: '', message: '' },
 
         init() {
             this.loadUsers();
             this.loadStats();
+            this.loadFeedbacks();
         },
 
         showToast(type, title, message) {
@@ -220,6 +306,28 @@ function adminApp() {
                 }
             } catch (e) {
                 console.error('Load stats failed:', e);
+            }
+        },
+
+        async loadFeedbacks() {
+            try {
+                const response = await fetch('/api/admin/feedback');
+                const data = await response.json();
+                if (data.success) {
+                    this.feedbacks = data.data;
+                }
+            } catch (e) {
+                console.error('Load feedbacks failed:', e);
+            }
+
+            try {
+                const response = await fetch('/api/admin/feedback/stats');
+                const data = await response.json();
+                if (data.success) {
+                    this.feedbackStats = data.data;
+                }
+            } catch (e) {
+                console.error('Load feedback stats failed:', e);
             }
         },
 
@@ -319,6 +427,41 @@ function adminApp() {
                 }
             } catch (e) {
                 this.showToast('error', '错误', '操作失败');
+            }
+        },
+
+        showReplyModal(fb) {
+            this.selectedFeedback = fb;
+            this.feedbackReplyContent = fb.admin_reply || '';
+            this.showFeedbackReplyModal = true;
+        },
+
+        async replyFeedback() {
+            if (!this.feedbackReplyContent.trim()) {
+                this.showToast('error', '错误', '回复内容不能为空');
+                return;
+            }
+
+            this.feedbackReplySubmitting = true;
+
+            try {
+                const response = await fetch(`/api/admin/feedback/${this.selectedFeedback.id}/reply`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reply: this.feedbackReplyContent })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '回复已提交');
+                    this.showFeedbackReplyModal = false;
+                    this.loadFeedbacks();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '回复失败');
+            } finally {
+                this.feedbackReplySubmitting = false;
             }
         }
     };

@@ -100,6 +100,67 @@
                     </form>
                 </div>
             </div>
+
+            <!-- 意见反馈 -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-chat-dots"></i> 意见反馈</span>
+                    <button class="btn btn-primary btn-sm" @click="showFeedbackModal = true">
+                        <i class="bi bi-plus"></i> 提交意见
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div x-show="myFeedbacks.length === 0" class="text-muted text-center py-3">
+                        暂无已提交的意见
+                    </div>
+                    <div x-show="myFeedbacks.length > 0">
+                        <template x-for="fb in myFeedbacks" :key="fb.id">
+                            <div class="border rounded p-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <small class="text-muted" x-text="fb.created_at"></small>
+                                    <span class="badge"
+                                          :class="fb.status === 'replied' ? 'bg-success' : 'bg-warning'"
+                                          x-text="fb.status === 'replied' ? '已回复' : '待处理'"></span>
+                                </div>
+                                <div class="mb-2" x-text="fb.content"></div>
+                                <div x-show="fb.status === 'replied' && fb.admin_reply" class="alert alert-info mb-0">
+                                    <strong>管理员回复：</strong>
+                                    <span x-text="fb.admin_reply"></span>
+                                    <br>
+                                    <small class="text-muted" x-text="'回复时间: ' + fb.replied_at"></small>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提交意见模态框 -->
+    <div class="modal" :class="showFeedbackModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">提交意见</h5>
+                    <button type="button" class="btn-close" @click="showFeedbackModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">意见内容</label>
+                        <textarea class="form-control" x-model="feedbackContent"
+                                  rows="4" placeholder="请输入您的意见或建议..." maxlength="2000"></textarea>
+                        <small class="text-muted" x-text="feedbackContent.length + '/2000'"></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showFeedbackModal = false">取消</button>
+                    <button class="btn btn-primary" @click="submitFeedback()" :disabled="feedbackSubmitting">
+                        <span x-show="feedbackSubmitting" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="feedbackSubmitting ? '提交中...' : '提交'"></span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -134,10 +195,15 @@ function profileApp() {
         error: '',
         success: '',
         toast: { show: false, type: '', title: '', message: '' },
+        showFeedbackModal: false,
+        feedbackContent: '',
+        feedbackSubmitting: false,
+        myFeedbacks: [],
 
         init() {
             this.loadUserInfo();
             this.loadQuota();
+            this.loadMyFeedbacks();
         },
 
         async loadUserInfo() {
@@ -161,6 +227,18 @@ function profileApp() {
                 }
             } catch (e) {
                 console.error('Failed to load quota:', e);
+            }
+        },
+
+        async loadMyFeedbacks() {
+            try {
+                const response = await fetch('/api/feedback/my');
+                const data = await response.json();
+                if (data.success) {
+                    this.myFeedbacks = data.data;
+                }
+            } catch (e) {
+                console.error('Failed to load feedbacks:', e);
             }
         },
 
@@ -206,6 +284,37 @@ function profileApp() {
             }
         },
 
+        async submitFeedback() {
+            if (!this.feedbackContent.trim()) {
+                this.showToast('error', '错误', '意见内容不能为空');
+                return;
+            }
+
+            this.feedbackSubmitting = true;
+
+            try {
+                const response = await fetch('/api/feedback/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: this.feedbackContent })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '意见已提交');
+                    this.showFeedbackModal = false;
+                    this.feedbackContent = '';
+                    this.loadMyFeedbacks();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '提交失败，请重试');
+            } finally {
+                this.feedbackSubmitting = false;
+            }
+        },
+
         async logout() {
             if (!confirm('确定要退出登录吗？')) {
                 return;
@@ -222,6 +331,7 @@ function profileApp() {
 </script>
 
 <style>
+.modal.show { display: block; }
 [x-cloak] { display: none !important; }
 </style>
 {% endblock %}
