@@ -1,4 +1,9 @@
 {
+    "web": {
+        "host": "0.0.0.0",
+        "port": 18888,
+        "debug": false
+    },
     "api": {
         "base_url": "http://127.0.0.1:18000/v1",
         "api_key": "123",

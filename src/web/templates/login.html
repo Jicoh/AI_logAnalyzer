@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - AI Log Analyzer</title>
+    <link href="{{ url_for('static', filename='css/vendor/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+    <script defer src="{{ url_for('static', filename='js/alpine.min.js') }}"></script>
+</head>
+<body>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h2><i class="bi bi-box"></i> AI Log Analyzer</h2>
+            <p class="text-muted">服务器日志分析系统</p>
+        </div>
+
+        <form x-data="loginApp()" @submit.prevent="submitLogin()">
+            <div class="mb-3">
+                <label class="form-label">工号</label>
+                <input type="text" class="form-control" x-model="employee_id"
+                       placeholder="请输入工号" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-control" x-model="password"
+                       placeholder="请输入密码" required>
+            </div>
+
+            <div class="alert alert-danger" x-show="error" x-text="error"></div>
+
+            <div class="d-grid mb-3">
+                <button type="submit" class="btn btn-primary" :disabled="loading">
+                    <span x-show="loading" class="spinner-border spinner-border-sm"></span>
+                    <span x-text="loading ? '登录中...' : '登录'"></span>
+                </button>
+            </div>
+
+            <div class="text-center">
+                <a href="{{ url_for('auth.register') }}">没有账号？点击注册</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function loginApp() {
+    return {
+        employee_id: '',
+        password: '',
+        loading: false,
+        error: '',
+
+        async submitLogin() {
+            this.loading = true;
+            this.error = '';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_id: this.employee_id,
+                        password: this.password
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    window.location.href = '/';
+                } else {
+                    this.error = data.error;
+                }
+            } catch (e) {
+                this.error = '网络错误，请重试';
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+
+<style>
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-card {
+    width: 400px;
+    padding: 40px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h2 {
+    color: #333;
+    margin-bottom: 10px;
+}
+</style>
+</body>
+</html>

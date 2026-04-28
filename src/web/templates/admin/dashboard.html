@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}管理员控制台 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="adminApp()" x-init="init()">
+    <div class="row">
+        <div class="col-12">
+            <h4 class="mb-4"><i class="bi bi-shield-lock"></i> 管理员控制台</h4>
+        </div>
+    </div>
+
+    <!-- 统计概览 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">用户总数</h5>
+                    <h2 x-text="stats.users?.total || 0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">活跃用户</h5>
+                    <h2 class="text-success" x-text="stats.users?.active || 0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">管理员</h5>
+                    <h2 class="text-primary" x-text="stats.users?.admins || 0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">总存储使用</h5>
+                    <h2 x-text="stats.storage?.total_users_storage_formatted || '0 B'">0 B</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户管理 -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-people"></i> 用户管理</span>
+            <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
+                <i class="bi bi-plus"></i> 新增用户
+            </button>
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>工号</th>
+                        <th>角色</th>
+                        <th>状态</th>
+                        <th>注册时间</th>
+                        <th>存储使用</th>
+                        <th>配额</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="user in users" :key="user.id">
+                        <tr>
+                            <td x-text="user.employee_id"></td>
+                            <td>
+                                <span class="badge" :class="user.is_admin ? 'bg-danger' : 'bg-secondary'"
+                                      x-text="user.is_admin ? '管理员' : '普通用户'"></span>
+                            </td>
+                            <td>
+                                <span class="badge" :class="user.is_active ? 'bg-success' : 'bg-warning'"
+                                      x-text="user.is_active ? '正常' : '禁用'"></span>
+                            </td>
+                            <td x-text="user.created_at"></td>
+                            <td>
+                                <span x-text="user.storage_used_formatted"></span>
+                                <span class="text-muted" x-text="'(' + user.storage_percent + '%)'"></span>
+                            </td>
+                            <td x-text="user.storage_quota_formatted"></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" @click="editQuota(user)" title="修改配额">
+                                        <i class="bi bi-sliders"></i>
+                                    </button>
+                                    <button class="btn btn-outline-warning" @click="resetPassword(user)" title="重置密码">
+                                        <i class="bi bi-key"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary"
+                                            :class="user.is_active ? '' : 'active'"
+                                            @click="toggleActive(user)" title="启用/禁用">
+                                        <i class="bi" :class="user.is_active ? 'bi-pause' : 'bi-play'"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 新增用户模态框 -->
+    <div class="modal" :class="showCreateModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增用户</h5>
+                    <button type="button" class="btn-close" @click="showCreateModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">工号</label>
+                        <input type="text" class="form-control" x-model="newUser.employee_id" maxlength="20">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">初始密码</label>
+                        <input type="text" class="form-control" x-model="newUser.password" placeholder="默认: 123456">
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" x-model="newUser.is_admin">
+                        <label class="form-check-label">设为管理员</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showCreateModal = false">取消</button>
+                    <button class="btn btn-primary" @click="createUser()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改配额模态框 -->
+    <div class="modal" :class="showQuotaModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改配额</h5>
+                    <button type="button" class="btn-close" @click="showQuotaModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>用户: <strong x-text="selectedUser?.employee_id"></strong></p>
+                    <p>当前配额: <span x-text="selectedUser?.storage_quota_formatted"></span></p>
+                    <div class="mb-3">
+                        <label class="form-label">新配额 (MB)</label>
+                        <input type="number" class="form-control" x-model="newQuotaMb" min="10">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showQuotaModal = false">取消</button>
+                    <button class="btn btn-primary" @click="updateQuota()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
+            <div class="toast-header" :class="toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'">
+                <strong class="me-auto" x-text="toast.title"></strong>
+                <button type="button" class="btn-close btn-close-white" @click="toast.show = false"></button>
+            </div>
+            <div class="toast-body" x-text="toast.message"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function adminApp() {
+    return {
+        users: [],
+        stats: {},
+        showCreateModal: false,
+        showQuotaModal: false,
+        newUser: { employee_id: '', password: '123456', is_admin: false },
+        selectedUser: null,
+        newQuotaMb: 300,
+        toast: { show: false, type: '', title: '', message: '' },
+
+        init() {
+            this.loadUsers();
+            this.loadStats();
+        },
+
+        showToast(type, title, message) {
+            this.toast = { show: true, type, title, message };
+            setTimeout(() => { this.toast.show = false; }, 3000);
+        },
+
+        async loadUsers() {
+            try {
+                const response = await fetch('/api/admin/users');
+                const data = await response.json();
+                if (data.success) {
+                    this.users = data.data;
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '加载用户列表失败');
+            }
+        },
+
+        async loadStats() {
+            try {
+                const response = await fetch('/api/admin/stats');
+                const data = await response.json();
+                if (data.success) {
+                    this.stats = data.data;
+                }
+            } catch (e) {
+                console.error('Load stats failed:', e);
+            }
+        },
+
+        async createUser() {
+            if (!this.newUser.employee_id) {
+                this.showToast('error', '错误', '工号不能为空');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/users/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newUser)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.showCreateModal = false;
+                    this.newUser = { employee_id: '', password: '123456', is_admin: false };
+                    this.loadUsers();
+                    this.loadStats();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '创建用户失败');
+            }
+        },
+
+        editQuota(user) {
+            this.selectedUser = user;
+            this.newQuotaMb = Math.round(user.storage_quota / 1024 / 1024);
+            this.showQuotaModal = true;
+        },
+
+        async updateQuota() {
+            try {
+                const response = await fetch(`/api/admin/users/${this.selectedUser.id}/quota`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quota_mb: this.newQuotaMb })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.showQuotaModal = false;
+                    this.loadUsers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '修改配额失败');
+            }
+        },
+
+        async resetPassword(user) {
+            if (!confirm(`确定要重置用户 ${user.employee_id} 的密码吗？`)) return;
+
+            const newPassword = prompt('请输入新密码（默认123456）：', '123456');
+            if (!newPassword) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_password: newPassword })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '重置密码失败');
+            }
+        },
+
+        async toggleActive(user) {
+            const action = user.is_active ? '禁用' : '启用';
+            if (!confirm(`确定要${action}用户 ${user.employee_id} 吗？`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${user.id}/disable`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_active: !user.is_active })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadUsers();
+                    this.loadStats();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '操作失败');
+            }
+        }
+    };
+}
+</script>
+
+<style>
+.modal.show { display: block; }
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

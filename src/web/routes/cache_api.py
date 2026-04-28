@@ -7,7 +7,9 @@ import stat
 import time
 import shutil
 from flask import Blueprint, jsonify
-from src.utils import get_data_dir
+from flask_login import current_user
+from src.utils.file_utils import get_data_dir, get_user_data_dir
+from src.storage.quota import format_size, get_dir_size, StorageQuota
 
 cache_bp = Blueprint('cache_api', __name__)
 
@@ -22,6 +24,13 @@ def format_size(size_bytes):
         return f"{size_bytes / (1024 * 1024):.2f} MB"
     else:
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+def get_current_user_id():
+    """获取当前登录用户的ID（工号）。"""
+    if current_user.is_authenticated:
+        return current_user.employee_id
+    return None
 
 
 def handle_readonly(func, path, excinfo):
@@ -119,13 +128,21 @@ def clear_dir_contents(path):
 
 @cache_bp.route('/api/cache/stats', methods=['GET'])
 def get_cache_stats():
-    """获取缓存目录大小统计。"""
+    """获取缓存目录大小统计（用户隔离）。"""
     try:
-        temp_dir = get_data_dir('temp')
-        analysis_output_dir = get_data_dir('analysis_output')
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        temp_dir = get_user_data_dir(user_id, 'temp')
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
 
         temp_size = get_dir_size(temp_dir)
         analysis_output_size = get_dir_size(analysis_output_dir)
+
+        # 获取配额状态
+        quota = StorageQuota(user_id)
+        quota_status = quota.get_status()
 
         return jsonify({
             'success': True,
@@ -143,7 +160,8 @@ def get_cache_stats():
                 'total': {
                     'size_bytes': temp_size + analysis_output_size,
                     'size_formatted': format_size(temp_size + analysis_output_size)
-                }
+                },
+                'quota': quota_status
             }
         })
     except Exception as e:
@@ -152,9 +170,13 @@ def get_cache_stats():
 
 @cache_bp.route('/api/cache/clear-results', methods=['POST'])
 def clear_results():
-    """清理分析结果目录。"""
+    """清理分析结果目录（用户隔离）。"""
     try:
-        analysis_output_dir = get_data_dir('analysis_output')
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
         stats = clear_dir_contents(analysis_output_dir)
 
         message = f"清理完成：删除 {stats['deleted']} 个文件"
@@ -172,9 +194,13 @@ def clear_results():
 
 @cache_bp.route('/api/cache/clear-temp', methods=['POST'])
 def clear_temp():
-    """清理临时文件目录。"""
+    """清理临时文件目录（用户隔离）。"""
     try:
-        temp_dir = get_data_dir('temp')
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        temp_dir = get_user_data_dir(user_id, 'temp')
         stats = clear_dir_contents(temp_dir)
 
         message = f"清理完成：删除 {stats['deleted']} 个文件"

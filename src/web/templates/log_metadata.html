@@ -6,7 +6,7 @@
 <div x-data="logMetadataApp()">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-file-earmark-rule"></i> 日志规则管理</h2>
-        <button class="btn btn-primary" @click="showCreateModal = true">
+        <button class="btn btn-primary" @click="showCreateModal = true" x-show="userInfo.is_admin">
             <i class="bi bi-plus-circle"></i> 创建规则集
         </button>
     </div>
@@ -16,7 +16,9 @@
         <template x-if="ruleSets.length === 0 && !loading">
             <div class="col-12">
                 <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> 暂无规则集，点击上方按钮创建
+                    <i class="bi bi-info-circle"></i>
+                    <span x-show="userInfo.is_admin">暂无规则集，点击上方按钮创建</span>
+                    <span x-show="!userInfo.is_admin">暂无规则集</span>
                 </div>
             </div>
         </template>
@@ -28,7 +30,7 @@
                         <h5 class="mb-0">
                             <span x-text="rules.name"></span>
                         </h5>
-                        <div class="btn-group btn-group-sm">
+                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
                             <button class="btn btn-outline-primary" @click="showRulesDetail(rules)" title="查看详情">
                                 <i class="bi bi-eye"></i>
                             </button>
@@ -36,6 +38,9 @@
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
+                        <button class="btn btn-outline-primary btn-sm" @click="showRulesDetail(rules)" title="查看详情" x-show="!userInfo.is_admin">
+                            <i class="bi bi-eye"></i>
+                        </button>
                     </div>
                     <div class="card-body">
                         <p class="card-text text-muted" x-text="rules.description || '无描述'"></p>
@@ -152,7 +157,7 @@
 
                             <hr>
                             <!-- Add Rule Form -->
-                            <div class="mb-3">
+                            <div class="mb-3" x-show="userInfo.is_admin">
                                 <h6><i class="bi bi-plus-circle"></i> 添加规则</h6>
                                 <form @submit.prevent="addRule()" class="row g-2">
                                     <div class="col-md-3">
@@ -202,7 +207,7 @@
                                                     </small>
                                                 </div>
                                             </div>
-                                            <div class="btn-group btn-group-sm">
+                                            <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
                                                 <button class="btn btn-outline-primary" @click="showEditRuleModal(rule)" title="编辑">
                                                     <i class="bi bi-pencil"></i>
                                                 </button>
@@ -330,9 +335,23 @@ function logMetadataApp() {
         newRule: { file_path: '', description: '', keywordsText: '' },
         editingRule: { rule_id: '', file_path: '', description: '', keywordsText: '', pluginsText: '' },
         toast: { show: false, type: 'success', title: '', message: '' },
+        userInfo: { is_admin: false },
 
         init() {
+            this.loadUserInfo();
             this.loadRuleSets();
+        },
+
+        async loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/me');
+                const data = await response.json();
+                if (data.success) {
+                    this.userInfo = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
         },
 
         async loadRuleSets() {

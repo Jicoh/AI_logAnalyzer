@@ -9,7 +9,7 @@
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body x-data="{ userInfo: {} }" x-init="fetch('/api/auth/me').then(r => r.json()).then(d => { if(d.success) userInfo = d.data; else window.location.href = '/login'; })">
     <div class="d-flex" style="height: 100vh;">
         <!-- Sidebar -->
         <div class="sidebar bg-dark text-white d-flex flex-column">
@@ -35,6 +35,14 @@
                 </a>
             </nav>
             <nav class="sidebar-nav border-top border-secondary">
+                <template x-if="userInfo.is_admin">
+                    <a href="{{ url_for('main.admin_dashboard') }}" class="nav-link {% if active_page == 'admin' %}active{% endif %}">
+                        <i class="bi bi-shield-lock"></i> <span>管理员</span>
+                    </a>
+                </template>
+                <a href="{{ url_for('main.profile') }}" class="nav-link {% if active_page == 'profile' %}active{% endif %}">
+                    <i class="bi bi-person"></i> <span>个人中心</span>
+                </a>
                 <a href="{{ url_for('main.settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
                     <i class="bi bi-gear"></i> <span>设置</span>
                 </a>

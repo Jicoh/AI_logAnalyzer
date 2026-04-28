@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}个人中心 - AI Log Analyzer{% endblock %}
+
+{% block content %}
+<div x-data="profileApp()" x-init="init()">
+    <div class="row">
+        <div class="col-12">
+            <h4 class="mb-4"><i class="bi bi-person"></i> 个人中心</h4>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <!-- 用户信息 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-person-badge"></i> 用户信息
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">工号</label>
+                        <div class="form-control-plaintext fw-bold" x-text="userInfo.employee_id || '加载中...'"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">身份</label>
+                        <div class="form-control-plaintext">
+                            <span class="badge" :class="userInfo.is_admin ? 'bg-danger' : 'bg-secondary'"
+                                  x-text="userInfo.is_admin ? '管理员' : '普通用户'"></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <button class="btn btn-outline-danger" @click="logout()">
+                            <i class="bi bi-box-arrow-right"></i> 退出登录
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 存储配额 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-hard-drive"></i> 存储空间
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>已使用</span>
+                            <span x-text="quotaStatus.used_formatted || '计算中...'"></span>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar"
+                                 :class="quotaStatus.percent > 80 ? 'bg-danger' : quotaStatus.percent > 60 ? 'bg-warning' : 'bg-success'"
+                                 :style="'width: ' + (quotaStatus.percent || 0) + '%'"
+                                 x-text="(quotaStatus.percent || 0) + '%'">
+                            </div>
+                        </div>
+                        <small class="text-muted">配额上限：300MB，剩余：<span x-text="quotaStatus.remaining || '300MB'"></span></small>
+                    </div>
+
+                    <div class="alert alert-warning" x-show="quotaStatus.percent > 80">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        存储空间即将用尽，请及时清理缓存
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <!-- 修改密码 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-key"></i> 修改密码
+                </div>
+                <div class="card-body">
+                    <form @submit.prevent="changePassword()">
+                        <div class="mb-3">
+                            <label class="form-label">旧密码</label>
+                            <input type="password" class="form-control" x-model="old_password"
+                                   placeholder="请输入当前密码" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新密码</label>
+                            <input type="password" class="form-control" x-model="new_password"
+                                   placeholder="请输入新密码（至少6个字符）" required minlength="6">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" x-model="confirm_password"
+                                   placeholder="请再次输入新密码" required>
+                        </div>
+
+                        <div class="alert alert-danger" x-show="error" x-text="error"></div>
+                        <div class="alert alert-success" x-show="success" x-text="success"></div>
+
+                        <button type="submit" class="btn btn-primary" :disabled="loading">
+                            <span x-show="loading" class="spinner-border spinner-border-sm"></span>
+                            <span x-text="loading ? '修改中...' : '修改密码'"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast" :class="toast.show ? 'show' : ''" role="alert" x-show="toast.show" x-cloak>
+            <div class="toast-header"
+                :class="{
+                    'bg-danger text-white': toast.type === 'error',
+                    'bg-warning': toast.type === 'warning',
+                    'bg-success text-white': toast.type === 'success'
+                }">
+                <strong class="me-auto" x-text="toast.title"></strong>
+                <button type="button" class="btn-close" :class="toast.type === 'warning' ? '' : 'btn-close-white'" @click="toast.show = false"></button>
+            </div>
+            <div class="toast-body" x-text="toast.message"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function profileApp() {
+    return {
+        userInfo: {},
+        quotaStatus: {},
+        old_password: '',
+        new_password: '',
+        confirm_password: '',
+        loading: false,
+        error: '',
+        success: '',
+        toast: { show: false, type: '', title: '', message: '' },
+
+        init() {
+            this.loadUserInfo();
+            this.loadQuota();
+        },
+
+        async loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/me');
+                const data = await response.json();
+                if (data.success) {
+                    this.userInfo = data.data;
+                }
+            } catch (e) {
+                console.error('Failed to load user info:', e);
+            }
+        },
+
+        async loadQuota() {
+            try {
+                const response = await fetch('/api/cache/stats');
+                const data = await response.json();
+                if (data.success) {
+                    this.quotaStatus = data.data.quota || {};
+                }
+            } catch (e) {
+                console.error('Failed to load quota:', e);
+            }
+        },
+
+        showToast(type, title, message) {
+            this.toast = { show: true, type, title, message };
+            setTimeout(() => { this.toast.show = false; }, 3000);
+        },
+
+        async changePassword() {
+            this.error = '';
+            this.success = '';
+
+            if (this.new_password !== this.confirm_password) {
+                this.error = '两次输入的新密码不一致';
+                return;
+            }
+
+            this.loading = true;
+
+            try {
+                const response = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        old_password: this.old_password,
+                        new_password: this.new_password
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    this.success = data.message;
+                    this.old_password = '';
+                    this.new_password = '';
+                    this.confirm_password = '';
+                } else {
+                    this.error = data.error;
+                }
+            } catch (e) {
+                this.error = '网络错误，请重试';
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async logout() {
+            if (!confirm('确定要退出登录吗？')) {
+                return;
+            }
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (e) {
+                this.showToast('error', '错误', '退出登录失败');
+            }
+        }
+    };
+}
+</script>
+
+<style>
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}

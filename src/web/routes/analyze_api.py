@@ -7,6 +7,7 @@ import json
 import subprocess
 from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
+from flask_login import current_user
 
 from src.ai_analyzer.agent_coordinator import AgentCoordinator
 from src.ai_analyzer.selection_agent import SelectionAgent
@@ -19,8 +20,9 @@ from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
-    get_project_root, get_data_dir
+    get_project_root, get_data_dir, get_user_data_dir
 )
+from src.storage.quota import StorageQuota, format_size
 from src.utils import get_logger
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -29,6 +31,13 @@ from plugins.base import count_severity
 logger = get_logger('analyze_api')
 
 analyze_bp = Blueprint('analyze_api', __name__)
+
+
+def get_current_user_id():
+    """获取当前登录用户的ID（工号）。"""
+    if current_user.is_authenticated:
+        return current_user.employee_id
+    return None
 
 
 def log_callback(message: str, level: str = "info"):
@@ -216,6 +225,12 @@ def analyze_stream():
         work_dir = None
 
         try:
+            # 获取当前用户
+            user_id = get_current_user_id()
+            if not user_id:
+                yield generate_sse_event({'stage': 'error', 'message': '请先登录'})
+                return
+
             # 检查是否有文件
             if 'file' not in request.files:
                 yield generate_sse_event({'stage': 'error', 'message': 'No file provided'})
@@ -231,6 +246,15 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': 'Invalid file type. Allowed: tar.gz, tar, zip, txt, log'})
                 return
 
+            # 检查配额（预估文件大小）
+            quota = StorageQuota(user_id)
+            # 获取文件大小（从 Content-Length 或估算）
+            content_length = request.content_length or 50 * 1024 * 1024  # 默认估算50MB
+            allowed, quota_error = quota.check_upload(content_length)
+            if not allowed:
+                yield generate_sse_event({'stage': 'error', 'message': quota_error})
+                return
+
             # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
@@ -239,8 +263,8 @@ def analyze_stream():
             user_prompt = request.form.get('user_prompt', '').strip() or None
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
-            # 创建工作目录
-            temp_base = get_data_dir('temp')
+            # 创建工作目录（用户隔离）
+            temp_base = get_user_data_dir(user_id, 'temp')
             work_dir = create_work_directory(temp_base, filename)
 
             # 根据文件类型处理，确定分析路径
@@ -351,8 +375,8 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
                 return
 
-            # 保存插件分析结果
-            analysis_output_base = get_data_dir('analysis_output')
+            # 保存插件分析结果（用户隔离）
+            analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             # 使用原始上传文件名（去除扩展名）
             clean_name = filename
@@ -571,6 +595,12 @@ def analyze_local_stream():
         batch_output_dir = None
 
         try:
+            # 获取当前用户
+            user_id = get_current_user_id()
+            if not user_id:
+                yield generate_sse_event({'stage': 'error', 'message': '请先登录'})
+                return
+
             # 获取路径参数
             data = request.get_json()
             path = data.get('path', '')
@@ -590,8 +620,20 @@ def analyze_local_stream():
                 yield generate_sse_event({'stage': 'error', 'message': f'路径不存在: {path}'})
                 return
 
+            # 检查配额
+            quota = StorageQuota(user_id)
+            # 估算文件/目录大小
+            if os.path.isfile(path):
+                estimated_size = os.path.getsize(path)
+            else:
+                estimated_size = sum(os.path.getsize(f) for f in find_log_files_in_directory(path))
+            allowed, quota_error = quota.check_upload(estimated_size)
+            if not allowed:
+                yield generate_sse_event({'stage': 'error', 'message': quota_error})
+                return
+
             plugin_manager = get_plugin_manager_with_custom()
-            temp_base = get_data_dir('temp')
+            temp_base = get_user_data_dir(user_id, 'temp')
 
             if os.path.isfile(path):
                 # 单文件分析
@@ -670,8 +712,8 @@ def analyze_local_stream():
                     log_callback=log_callback
                 )
 
-                # 保存结果
-                analysis_output_base = get_data_dir('analysis_output')
+                # 保存结果（用户隔离）
+                analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 clean_name = filename
                 for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:

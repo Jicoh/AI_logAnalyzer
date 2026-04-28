@@ -11,263 +11,37 @@
     </div>
 
     <div class="row">
-        <!-- 左侧子侧边栏 -->
-        <div class="col-md-3 mb-4">
-            <div class="settings-sidebar">
-                <div class="nav-item" :class="{ 'active': currentTab === 'api' }" @click="currentTab = 'api'">
-                    <i class="bi bi-cloud"></i> API 设置
-                </div>
-                <div class="nav-item" :class="{ 'active': currentTab === 'kb' }" @click="currentTab = 'kb'">
-                    <i class="bi bi-database"></i> 知识库设置
-                </div>
-                <div class="nav-item" :class="{ 'active': currentTab === 'logviewer' }" @click="currentTab = 'logviewer'">
-                    <i class="bi bi-folder2-open"></i> 日志查看设置
-                </div>
-                <div class="nav-item" :class="{ 'active': currentTab === 'cache' }" @click="currentTab = 'cache'">
-                    <i class="bi bi-trash"></i> 缓存设置
-                </div>
-            </div>
-        </div>
-
-        <!-- 右侧内容区域 -->
-        <div class="col-md-9">
-            <!-- API 设置 -->
-            <div x-show="currentTab === 'api'" x-cloak>
-                <!-- API 配置 -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-cloud"></i> API 配置
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">Base URL</label>
-                            <input type="text" class="form-control" x-model="config.api.base_url"
-                                   placeholder="https://api.example.com/v1">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">API Key</label>
-                            <input type="text" class="form-control" x-model="config.api.api_key" placeholder="sk-...">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Model</label>
-                            <input type="text" class="form-control" x-model="config.api.model"
-                                   placeholder="gpt-4, glm-4, etc.">
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Temperature</label>
-                                <input type="number" class="form-control" x-model="config.api.temperature"
-                                       min="0" max="2" step="0.1">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Max Tokens</label>
-                                <input type="number" class="form-control" x-model="config.api.max_tokens"
-                                       min="1" step="1">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Embedding 设置 -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-diagram-3"></i> Embedding 设置
-                    </div>
-                    <div class="card-body">
-                        <div class="form-check form-switch mb-3">
-                            <input class="form-check-input" type="checkbox" id="embeddingEnabled"
-                                   x-model="config.embedding.enabled">
-                            <label class="form-check-label" for="embeddingEnabled">启用向量嵌入</label>
-                        </div>
-
-                        <div x-show="config.embedding.enabled">
-                            <div class="mb-3">
-                                <label class="form-label">Provider</label>
-                                <select class="form-select" x-model="config.embedding.provider">
-                                    <option value="ollama">Ollama</option>
-                                    <option value="openai">OpenAI</option>
-                                    <option value="custom">Custom</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Base URL</label>
-                                <input type="text" class="form-control" x-model="config.embedding.base_url"
-                                       placeholder="http://localhost:11434/v1">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">API Key</label>
-                                <input type="password" class="form-control" x-model="config.embedding.api_key"
-                                       placeholder="可选">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Model</label>
-                                <input type="text" class="form-control" x-model="config.embedding.model"
-                                       placeholder="nomic-embed-text, text-embedding-ada-002, etc.">
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Dimension</label>
-                                    <input type="number" class="form-control" x-model="config.embedding.dimension"
-                                           min="1" step="1">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Batch Size</label>
-                                    <input type="number" class="form-control" x-model="config.embedding.batch_size"
-                                           min="1" step="1">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 知识库设置 -->
-            <div x-show="currentTab === 'kb'" x-cloak>
-                <!-- BM25 参数 -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-bar-chart"></i> BM25 参数
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">k1 (词频饱和参数)</label>
-                                <input type="number" class="form-control" x-model="config.bm25.k1"
-                                       min="0" max="3" step="0.1">
-                                <small class="text-muted">通常在 1.2-2.0 之间</small>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">b (文档长度归一化)</label>
-                                <input type="number" class="form-control" x-model="config.bm25.b"
-                                       min="0" max="1" step="0.05">
-                                <small class="text-muted">通常在 0.75 左右</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 检索设置 -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-search"></i> 检索设置
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">检索模式</label>
-                            <select class="form-select" x-model="config.retrieval.mode">
-                                <option value="bm25">BM25</option>
-                                <option value="vector">Vector</option>
-                                <option value="hybrid">Hybrid (混合)</option>
-                            </select>
-                        </div>
-                        <div x-show="config.retrieval.mode === 'hybrid'">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">BM25 权重</label>
-                                    <input type="number" class="form-control" x-model="config.retrieval.bm25_weight"
-                                           min="0" max="1" step="0.1">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Vector 权重</label>
-                                    <input type="number" class="form-control" x-model="config.retrieval.vector_weight"
-                                           min="0" max="1" step="0.1">
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">RRF K 参数</label>
-                                <input type="number" class="form-control" x-model="config.retrieval.rrf_k"
-                                       min="1" max="100" step="1">
-                                <small class="text-muted">Reciprocal Rank Fusion 参数，通常为 60</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 日志查看设置 -->
-            <div x-show="currentTab === 'logviewer'" x-cloak>
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-folder2-open"></i> 日志查看工具
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">查看工具路径</label>
-                            <input type="text" class="form-control" x-model="config.log_viewer.exe_path"
-                                   placeholder="支持 exe 或快捷方式(.lnk)，例如: C:\...\Code.exe">
-                            <small class="text-muted">支持 VSCode、Notepad++ 或其他编辑器/查看器(该功能只在离线部署时可用)</small>
-                        </div>
-
-                        <div class="form-check form-switch mb-3" x-show="config.log_viewer.exe_path">
-                            <input class="form-check-input" type="checkbox" id="logViewerEnabled"
-                                   x-model="config.log_viewer.enabled">
-                            <label class="form-check-label" for="logViewerEnabled">启用自动打开</label>
-                        </div>
-
-                        <div class="mb-3" x-show="config.log_viewer.exe_path">
-                            <button class="btn btn-outline-info btn-sm" @click="testLogViewer()">
-                                <i class="bi bi-play-circle"></i> 测试打开
-                            </button>
-                            <small class="text-muted ms-2">测试是否能够正常打开文件夹</small>
-                        </div>
-
-                        <div class="alert alert-info" x-show="config.log_viewer.enabled">
-                            <small>
-                                <i class="bi bi-info-circle"></i>
-                                启用后，日志分析完成时会自动使用所选工具打开 <code>data/temp</code> 目录下对应的分析工作目录（时间戳+日志文件名）。
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 缓存设置 -->
-            <div x-show="currentTab === 'cache'" x-cloak>
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="bi bi-trash"></i> 缓存清理
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span><i class="bi bi-folder2-open"></i> 缓存文件 (data/temp)</span>
-                                <span class="badge bg-secondary" x-text="cacheStats.temp?.size_formatted || '计算中...'"></span>
-                            </div>
-                            <button class="btn btn-outline-warning btn-sm" @click="clearTemp()">
-                                <i class="bi bi-trash3"></i> 清理缓存文件
-                            </button>
-                        </div>
-                        <hr>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span><i class="bi bi-folder"></i> 分析结果 (data/analysis_output)</span>
-                                <span class="badge bg-secondary" x-text="cacheStats.analysis_output?.size_formatted || '计算中...'"></span>
-                            </div>
-                            <button class="btn btn-outline-danger btn-sm" @click="clearResults()">
-                                <i class="bi bi-trash3"></i> 清理分析结果
-                            </button>
-                        </div>
-                        <small class="text-muted">
-                            <i class="bi bi-info-circle"></i>
-                            清理操作不可恢复，请谨慎操作
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Save Button -->
-    <div class="row">
         <div class="col-12">
-            <div class="d-flex gap-2 justify-content-end">
-                <button class="btn btn-secondary" @click="loadConfig()">
-                    <i class="bi bi-arrow-counterclockwise"></i> 重置
-                </button>
-                <button class="btn btn-primary" @click="saveConfig()" :disabled="saving">
-                    <span x-show="saving" class="spinner-border spinner-border-sm"></span>
-                    <span x-text="saving ? '保存中...' : '保存配置'"></span>
-                </button>
+            <!-- 缓存设置 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-trash"></i> 缓存清理
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-folder2-open"></i> 缓存文件 (data/temp)</span>
+                            <span class="badge bg-secondary" x-text="cacheStats.temp?.size_formatted || '计算中...'"></span>
+                        </div>
+                        <button class="btn btn-outline-warning btn-sm" @click="clearTemp()">
+                            <i class="bi bi-trash3"></i> 清理缓存文件
+                        </button>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-folder"></i> 分析结果 (data/analysis_output)</span>
+                            <span class="badge bg-secondary" x-text="cacheStats.analysis_output?.size_formatted || '计算中...'"></span>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" @click="clearResults()">
+                            <i class="bi bi-trash3"></i> 清理分析结果
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        清理操作不可恢复，请谨慎操作
+                    </small>
+                </div>
             </div>
         </div>
     </div>
@@ -294,40 +68,6 @@
 <script>
 function settingsApp() {
     return {
-        currentTab: 'api',
-        config: {
-            api: {
-                base_url: '',
-                api_key: '',
-                model: '',
-                temperature: 0.7,
-                max_tokens: 4096
-            },
-            bm25: {
-                k1: 1.5,
-                b: 0.75
-            },
-            embedding: {
-                enabled: true,
-                provider: 'ollama',
-                base_url: '',
-                api_key: '',
-                model: '',
-                dimension: 4096,
-                batch_size: 100
-            },
-            retrieval: {
-                mode: 'hybrid',
-                bm25_weight: 0.4,
-                vector_weight: 0.6,
-                rrf_k: 60
-            },
-            log_viewer: {
-                enabled: false,
-                exe_path: ''
-            }
-        },
-        saving: false,
         cacheStats: {},
         toast: {
             show: false,
@@ -337,113 +77,7 @@ function settingsApp() {
         },
 
         init() {
-            this.loadConfig();
             this.loadCacheStats();
-        },
-
-        async loadConfig() {
-            try {
-                // 加载 AI 配置
-                const response = await fetch('/api/config');
-                const data = await response.json();
-                if (data.success) {
-                    if (data.data.api) {
-                        this.config.api = { ...this.config.api, ...data.data.api };
-                    }
-                    if (data.data.bm25) {
-                        this.config.bm25 = { ...this.config.bm25, ...data.data.bm25 };
-                    }
-                    if (data.data.embedding) {
-                        this.config.embedding = { ...this.config.embedding, ...data.data.embedding };
-                    }
-                    if (data.data.retrieval) {
-                        this.config.retrieval = { ...this.config.retrieval, ...data.data.retrieval };
-                    }
-                }
-
-                // 加载通用设置
-                const settingsResponse = await fetch('/api/settings');
-                const settingsData = await settingsResponse.json();
-                if (settingsData.success && settingsData.data.log_viewer) {
-                    this.config.log_viewer = { ...this.config.log_viewer, ...settingsData.data.log_viewer };
-                }
-            } catch (error) {
-                console.error('Failed to load config:', error);
-                this.showToast('error', '加载失败', '无法加载配置');
-            }
-        },
-
-        async saveConfig() {
-            this.saving = true;
-            try {
-                // 保存 AI 配置
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        api: {
-                            base_url: this.config.api.base_url,
-                            api_key: this.config.api.api_key,
-                            model: this.config.api.model,
-                            temperature: parseFloat(this.config.api.temperature),
-                            max_tokens: parseInt(this.config.api.max_tokens)
-                        },
-                        bm25: {
-                            k1: parseFloat(this.config.bm25.k1),
-                            b: parseFloat(this.config.bm25.b)
-                        },
-                        embedding: {
-                            enabled: this.config.embedding.enabled,
-                            provider: this.config.embedding.provider,
-                            base_url: this.config.embedding.base_url,
-                            api_key: this.config.embedding.api_key,
-                            model: this.config.embedding.model,
-                            dimension: parseInt(this.config.embedding.dimension),
-                            batch_size: parseInt(this.config.embedding.batch_size)
-                        },
-                        retrieval: {
-                            mode: this.config.retrieval.mode,
-                            bm25_weight: parseFloat(this.config.retrieval.bm25_weight),
-                            vector_weight: parseFloat(this.config.retrieval.vector_weight),
-                            rrf_k: parseInt(this.config.retrieval.rrf_k)
-                        }
-                    })
-                });
-
-                const data = await response.json();
-                if (!data.success) {
-                    this.showToast('error', '保存失败', data.error || '未知错误');
-                    return;
-                }
-
-                // 保存通用设置
-                const settingsResponse = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        log_viewer: {
-                            enabled: this.config.log_viewer.enabled,
-                            exe_path: this.config.log_viewer.exe_path
-                        }
-                    })
-                });
-
-                const settingsData = await settingsResponse.json();
-                if (settingsData.success) {
-                    this.showToast('success', '保存成功', '配置已更新');
-                } else {
-                    this.showToast('error', '保存失败', settingsData.error || '未知错误');
-                }
-            } catch (error) {
-                console.error('Failed to save config:', error);
-                this.showToast('error', '保存失败', error.message);
-            } finally {
-                this.saving = false;
-            }
         },
 
         showToast(type, title, message) {
@@ -456,30 +90,6 @@ function settingsApp() {
             setTimeout(() => {
                 this.toast.show = false;
             }, 3000);
-        },
-
-        async testLogViewer() {
-            if (!this.config.log_viewer.exe_path) {
-                this.showToast('warning', '提示', '请先设置查看工具路径');
-                return;
-            }
-            try {
-                const response = await fetch('/api/log-viewer/test', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        exe_path: this.config.log_viewer.exe_path
-                    })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '测试成功', data.message);
-                } else {
-                    this.showToast('error', '测试失败', data.error);
-                }
-            } catch (error) {
-                this.showToast('error', '测试失败', error.message);
-            }
         },
 
         async loadCacheStats() {
@@ -548,9 +158,6 @@ function settingsApp() {
 </script>
 
 <style>
-.font-monospace {
-    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
 [x-cloak] { display: none !important; }
 </style>
 {% endblock %}

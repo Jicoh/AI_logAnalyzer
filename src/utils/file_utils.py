@@ -82,6 +82,41 @@ def get_data_dir(subdir: str = '') -> str:
     return data_dir
 
 
+def get_user_data_dir(user_id: str, subdir: str = '') -> str:
+    """
+    获取用户专属数据目录
+
+    Args:
+        user_id: 用户ID（工号）
+        subdir: 子目录名，如 'uploads', 'temp', 'analysis_output'
+
+    Returns:
+        str: 用户数据目录路径
+    """
+    users_dir = get_data_dir('users')
+    user_dir = os.path.join(users_dir, user_id)
+    if subdir:
+        user_dir = os.path.join(user_dir, subdir)
+    ensure_dir(user_dir)
+    return user_dir
+
+
+def get_shared_data_dir(subdir: str = '') -> str:
+    """
+    获取共享数据目录（知识库等全局共享资源）
+
+    Args:
+        subdir: 子目录名
+
+    Returns:
+        str: 共享数据目录路径
+    """
+    shared_dir = get_data_dir('shared')
+    if subdir:
+        return os.path.join(shared_dir, subdir)
+    return shared_dir
+
+
 def get_ai_temp_dir() -> str:
     """
     获取AI临时数据保存目录（data/ai_temp）

@@ -71,6 +71,10 @@ Both agents implement robust error handling:
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
 | Custom Plugins | `custom_plugins/` | User-defined plugins |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
+| Authentication | `src/auth/` | User authentication, password hashing, permission decorators |
+| User Model | `src/models/` | User data model, database management |
+| Admin API | `src/web/routes/admin_api.py` | User management, system configuration |
+| Storage | `src/storage/` | User storage quota management |
 
 #### SSE Streaming
 Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`), allowing real-time progress updates during long-running AI analysis.
@@ -162,6 +166,31 @@ See `plugins/README.md` for full documentation.
 - `data/analysis_output/` - Analysis results (JSON + HTML)
 - `document/` - Knowledge base storage
 - `custom_plugins/` - User-defined plugins
+- `data/app.db` - User database (SQLite)
+- `data/users/` - User data directories (isolated by employee_id)
+
+### User Authentication
+
+用户认证系统基于 Flask-Login，使用 SQLite 存储用户数据。
+
+#### 用户角色
+- **普通用户**: 可使用日志分析、知识库等功能，受限存储配额
+- **管理员**: 可管理用户、修改系统配置、查看全局统计
+
+#### 默认账号
+首次启动自动创建管理员账号：
+- 工号: `admin`
+- 密码: `admin123`
+
+#### 认证流程
+- 用户通过工号+密码登录/注册
+- 登录状态由 Flask-Login 管理（session）
+- 所有页面需登录访问，管理员菜单仅管理员可见
+
+#### 管理员功能
+- 用户管理: 创建用户、启用/禁用、重置密码、修改配额
+- 系统配置: 修改 AI API、Embedding、检索设置
+- 全局统计: 用户数量、存储使用量
 
 ## Development Guidelines
 

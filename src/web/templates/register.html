@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - AI Log Analyzer</title>
+    <link href="{{ url_for('static', filename='css/vendor/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+    <script defer src="{{ url_for('static', filename='js/alpine.min.js') }}"></script>
+</head>
+<body>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h2><i class="bi bi-box"></i> AI Log Analyzer</h2>
+            <p class="text-muted">服务器日志分析系统</p>
+        </div>
+
+        <form x-data="registerApp()" @submit.prevent="submitRegister()">
+            <div class="mb-3">
+                <label class="form-label">工号</label>
+                <input type="text" class="form-control" x-model="employee_id"
+                       placeholder="请输入工号" required maxlength="20">
+                <small class="text-muted">工号用于登录标识，最长20字符</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-control" x-model="password"
+                       placeholder="请输入密码" required minlength="6">
+                <small class="text-muted">密码长度至少6个字符</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">确认密码</label>
+                <input type="password" class="form-control" x-model="confirm_password"
+                       placeholder="请再次输入密码" required>
+            </div>
+
+            <div class="alert alert-danger" x-show="error" x-text="error"></div>
+            <div class="alert alert-success" x-show="success" x-text="success"></div>
+
+            <div class="d-grid mb-3">
+                <button type="submit" class="btn btn-primary" :disabled="loading">
+                    <span x-show="loading" class="spinner-border spinner-border-sm"></span>
+                    <span x-text="loading ? '注册中...' : '注册'"></span>
+                </button>
+            </div>
+
+            <div class="text-center">
+                <a href="{{ url_for('auth.login') }}">已有账号？点击登录</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function registerApp() {
+    return {
+        employee_id: '',
+        password: '',
+        confirm_password: '',
+        loading: false,
+        error: '',
+        success: '',
+
+        async submitRegister() {
+            this.error = '';
+            this.success = '';
+
+            if (this.password !== this.confirm_password) {
+                this.error = '两次输入的密码不一致';
+                return;
+            }
+
+            this.loading = true;
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_id: this.employee_id,
+                        password: this.password
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    this.success = data.message;
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    this.error = data.error;
+                }
+            } catch (e) {
+                this.error = '网络错误，请重试';
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+
+<style>
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-card {
+    width: 400px;
+    padding: 40px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h2 {
+    color: #333;
+    margin-bottom: 10px;
+}
+</style>
+</body>
+</html>

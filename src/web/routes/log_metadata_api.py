@@ -5,6 +5,7 @@ Log metadata rules API routes.
 from flask import Blueprint, request, jsonify
 
 from src.log_metadata.manager import LogMetadataManager
+from src.auth.decorators import admin_required
 
 log_metadata_bp = Blueprint('log_metadata_api', __name__)
 
@@ -47,6 +48,7 @@ def get_rule_set(rules_id):
 
 
 @log_metadata_bp.route('/api/log-rules', methods=['POST'])
+@admin_required
 def create_rule_set():
     """创建规则集"""
     try:
@@ -73,6 +75,7 @@ def create_rule_set():
 
 
 @log_metadata_bp.route('/api/log-rules/import', methods=['POST'])
+@admin_required
 def import_rule_set():
     """通过 JSON 导入完整规则集"""
     try:
@@ -96,6 +99,7 @@ def import_rule_set():
 
 
 @log_metadata_bp.route('/api/log-rules/<rules_id>', methods=['PUT'])
+@admin_required
 def update_rule_set(rules_id):
     """更新规则集信息"""
     try:
@@ -115,6 +119,7 @@ def update_rule_set(rules_id):
 
 
 @log_metadata_bp.route('/api/log-rules/<rules_id>', methods=['DELETE'])
+@admin_required
 def delete_rule_set(rules_id):
     """删除规则集"""
     try:
@@ -162,6 +167,7 @@ def get_rule(rules_id, rule_id):
 
 
 @log_metadata_bp.route('/api/log-rules/<rules_id>/rules', methods=['POST'])
+@admin_required
 def add_rule(rules_id):
     """向规则集添加规则"""
     try:
@@ -197,6 +203,7 @@ def add_rule(rules_id):
 
 
 @log_metadata_bp.route('/api/log-rules/<rules_id>/rules/<rule_id>', methods=['PUT'])
+@admin_required
 def update_rule(rules_id, rule_id):
     """更新规则"""
     try:
@@ -214,6 +221,7 @@ def update_rule(rules_id, rule_id):
 
 
 @log_metadata_bp.route('/api/log-rules/<rules_id>/rules/<rule_id>', methods=['DELETE'])
+@admin_required
 def delete_rule(rules_id, rule_id):
     """删除规则"""
     try:

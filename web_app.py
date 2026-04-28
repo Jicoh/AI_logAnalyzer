@@ -9,7 +9,7 @@ AI 日志分析器 - Web 应用入口
     python web_app.py --host 0.0.0.0 --port 80  # 覆盖主机和端口
     python web_app.py --no-debug                # 禁用调试模式
 
-访问 Web 界面: http://127.0.0.1:18888（默认）
+访问 Web 界面: http://0.0.0.0:18888（默认）
 """
 
 import argparse
@@ -31,9 +31,9 @@ def get_web_config():
     """从配置文件读取 Web 配置。"""
     config_manager = ConfigManager()
     return {
-        "host": config_manager.get("web.host", "127.0.0.1"),
+        "host": config_manager.get("web.host", "0.0.0.0"),
         "port": config_manager.get("web.port", 18888),
-        "debug": config_manager.get("web.debug", True)
+        "debug": config_manager.get("web.debug", False)
     }
 
 
@@ -60,9 +60,27 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ai-log-analyzer-secret-key-change-in-production')
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 最大文件大小 50MB
 
-    # 确保上传目录存在
-    uploads_dir = os.path.join(root_dir, 'data', 'uploads')
-    os.makedirs(uploads_dir, exist_ok=True)
+    # 数据库配置
+    db_path = os.path.join(root_dir, 'data', 'app.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # 初始化数据库
+    from src.models.user import db
+    db.init_app(app)
+
+    # 初始化 Flask-Login
+    from src.web.routes.auth_api import init_login_manager
+    init_login_manager(app)
+
+    # 创建数据库表和默认管理员
+    with app.app_context():
+        db.create_all()
+        init_default_admin()
+
+    # 确保数据目录存在
+    users_dir = os.path.join(root_dir, 'data', 'users')
+    os.makedirs(users_dir, exist_ok=True)
 
     # 预加载插件
     logger.info("正在预加载插件...")
@@ -77,6 +95,24 @@ def create_app():
     return app
 
 
+def init_default_admin():
+    """初始化默认管理员账号。"""
+    from src.models.user import User, db
+    from src.auth.password import hash_password
+
+    # 检查是否已存在管理员
+    admin = User.query.filter_by(employee_id='admin').first()
+    if not admin:
+        admin = User(
+            employee_id='admin',
+            password_hash=hash_password('admin123'),
+            is_admin=True
+        )
+        db.session.add(admin)
+        db.session.commit()
+        logger.info("创建默认管理员账号: admin / admin123")
+
+
 # 创建应用实例
 app = create_app()
 
@@ -84,7 +120,7 @@ app = create_app()
 def parse_args():
     """解析命令行参数。"""
     parser = argparse.ArgumentParser(description='AI Log Analyzer Web Application')
-    parser.add_argument('--host', type=str, help='Host to bind to (default: 127.0.0.1)')
+    parser.add_argument('--host', type=str, help='Host to bind to (default: 0.0.0.0)')
     parser.add_argument('--port', type=int, help='Port to bind to (default: 18888)')
     parser.add_argument('--debug', action='store_true', dest='debug', help='Enable debug mode')
     parser.add_argument('--no-debug', action='store_false', dest='debug', help='Disable debug mode')

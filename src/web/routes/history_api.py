@@ -7,10 +7,18 @@ import json
 import re
 from datetime import datetime
 from flask import Blueprint, jsonify
-from src.utils import get_data_dir
+from flask_login import current_user
+from src.utils.file_utils import get_data_dir, get_user_data_dir, get_project_root
 from plugins.base import count_severity
 
 history_bp = Blueprint('history_api', __name__)
+
+
+def get_current_user_id():
+    """获取当前登录用户的ID（工号）。"""
+    if current_user.is_authenticated:
+        return current_user.employee_id
+    return None
 
 
 def parse_timestamp_folder(folder_name):
@@ -32,9 +40,12 @@ def parse_timestamp_folder(folder_name):
     return None
 
 
-def get_history_list():
-    """获取所有分析历史记录列表。"""
-    analysis_output_dir = get_data_dir('analysis_output')
+def get_history_list(user_id: str = None):
+    """获取所有分析历史记录列表（用户隔离）。"""
+    if user_id:
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
+    else:
+        analysis_output_dir = get_data_dir('analysis_output')
 
     history_records = []
 
@@ -154,9 +165,12 @@ def get_history_list():
     return history_records
 
 
-def get_history_detail(timestamp):
-    """获取特定历史记录的详情。"""
-    analysis_output_dir = get_data_dir('analysis_output')
+def get_history_detail(timestamp, user_id: str = None):
+    """获取特定历史记录的详情（用户隔离）。"""
+    if user_id:
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
+    else:
+        analysis_output_dir = get_data_dir('analysis_output')
     folder_path = os.path.join(analysis_output_dir, timestamp)
 
     if not os.path.exists(folder_path):
@@ -202,9 +216,12 @@ def get_history_detail(timestamp):
     return result
 
 
-def get_batch_file_detail(batch_folder, file_output_dir):
-    """获取批量记录中单个文件的详情。"""
-    analysis_output_dir = get_data_dir('analysis_output')
+def get_batch_file_detail(batch_folder, file_output_dir, user_id: str = None):
+    """获取批量记录中单个文件的详情（用户隔离）。"""
+    if user_id:
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
+    else:
+        analysis_output_dir = get_data_dir('analysis_output')
     folder_path = os.path.join(analysis_output_dir, batch_folder, file_output_dir)
 
     if not os.path.exists(folder_path):
@@ -246,9 +263,13 @@ def get_batch_file_detail(batch_folder, file_output_dir):
 
 @history_bp.route('/api/history', methods=['GET'])
 def list_history():
-    """获取所有历史记录列表。"""
+    """获取所有历史记录列表（用户隔离）。"""
     try:
-        records = get_history_list()
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        records = get_history_list(user_id)
         return jsonify({'success': True, 'data': records})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -256,9 +277,13 @@ def list_history():
 
 @history_bp.route('/api/history/<timestamp>', methods=['GET'])
 def get_history(timestamp):
-    """获取特定历史记录的详情。"""
+    """获取特定历史记录的详情（用户隔离）。"""
     try:
-        detail = get_history_detail(timestamp)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        detail = get_history_detail(timestamp, user_id)
         if detail is None:
             return jsonify({'success': False, 'error': 'Record not found'}), 404
         return jsonify({'success': True, 'data': detail})
@@ -268,9 +293,13 @@ def get_history(timestamp):
 
 @history_bp.route('/api/history/batch/<batch_folder>/<file_output_dir>', methods=['GET'])
 def get_batch_file_detail_api(batch_folder, file_output_dir):
-    """获取批量记录中单个文件的详情。"""
+    """获取批量记录中单个文件的详情（用户隔离）。"""
     try:
-        detail = get_batch_file_detail(batch_folder, file_output_dir)
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        detail = get_batch_file_detail(batch_folder, file_output_dir, user_id)
         if detail is None:
             return jsonify({'success': False, 'error': 'Record not found'}), 404
         return jsonify({'success': True, 'data': detail})

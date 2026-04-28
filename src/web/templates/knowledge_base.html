@@ -6,7 +6,7 @@
 <div x-data="knowledgeBaseApp()">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-database"></i> 知识库管理</h2>
-        <button class="btn btn-primary" @click="showCreateModal = true">
+        <button class="btn btn-primary" @click="showCreateModal = true" x-show="userInfo.is_admin">
             <i class="bi bi-plus-circle"></i> 创建知识库
         </button>
     </div>
@@ -19,7 +19,7 @@
             <span class="badge bg-success ms-2" x-show="systemStatus.embedding_enabled">Embedding 已启用</span>
             <span class="badge bg-secondary ms-2" x-show="!systemStatus.embedding_enabled">Embedding 未启用</span>
         </div>
-        <a href="/settings" class="btn btn-sm btn-outline-primary"><i class="bi bi-gear"></i> 配置</a>
+        <a href="/settings" class="btn btn-sm btn-outline-primary" x-show="userInfo.is_admin"><i class="bi bi-gear"></i> 配置</a>
     </div>
 
     <!-- Knowledge Base List -->
@@ -27,7 +27,9 @@
         <template x-if="kbList.length === 0 && !loading">
             <div class="col-12">
                 <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> 暂无知识库，点击上方按钮创建
+                    <i class="bi bi-info-circle"></i>
+                    <span x-show="userInfo.is_admin">暂无知识库，点击上方按钮创建</span>
+                    <span x-show="!userInfo.is_admin">暂无知识库</span>
                 </div>
             </div>
         </template>
@@ -37,7 +39,7 @@
                 <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0" x-text="kb.name"></h5>
-                        <div class="btn-group btn-group-sm">
+                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
                             <button class="btn btn-outline-primary" @click="showKbDetail(kb)" title="查看详情">
                                 <i class="bi bi-eye"></i>
                             </button>
@@ -45,6 +47,9 @@
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
+                        <button class="btn btn-outline-primary btn-sm" @click="showKbDetail(kb)" title="查看详情" x-show="!userInfo.is_admin">
+                            <i class="bi bi-eye"></i>
+                        </button>
                     </div>
                     <div class="card-body">
                         <p class="card-text text-muted" x-text="kb.description || '无描述'"></p>
@@ -130,7 +135,7 @@
 
                             <hr>
                             <!-- Rebuild Index Button -->
-                            <div class="mb-3 d-flex justify-content-between align-items-center">
+                            <div class="mb-3 d-flex justify-content-between align-items-center" x-show="userInfo.is_admin">
                                 <h6><i class="bi bi-file-earmark"></i> 文档列表</h6>
                                 <button class="btn btn-outline-secondary btn-sm" @click="reindexKb()" :disabled="reindexing">
                                     <span x-show="reindexing" class="spinner-border spinner-border-sm"></span>
@@ -138,9 +143,12 @@
                                     <span x-text="reindexing ? '重建中...' : '重建索引'"></span>
                                 </button>
                             </div>
+                            <div class="mb-3" x-show="!userInfo.is_admin">
+                                <h6><i class="bi bi-file-earmark"></i> 文档列表</h6>
+                            </div>
 
                             <!-- Upload Document -->
-                            <form @submit.prevent="uploadDocument()" class="mb-3">
+                            <form @submit.prevent="uploadDocument()" class="mb-3" x-show="userInfo.is_admin">
                                 <div class="input-group">
                                     <input type="file" class="form-control" id="docFile" accept=".txt,.md,.pdf,.docx,.doc"
                                            @change="docFile = $event.target.files[0]">
@@ -161,7 +169,7 @@
                                             <i class="bi bi-file-earmark-text"></i>
                                             <span x-text="doc.file_name || doc.doc_id"></span>
                                         </span>
-                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.doc_id)">
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.doc_id)" x-show="userInfo.is_admin">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -231,10 +239,24 @@ function knowledgeBaseApp() {
         docFile: null,
         toast: { show: false, type: 'success', title: '', message: '' },
         systemStatus: { retrieval_mode: 'bm25', embedding_enabled: false },
+        userInfo: { is_admin: false },
 
         init() {
+            this.loadUserInfo();
             this.loadKbList();
             this.loadSystemStatus();
+        },
+
+        async loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/me');
+                const data = await response.json();
+                if (data.success) {
+                    this.userInfo = data.data;
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
         },
 
         async loadSystemStatus() {

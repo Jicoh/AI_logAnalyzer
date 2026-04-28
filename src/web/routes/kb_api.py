@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.config_manager.manager import ConfigManager
+from src.auth.decorators import admin_required
 
 kb_bp = Blueprint('kb_api', __name__)
 
@@ -52,6 +53,7 @@ def list_kb():
 
 
 @kb_bp.route('/api/kb', methods=['POST'])
+@admin_required
 def create_kb():
     """创建新的知识库。"""
     try:
@@ -99,6 +101,7 @@ def get_kb(kb_id):
 
 
 @kb_bp.route('/api/kb/<kb_id>', methods=['DELETE'])
+@admin_required
 def delete_kb(kb_id):
     """删除知识库。"""
     try:
@@ -114,6 +117,7 @@ def delete_kb(kb_id):
 
 
 @kb_bp.route('/api/kb/<kb_id>/documents', methods=['POST'])
+@admin_required
 def upload_document(kb_id):
     """上传文档到知识库。"""
     try:
@@ -159,6 +163,7 @@ def upload_document(kb_id):
 
 
 @kb_bp.route('/api/kb/<kb_id>/documents/<doc_id>', methods=['DELETE'])
+@admin_required
 def delete_document(kb_id, doc_id):
     """从知识库删除文档。"""
     try:
@@ -205,6 +210,7 @@ def search_kb(kb_id):
 
 
 @kb_bp.route('/api/kb/<kb_id>/reindex', methods=['POST'])
+@admin_required
 def reindex_kb(kb_id):
     """重建知识库索引（包括向量索引）"""
     try:
