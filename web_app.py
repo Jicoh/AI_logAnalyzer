@@ -102,16 +102,16 @@ def init_default_admin():
     from src.auth.password import hash_password
 
     # 检查是否已存在管理员
-    admin = User.query.filter_by(employee_id='admin').first()
+    admin = User.query.filter_by(employee_id='Administrator').first()
     if not admin:
         admin = User(
-            employee_id='admin',
-            password_hash=hash_password('admin123'),
+            employee_id='Administrator',
+            password_hash=hash_password('Admin@9000'),
             is_admin=True
         )
         db.session.add(admin)
         db.session.commit()
-        logger.info("创建默认管理员账号: admin / admin123")
+        logger.info("创建默认管理员账号: Administrator / Admin@9000")
 
 
 # 创建应用实例

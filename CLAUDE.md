@@ -179,8 +179,8 @@ See `plugins/README.md` for full documentation.
 
 #### 默认账号
 首次启动自动创建管理员账号：
-- 工号: `admin`
-- 密码: `admin123`
+- 工号: `Administrator`
+- 密码: `Admin@9000`
 
 #### 认证流程
 - 用户通过工号+密码登录/注册
