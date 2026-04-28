@@ -3,7 +3,8 @@
 """
 
 import os
-from src.utils.file_utils import get_user_data_dir
+import shutil
+from src.utils.file_utils import get_user_data_dir, get_data_dir
 
 
 def format_size(size_bytes: int) -> str:
@@ -32,6 +33,25 @@ def get_dir_size(path: str) -> int:
     except OSError:
         pass
     return total
+
+
+def check_disk_space(min_gb: float = 10.0) -> tuple[bool, str]:
+    """
+    检查服务器磁盘剩余空间。
+
+    Args:
+        min_gb: 最低要求的剩余空间（GB），默认10GB
+
+    Returns:
+        tuple: (是否充足, 错误消息或剩余空间信息)
+    """
+    data_dir = get_data_dir()
+    disk_usage = shutil.disk_usage(data_dir)
+    free_gb = disk_usage.free / (1024 * 1024 * 1024)
+
+    if free_gb < min_gb:
+        return False, f"服务器存储空间不足，剩余 {free_gb:.2f}GB，需要至少 {min_gb}GB"
+    return True, f"剩余空间 {free_gb:.2f}GB"
 
 
 class StorageQuota:

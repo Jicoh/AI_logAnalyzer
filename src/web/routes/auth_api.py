@@ -7,6 +7,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, jsonif
 from flask_login import login_user, logout_user, current_user, LoginManager
 from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
+from src.storage.quota import check_disk_space
 from src.utils import get_logger
 
 logger = get_logger('auth_api')
@@ -106,6 +107,14 @@ def do_register():
         existing = User.query.filter_by(employee_id=employee_id).first()
         if existing:
             return jsonify({'success': False, 'error': '工号已存在'})
+
+        # 检查服务器存储空间
+        space_ok, space_msg = check_disk_space(10)
+        if not space_ok:
+            return jsonify({
+                'success': False,
+                'error': f'{space_msg}，无法创建新用户，请联系管理员 w30038012'
+            })
 
         # 创建用户
         password_hash = hash_password(password)

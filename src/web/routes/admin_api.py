@@ -10,7 +10,7 @@ from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
 from src.auth.decorators import admin_required
 from src.config_manager.manager import ConfigManager
-from src.storage.quota import StorageQuota, format_size, get_dir_size
+from src.storage.quota import StorageQuota, format_size, get_dir_size, check_disk_space
 from src.utils.file_utils import get_user_data_dir, get_data_dir
 from src.utils import get_logger
 
@@ -195,6 +195,14 @@ def create_user():
         existing = User.query.filter_by(employee_id=employee_id).first()
         if existing:
             return jsonify({'success': False, 'error': '工号已存在'})
+
+        # 检查服务器存储空间
+        space_ok, space_msg = check_disk_space(10)
+        if not space_ok:
+            return jsonify({
+                'success': False,
+                'error': f'{space_msg}，无法创建新用户，请联系管理员 w30038012'
+            })
 
         user = User(
             employee_id=employee_id,
