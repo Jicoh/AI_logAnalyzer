@@ -6,6 +6,21 @@
 <div class="container-fluid py-4" x-data="historyApp()">
     <h4 class="mb-4"><i class="bi bi-clock-history"></i> 历史记录</h4>
 
+    <!-- 工具栏 -->
+    <div x-show="!loading && historyList.length > 0" class="mb-3 d-flex gap-2 align-items-center">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="selectAll"
+                   :checked="selectedRecords.length === historyList.length && historyList.length > 0"
+                   @change="toggleSelectAll()">
+            <label class="form-check-label" for="selectAll">全选</label>
+        </div>
+        <button class="btn btn-primary btn-sm" x-show="selectedRecords.length > 0"
+                @click="downloadSelected()" :disabled="downloading">
+            <i class="bi bi-download"></i>
+            <span x-text="downloading ? '下载中...' : '下载选中 (' + selectedRecords.length + ')'"></span>
+        </button>
+    </div>
+
     <!-- Loading State -->
     <div x-show="loading" class="text-center py-5">
         <div class="spinner-border text-primary" role="status">
@@ -30,6 +45,12 @@
                     <!-- 单文件记录头部 -->
                     <template x-if="!record.is_batch">
                         <div class="row align-items-center">
+                            <div class="col-auto">
+                                <input class="form-check-input" type="checkbox"
+                                       :value="record.folder_name"
+                                       :checked="selectedRecords.includes(record.folder_name)"
+                                       @change="toggleSelect(record.folder_name)">
+                            </div>
                             <div class="col-md-4">
                                 <h6 class="mb-1">
                                     <i class="bi bi-file-text"></i>
@@ -56,7 +77,7 @@
                                     </span>
                                 </div>
                             </div>
-                            <div class="col-md-4 text-end">
+                            <div class="col-md-3 text-end">
                                 <button class="btn btn-outline-primary btn-sm" @click="viewDetail(record.folder_name)">
                                     <i class="bi bi-eye"></i> 查看详情
                                 </button>
@@ -68,6 +89,12 @@
                     <template x-if="record.is_batch">
                         <div>
                             <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <input class="form-check-input" type="checkbox"
+                                           :value="record.folder_name"
+                                           :checked="selectedRecords.includes(record.folder_name)"
+                                           @change="toggleSelect(record.folder_name)">
+                                </div>
                                 <div class="col-md-5">
                                     <h6 class="mb-1">
                                         <i class="bi bi-folder-fill"></i>
@@ -197,6 +224,8 @@ function historyApp() {
         modal: null,
         batchExpanded: {},
         detailFullscreen: false,
+        selectedRecords: [],
+        downloading: false,
 
         init() {
             this.loadHistory();
@@ -214,6 +243,63 @@ function historyApp() {
                 console.error('Failed to load history:', error);
             } finally {
                 this.loading = false;
+            }
+        },
+
+        toggleSelect(folderName) {
+            const index = this.selectedRecords.indexOf(folderName);
+            if (index > -1) {
+                this.selectedRecords.splice(index, 1);
+            } else {
+                this.selectedRecords.push(folderName);
+            }
+        },
+
+        toggleSelectAll() {
+            if (this.selectedRecords.length === this.historyList.length) {
+                this.selectedRecords = [];
+            } else {
+                this.selectedRecords = this.historyList.map(r => r.folder_name);
+            }
+        },
+
+        async downloadSelected() {
+            if (this.selectedRecords.length === 0) return;
+
+            this.downloading = true;
+            try {
+                const response = await fetch('/api/history/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_names: this.selectedRecords })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(error.error || '下载失败');
+                    return;
+                }
+
+                // 获取文件并触发下载
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('Content-Disposition')
+                    ?.split('filename=')[1]?.replace(/"/g, '')
+                    || 'analysis_export.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+
+                // 清空选择
+                this.selectedRecords = [];
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('下载失败: ' + error.message);
+            } finally {
+                this.downloading = false;
             }
         },
 

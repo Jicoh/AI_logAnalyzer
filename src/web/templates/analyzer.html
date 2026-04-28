@@ -209,7 +209,7 @@
             </div>
 
             <!-- 静态分析按钮区域（原始位置） -->
-            <div class="mb-4" id="staticActionBar" x-show="!completed || analyzing">
+            <div class="mb-4" id="staticActionBar">
                 <button class="btn btn-primary w-100" @click="startAnalysis()"
                         :disabled="(uploadMode === 'single' && !logFile && !localPath) ||
                                    (uploadMode === 'folder' && folderFiles.length === 0 && !localPath) ||
@@ -386,11 +386,11 @@
     <!-- 悬浮分析按钮（仅当静态按钮不在视口时显示） -->
     <div class="floating-action-bar"
          id="floatingActionBar"
-         x-show="(!completed || analyzing) && showFloatingButton"
+         x-show="showFloatingButton"
          x-transition:enter="fade-in"
          x-transition:leave="fade-out"
          :style="floatingButtonStyle">
-        <button class="btn btn-primary" @click="startAnalysis()"
+        <button class="btn btn-primary w-100" @click="startAnalysis()"
                 :disabled="(uploadMode === 'single' && !logFile && !localPath) ||
                            (uploadMode === 'folder' && folderFiles.length === 0 && !localPath) ||
                            (!aiSelectionMode && !hasSelectedPluginsInActiveCategory) ||
@@ -1417,9 +1417,10 @@ function analyzerApp() {
 }
 [x-cloak] { display: none !important; }
 
-/* 悬浮分析按钮 - 无背景，与静态按钮位置一致 */
+/* 悬浮分析按钮 - 与静态按钮位置一致 */
 .floating-action-bar {
     z-index: 1050;
+    padding: 0 12px;
 }
 
 .floating-action-bar .btn {

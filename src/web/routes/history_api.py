@@ -5,10 +5,12 @@
 import os
 import json
 import re
+import zipfile
+import tempfile
 from datetime import datetime
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request, send_file
 from flask_login import current_user
-from src.utils.file_utils import get_data_dir, get_user_data_dir, get_project_root
+from src.utils.file_utils import get_data_dir, get_user_data_dir, get_project_root, ensure_dir
 from plugins.base import count_severity
 
 history_bp = Blueprint('history_api', __name__)
@@ -305,3 +307,72 @@ def get_batch_file_detail_api(batch_folder, file_output_dir):
         return jsonify({'success': True, 'data': detail})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@history_bp.route('/api/history/download', methods=['POST'])
+def download_history():
+    """批量下载历史记录分析结果（用户隔离）。"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        folder_names = data.get('folder_names', [])
+        if not folder_names:
+            return jsonify({'success': False, 'error': '请选择要下载的记录'}), 400
+
+        analysis_output_dir = get_user_data_dir(user_id, 'analysis_output')
+
+        # 创建临时ZIP文件
+        temp_dir = get_user_data_dir(user_id, 'temp')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        zip_filename = f'analysis_export_{timestamp}.zip'
+        zip_path = os.path.join(temp_dir, zip_filename)
+
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for folder_name in folder_names:
+                folder_path = os.path.join(analysis_output_dir, folder_name)
+                if not os.path.exists(folder_path):
+                    continue
+
+                # 检查是否为批量分析目录
+                batch_summary_path = os.path.join(folder_path, 'batch_summary.json')
+                if os.path.exists(batch_summary_path):
+                    # 批量分析：打包每个子文件目录
+                    try:
+                        with open(batch_summary_path, 'r', encoding='utf-8') as f:
+                            batch_summary = json.load(f)
+                        files_data = batch_summary.get('files', {})
+                        for filename, file_data in files_data.items():
+                            output_dir = file_data.get('output_dir', '')
+                            if output_dir:
+                                sub_folder_path = os.path.join(folder_path, output_dir)
+                                if os.path.exists(sub_folder_path):
+                                    add_folder_to_zip(zf, sub_folder_path, os.path.join(folder_name, output_dir))
+                    except (json.JSONDecodeError, IOError):
+                        pass
+                else:
+                    # 单文件分析：直接打包整个目录
+                    add_folder_to_zip(zf, folder_path, folder_name)
+
+        # 发送文件
+        return send_file(
+            zip_path,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=zip_filename
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def add_folder_to_zip(zf, folder_path, zip_folder_name):
+    """将文件夹内容添加到ZIP文件中。"""
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            # 计算ZIP内的相对路径
+            rel_path = os.path.relpath(file_path, folder_path)
+            zip_path = os.path.join(zip_folder_name, rel_path)
+            zf.write(file_path, zip_path)
