@@ -10,6 +10,7 @@ from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
 from src.auth.decorators import admin_required
 from src.config_manager.manager import ConfigManager
+from src.settings_manager.manager import SettingsManager
 from src.storage.quota import StorageQuota, format_size, get_dir_size, check_disk_space
 from src.utils.file_utils import get_user_data_dir, get_data_dir
 from src.utils import get_logger
@@ -272,6 +273,9 @@ def get_config():
     try:
         config_manager = ConfigManager()
         config = config_manager.get_all()
+        # 添加 log_viewer 配置（从 settings.json 获取）
+        settings_manager = SettingsManager()
+        config['log_viewer'] = settings_manager.get('log_viewer', {'enabled': False, 'exe_path': ''})
         return jsonify({'success': True, 'data': config})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -330,6 +334,16 @@ def update_config():
                 config_manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
 
         config_manager.save()
+
+        # 更新 log_viewer 设置（保存到 settings.json）
+        if 'log_viewer' in data:
+            lv_config = data['log_viewer']
+            settings_manager = SettingsManager()
+            if 'enabled' in lv_config:
+                settings_manager.set('log_viewer.enabled', lv_config['enabled'])
+            if 'exe_path' in lv_config:
+                settings_manager.set('log_viewer.exe_path', lv_config['exe_path'])
+            settings_manager.save()
 
         logger.info(f"管理员 {current_user.employee_id} 更新系统配置")
 
