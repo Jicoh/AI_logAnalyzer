@@ -312,16 +312,18 @@ class ToolExecutor:
 class LogAnalyzerAgent:
     """BMC日志分析Agent"""
 
-    def __init__(self, config_manager, kb_manager=None):
+    def __init__(self, config_manager, kb_manager=None, mcp_client=None):
         """
         初始化Agent
 
         Args:
             config_manager: 配置管理器实例
             kb_manager: 知识库管理器实例
+            mcp_client: MCP客户端实例（可选）
         """
         self.config_manager = config_manager
         self.kb_manager = kb_manager
+        self.mcp_client = mcp_client
 
         api_config = config_manager.get('api', {})
         self.client = AIClient(api_config)
@@ -333,6 +335,9 @@ class LogAnalyzerAgent:
         self.prompt_path = self._get_prompt_path()
         self.template_path = self._get_template_path()
         self.html_template = self._load_template()
+
+        # 构建工具列表（内置工具 + MCP工具）
+        self.tools = self._build_tools()
 
     def _get_prompt_path(self) -> str:
         """获取prompt文件路径"""
@@ -351,6 +356,15 @@ class LogAnalyzerAgent:
             with open(self.template_path, 'r', encoding='utf-8') as f:
                 return Template(f.read())
         return None
+
+    def _build_tools(self) -> list:
+        """构建完整工具列表（内置工具 + MCP工具）"""
+        tools = BUILTIN_TOOLS.copy()
+        if self.mcp_client:
+            mcp_tools = self.mcp_client.list_tools()
+            tools.extend(mcp_tools)
+            logger.debug(f"已加载 {len(mcp_tools)} 个MCP工具")
+        return tools
 
     def _load_prompt(self) -> str:
         """加载prompt模板"""
@@ -446,9 +460,9 @@ class LogAnalyzerAgent:
             round_count += 1
             logger.debug(f"第{round_count}轮交互开始")
 
-            # 调用AI
+            # 调用AI（使用完整工具列表）
             try:
-                response = self.client.chat_with_tools(messages, BUILTIN_TOOLS, "auto")
+                response = self.client.chat_with_tools(messages, self.tools, "auto")
             except Exception as e:
                 logger.error(f"AI调用失败: {str(e)}")
                 validation_errors.append(f"AI调用失败: {str(e)}")
@@ -471,7 +485,14 @@ class LogAnalyzerAgent:
                     except json.JSONDecodeError:
                         args = {}
 
-                    result = tool_executor.execute(tool_name, args)
+                    # 区分内置工具和MCP工具
+                    if tool_name in BUILTIN_TOOL_NAMES:
+                        result = tool_executor.execute(tool_name, args)
+                    elif self.mcp_client:
+                        result = self.mcp_client.call_tool(tool_name, args)
+                    else:
+                        result = {"error": f"未知工具: {tool_name}"}
+
                     tool_results.append({
                         "tool_call_id": tool_call.get('id', ''),
                         "name": tool_name,

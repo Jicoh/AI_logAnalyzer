@@ -12,6 +12,7 @@ from typing import Generator, Dict, Any, List
 
 from .client import AIClient
 from .log_analyzer_agent import LogAnalyzerAgent
+from .mcp_client import MCPClient
 
 
 def extract_machine_info_from_plugins(plugin_result: Dict) -> Dict[str, Any]:
@@ -131,7 +132,8 @@ def analyze_with_agent(
     log_files: List[str] = None,
     kb_id: str = None,
     user_prompt: str = None,
-    log_rules_id: str = None
+    log_rules_id: str = None,
+    mcp_client: MCPClient = None
 ) -> Dict[str, Any]:
     """
     使用LogAnalyzerAgent进行分析
@@ -145,6 +147,7 @@ def analyze_with_agent(
         kb_id: 知识库ID
         user_prompt: 用户提示词
         log_rules_id: 日志规则ID
+        mcp_client: MCP客户端实例（可选，如未提供则自动创建）
 
     Returns:
         dict: 包含html和interaction_record的结果
@@ -153,6 +156,17 @@ def analyze_with_agent(
     from src.utils import get_logger
 
     logger = get_logger('analyze_with_agent')
+
+    # 创建MCP客户端（如果未提供）
+    if mcp_client is None:
+        mcp_config = config_manager.get('mcp_servers', {})
+        if mcp_config:
+            try:
+                mcp_client = MCPClient(config_manager)
+                logger.info(f"MCP客户端已创建，状态: {mcp_client.get_server_status()}")
+            except Exception as e:
+                logger.warning(f"创建MCP客户端失败: {str(e)}")
+                mcp_client = None
 
     # 1. 提取机器信息
     machine_info = extract_machine_info_from_plugins(plugin_result or {})
@@ -218,7 +232,7 @@ def analyze_with_agent(
     analysis_templates = load_analysis_templates()
 
     # 5. 创建Agent并执行分析
-    agent = LogAnalyzerAgent(config_manager, kb_manager)
+    agent = LogAnalyzerAgent(config_manager, kb_manager, mcp_client)
 
     result = agent.run_analysis(
         plugin_result=plugin_result or {},
