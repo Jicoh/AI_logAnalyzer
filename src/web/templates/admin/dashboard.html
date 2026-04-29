@@ -5,13 +5,29 @@
 {% block content %}
 <div x-data="adminApp()" x-init="init()">
     <div class="row">
-        <div class="col-12">
-            <h4 class="mb-4"><i class="bi bi-shield-lock"></i> 管理员控制台</h4>
+        <!-- 二级侧边栏 -->
+        <div class="col-auto pe-0" style="width: 180px;">
+            <div class="settings-sidebar">
+                <div class="nav-item" :class="{ active: activeSection === 'stats' }" @click="scrollTo('stats')">
+                    <i class="bi bi-graph-up"></i> 统计概览
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'users' }" @click="scrollTo('users')">
+                    <i class="bi bi-people"></i> 用户管理
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'feedback' }" @click="scrollTo('feedback')">
+                    <i class="bi bi-chat-dots"></i> 意见管理
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
+                    <i class="bi bi-gear"></i> 系统配置
+                </div>
+            </div>
         </div>
-    </div>
+        <!-- 主内容区域 -->
+        <div class="col">
+            <h4 class="mb-4"><i class="bi bi-shield-lock"></i> 管理员控制台</h4>
 
-    <!-- 统计概览 -->
-    <div class="row mb-4">
+            <!-- 统计概览 -->
+            <div id="section-stats" class="row mb-4">
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
@@ -47,7 +63,7 @@
     </div>
 
     <!-- 用户管理 -->
-    <div class="card mb-4">
+    <div id="section-users" class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span><i class="bi bi-people"></i> 用户管理</span>
             <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
@@ -108,7 +124,7 @@
     </div>
 
     <!-- 意见管理 -->
-    <div class="card mb-4">
+    <div id="section-feedback" class="card mb-4">
         <div class="card-header">
             <i class="bi bi-chat-dots"></i> 意见管理
         </div>
@@ -148,7 +164,7 @@
     </div>
 
     <!-- 系统配置 -->
-    <div class="card mb-4">
+    <div id="section-config" class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span><i class="bi bi-gear"></i> 系统配置</span>
             <button class="btn btn-primary btn-sm" @click="saveConfig()" :disabled="configSaving">
@@ -380,6 +396,8 @@
                 </div>
             </div>
         </div>
+    </div>
+    </div>
     </div>
 
     <!-- 新增用户模态框 -->
@@ -661,6 +679,8 @@ function adminApp() {
             checksStr: ''
         },
         templateSaving: false,
+        // 二级侧边栏相关
+        activeSection: 'stats',
 
         init() {
             this.loadUsers();
@@ -669,6 +689,34 @@ function adminApp() {
             this.loadConfig();
             this.loadMcpServers();
             this.loadAnalysisTemplates();
+            this.setupScrollObserver();
+        },
+
+        scrollTo(sectionId) {
+            const element = document.getElementById('section-' + sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                this.activeSection = sectionId;
+            }
+        },
+
+        setupScrollObserver() {
+            const sections = ['stats', 'users', 'feedback', 'config'];
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const sectionId = entry.target.id.replace('section-', '');
+                        this.activeSection = sectionId;
+                    }
+                });
+            }, { threshold: 0.3 });
+
+            sections.forEach(section => {
+                const element = document.getElementById('section-' + section);
+                if (element) {
+                    observer.observe(element);
+                }
+            });
         },
 
         showToast(type, title, message) {
