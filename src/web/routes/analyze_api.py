@@ -9,7 +9,7 @@ from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
 from flask_login import current_user
 
-from src.ai_analyzer.agent_coordinator import AgentCoordinator
+from src.ai_analyzer.analyzer import analyze_with_agent
 from src.ai_analyzer.selection_agent import SelectionAgent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
@@ -406,20 +406,18 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
 
                 try:
-                    coordinator = AgentCoordinator(
+                    result = analyze_with_agent(
                         config_manager=get_config_manager(),
                         kb_manager=get_kb_manager(),
-                        log_metadata_manager=get_log_metadata_manager()
-                    )
-
-                    html_result = coordinator.run_analysis(
+                        log_metadata_manager=get_log_metadata_manager(),
                         plugin_result=combined_result,
-                        log_files=selected_log_files,
+                        log_files=log_file_paths,
                         kb_id=kb_id,
                         user_prompt=user_prompt,
-                        log_rules_id=log_rules_id,
-                        actual_log_paths=log_file_paths
+                        log_rules_id=log_rules_id
                     )
+
+                    html_result = result.get('html', '')
 
                     # 保存 HTML 结果
                     ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
@@ -740,19 +738,17 @@ def analyze_local_stream():
                 if enable_ai:
                     yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
                     try:
-                        coordinator = AgentCoordinator(
+                        result = analyze_with_agent(
                             config_manager=get_config_manager(),
                             kb_manager=get_kb_manager(),
-                            log_metadata_manager=get_log_metadata_manager()
-                        )
-                        html_result = coordinator.run_analysis(
+                            log_metadata_manager=get_log_metadata_manager(),
                             plugin_result=combined_result,
-                            log_files=selected_log_files,
+                            log_files=log_file_paths,
                             kb_id=kb_id,
                             user_prompt=user_prompt,
-                            log_rules_id=log_rules_id,
-                            actual_log_paths=log_file_paths
+                            log_rules_id=log_rules_id
                         )
+                        html_result = result.get('html', '')
                         ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
                         with open(ai_html_file, 'w', encoding='utf-8') as f:
                             f.write(html_result)
@@ -906,19 +902,17 @@ def analyze_local_stream():
                             'message': f'AI分析: {unit_name}'
                         })
                         try:
-                            coordinator = AgentCoordinator(
+                            result = analyze_with_agent(
                                 config_manager=get_config_manager(),
                                 kb_manager=get_kb_manager(),
-                                log_metadata_manager=get_log_metadata_manager()
-                            )
-                            html_result = coordinator.run_analysis(
+                                log_metadata_manager=get_log_metadata_manager(),
                                 plugin_result=plugin_result,
                                 log_files=log_files_in_unit,
                                 kb_id=kb_id,
                                 user_prompt=user_prompt,
-                                log_rules_id=log_rules_id,
-                                actual_log_paths=log_files_in_unit
+                                log_rules_id=log_rules_id
                             )
+                            html_result = result.get('html', '')
                             ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
                             with open(ai_html_file, 'w', encoding='utf-8') as f:
                                 f.write(html_result)
@@ -1445,20 +1439,18 @@ def analyze_batch_stream():
                     })
 
                     try:
-                        coordinator = AgentCoordinator(
+                        result = analyze_with_agent(
                             config_manager=get_config_manager(),
                             kb_manager=get_kb_manager(),
-                            log_metadata_manager=get_log_metadata_manager()
-                        )
-
-                        html_result = coordinator.run_analysis(
+                            log_metadata_manager=get_log_metadata_manager(),
                             plugin_result=plugin_result,
                             log_files=log_files_in_unit,
                             kb_id=kb_id,
                             user_prompt=user_prompt,
-                            log_rules_id=log_rules_id,
-                            actual_log_paths=log_files_in_unit
+                            log_rules_id=log_rules_id
                         )
+
+                        html_result = result.get('html', '')
 
                         # 保存HTML结果
                         ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')

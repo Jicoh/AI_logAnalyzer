@@ -11,6 +11,11 @@
         "temperature": 0.7,
         "max_tokens": 60000
     },
+    "agent": {
+        "max_tokens": 60000,
+        "max_rounds": 10,
+        "tool_call_limit": 20
+    },
     "knowledge_base": {
         "default_id": "",
         "version": "1.0"

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI 日志分析报告</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: #f8f9fa;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .container-main {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .report-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .section-header i {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        .section-header h5 {
+            margin: 0;
+            color: #333;
+        }
+        .stat-box {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-box .value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .stat-box .label {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        .machine-info-table {
+            font-size: 0.9rem;
+        }
+        .machine-info-table th {
+            width: 30%;
+            background: #f8f9fa;
+        }
+        .problem-item {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 4px solid;
+        }
+        .problem-item.error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .problem-item.warning {
+            border-left-color: #ffc107;
+            background: #fff8e6;
+        }
+        .problem-item.info {
+            border-left-color: #0dcaf0;
+            background: #f0faff;
+        }
+        .problem-item .title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .problem-item .detail {
+            font-size: 0.85rem;
+            color: #495057;
+        }
+        .solution-card {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .solution-card .card-header {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .solution-card .card-body {
+            font-size: 0.9rem;
+        }
+        .solution-card .step-item {
+            padding: 6px 0;
+            border-bottom: 1px dashed #dee2e6;
+        }
+        .solution-card .step-item:last-child {
+            border-bottom: none;
+        }
+        .log-snippet {
+            background: #f8f8f8;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .risk-badge {
+            font-size: 1rem;
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+        .footer-info {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px 0;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <!-- 机器信息 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-hdd text-primary"></i>
+                <h5>机器信息</h5>
+            </div>
+            {% if machine_info %}
+            <table class="table table-bordered machine-info-table">
+                <tbody>
+                    {% for key, value in machine_info.items() %}
+                    <tr>
+                        <th>{{ key }}</th>
+                        <td>{{ value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted">暂无机器信息</p>
+            {% endif %}
+        </div>
+
+        <!-- 分析摘要 -->
+        {% if analysis_summary %}
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-chat-text text-primary"></i>
+                <h5>分析摘要</h5>
+            </div>
+            <p class="lead">{{ analysis_summary }}</p>
+        </div>
+        {% endif %}
+
+        <!-- 问题摘要 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-clipboard-data text-warning"></i>
+                <h5>问题摘要</h5>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="stat-box border border-danger">
+                        <div class="value text-danger">{{ summary.errors }}</div>
+                        <div class="label">严重问题</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-box border border-warning">
+                        <div class="value text-warning">{{ summary.warnings }}</div>
+                        <div class="label">警告问题</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-box border border-info">
+                        <div class="value text-info">{{ summary.info or 0 }}</div>
+                        <div class="label">提示信息</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 问题详情 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-exclamation-triangle text-danger"></i>
+                <h5>问题详情</h5>
+            </div>
+            {% if problems %}
+                {% for problem in problems %}
+                <div class="problem-item {{ problem.severity }}">
+                    <div class="title">
+                        {% if problem.severity == 'error' %}
+                        <i class="bi bi-x-circle text-danger"></i>
+                        {% elif problem.severity == 'warning' %}
+                        <i class="bi bi-exclamation-triangle text-warning"></i>
+                        {% else %}
+                        <i class="bi bi-info-circle text-info"></i>
+                        {% endif %}
+                        {{ problem.title }}
+                    </div>
+                    {% if problem.description %}
+                    <div class="detail">{{ problem.description }}</div>
+                    {% endif %}
+                    {% if problem.analysis_logic %}
+                    <div class="detail mt-2 p-2 bg-light rounded">
+                        <strong>分析逻辑:</strong> {{ problem.analysis_logic }}
+                    </div>
+                    {% endif %}
+                    {% if problem.log_reference %}
+                    <div class="detail mt-1"><small class="text-muted">日志引用: {{ problem.log_reference[:100] }}{% if problem.log_reference|length > 100 %}...{% endif %}</small></div>
+                    {% endif %}
+                    {% if problem.source %}
+                    <div class="detail text-muted"><small>来源: {{ problem.source }}</small></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+            <p class="text-muted">未发现问题</p>
+            {% endif %}
+        </div>
+
+        <!-- 潜在风险 -->
+        {% if potential_risks and potential_risks|length > 0 %}
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-search text-warning"></i>
+                <h5>潜在风险</h5>
+            </div>
+            <p class="text-muted small mb-3">以下为分析过程中发现的可疑迹象，需要进一步确认：</p>
+            {% for risk in potential_risks %}
+            <div class="problem-item {{ risk.severity or 'warning' }}">
+                <div class="title">
+                    <i class="bi bi-question-circle text-warning"></i>
+                    {{ risk.title }}
+                </div>
+                {% if risk.reasoning %}
+                <div class="detail mt-2 p-2 bg-light rounded">
+                    <strong>怀疑依据:</strong> {{ risk.reasoning }}
+                </div>
+                {% endif %}
+                {% if risk.log_reference %}
+                <div class="detail mt-1"><small class="text-muted">日志引用: {{ risk.log_reference[:100] }}{% if risk.log_reference|length > 100 %}...{% endif %}</small></div>
+                {% endif %}
+                {% if risk.recommendation %}
+                <div class="detail text-info mt-1"><small><i class="bi bi-lightbulb"></i> 建议确认方式: {{ risk.recommendation }}</small></div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- 解决方案建议 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-lightbulb text-success"></i>
+                <h5>解决方案建议</h5>
+            </div>
+            {% if solutions %}
+            <div class="row">
+                {% for solution in solutions %}
+                <div class="col-md-6 mb-3">
+                    <div class="solution-card">
+                        <div class="card-header">
+                            <i class="bi bi-wrench"></i> {{ solution.title }}
+                        </div>
+                        <div class="card-body">
+                            {% if solution.description %}
+                            <p class="mb-2">{{ solution.description }}</p>
+                            {% endif %}
+                            {% if solution.steps %}
+                            <div class="steps">
+                                {% for step in solution.steps %}
+                                <div class="step-item">
+                                    <span class="badge bg-secondary me-2">{{ loop.index }}</span>
+                                    {{ step }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% if solution.priority %}
+                            <div class="mt-2">
+                                <span class="badge
+                                    {% if solution.priority == 'high' %}bg-danger
+                                    {% elif solution.priority == 'medium' %}bg-warning
+                                    {% else %}bg-info{% endif %}">
+                                    优先级: {{ solution.priority }}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted">暂无具体解决方案</p>
+            {% endif %}
+        </div>
+
+        <!-- 相关日志片段 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-file-text text-secondary"></i>
+                <h5>相关日志片段</h5>
+            </div>
+            {% if log_snippets %}
+                {% for snippet in log_snippets %}
+                {% if snippet.title %}
+                <div class="mb-2"><strong>{{ snippet.title }}</strong></div>
+                {% endif %}
+                <div class="log-snippet mb-3">{{ snippet.content }}</div>
+                {% endfor %}
+            {% else %}
+            <p class="text-muted">暂无相关日志片段</p>
+            {% endif %}
+        </div>
+
+        <!-- 风险评估 -->
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-shield text-info"></i>
+                <h5>风险评估</h5>
+            </div>
+            <div class="d-flex align-items-center">
+                {% if risk_assessment %}
+                <span class="risk-badge
+                    {% if risk_assessment.level == '高' %}bg-danger text-white
+                    {% elif risk_assessment.level == '中' %}bg-warning text-dark
+                    {% else %}bg-success text-white{% endif %}">
+                    风险等级: {{ risk_assessment.level }}
+                </span>
+                {% if risk_assessment.description %}
+                <span class="ms-3">{{ risk_assessment.description }}</span>
+                {% endif %}
+                {% elif risk %}
+                <span class="risk-badge
+                    {% if risk.level == '高' %}bg-danger text-white
+                    {% elif risk.level == '中' %}bg-warning text-dark
+                    {% else %}bg-success text-white{% endif %}">
+                    风险等级: {{ risk.level }}
+                </span>
+                {% if risk.description %}
+                <span class="ms-3">{{ risk.description }}</span>
+                {% endif %}
+                {% else %}
+                <span class="risk-badge bg-secondary text-white">风险等级: 未评估</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 分析覆盖范围 -->
+        {% if analysis_coverage %}
+        <div class="report-card">
+            <div class="section-header">
+                <i class="bi bi-folder text-secondary"></i>
+                <h5>分析覆盖范围</h5>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    {% if analysis_coverage.analysis_depth %}
+                    <p><strong>分析深度:</strong> {{ analysis_coverage.analysis_depth }}</p>
+                    {% endif %}
+                    {% if analysis_coverage.files_analyzed %}
+                    <p><strong>已分析文件:</strong></p>
+                    <ul class="list-unstyled">
+                        {% for f in analysis_coverage.files_analyzed %}
+                        <li><i class="bi bi-check-circle text-success"></i> {{ f }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    {% if analysis_coverage.files_skipped %}
+                    <p><strong>跳过文件:</strong></p>
+                    <ul class="list-unstyled">
+                        {% for f in analysis_coverage.files_skipped %}
+                        <li><i class="bi bi-skip-forward text-muted"></i> {{ f }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="footer-info">
+            Generated by AI Log Analyzer Agent | {{ analysis_time }}
+        </div>
+    </div>
+</body>
+</html>
