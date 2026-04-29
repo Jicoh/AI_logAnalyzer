@@ -406,12 +406,15 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
 
                 try:
+                    # 构建log_source参数
+                    log_source = {'type': 'local_file', 'paths': log_file_paths}
+
                     result = analyze_with_agent(
                         config_manager=get_config_manager(),
                         kb_manager=get_kb_manager(),
                         log_metadata_manager=get_log_metadata_manager(),
                         plugin_result=combined_result,
-                        log_files=log_file_paths,
+                        log_source=log_source,
                         kb_id=kb_id,
                         user_prompt=user_prompt,
                         log_rules_id=log_rules_id
@@ -738,12 +741,15 @@ def analyze_local_stream():
                 if enable_ai:
                     yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
                     try:
+                        # 构建log_source参数
+                        log_source = {'type': 'local_file', 'paths': log_file_paths}
+
                         result = analyze_with_agent(
                             config_manager=get_config_manager(),
                             kb_manager=get_kb_manager(),
                             log_metadata_manager=get_log_metadata_manager(),
                             plugin_result=combined_result,
-                            log_files=log_file_paths,
+                            log_source=log_source,
                             kb_id=kb_id,
                             user_prompt=user_prompt,
                             log_rules_id=log_rules_id
@@ -902,12 +908,15 @@ def analyze_local_stream():
                             'message': f'AI分析: {unit_name}'
                         })
                         try:
+                            # 构建log_source参数
+                            log_source = {'type': 'local_file', 'paths': log_files_in_unit}
+
                             result = analyze_with_agent(
                                 config_manager=get_config_manager(),
                                 kb_manager=get_kb_manager(),
                                 log_metadata_manager=get_log_metadata_manager(),
                                 plugin_result=plugin_result,
-                                log_files=log_files_in_unit,
+                                log_source=log_source,
                                 kb_id=kb_id,
                                 user_prompt=user_prompt,
                                 log_rules_id=log_rules_id
@@ -1439,12 +1448,15 @@ def analyze_batch_stream():
                     })
 
                     try:
+                        # 构建log_source参数
+                        log_source = {'type': 'local_file', 'paths': log_files_in_unit}
+
                         result = analyze_with_agent(
                             config_manager=get_config_manager(),
                             kb_manager=get_kb_manager(),
                             log_metadata_manager=get_log_metadata_manager(),
                             plugin_result=plugin_result,
-                            log_files=log_files_in_unit,
+                            log_source=log_source,
                             kb_id=kb_id,
                             user_prompt=user_prompt,
                             log_rules_id=log_rules_id

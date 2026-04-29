@@ -274,6 +274,63 @@
                     <small class="text-muted">支持exe程序或.lnk快捷方式路径</small>
                 </div>
             </div>
+
+            <hr>
+
+            <!-- MCP Server设置 -->
+            <h6 class="text-muted mb-3"><i class="bi bi-plug"></i> MCP Server设置</h6>
+            <div class="row mb-4">
+                <div class="col-12 mb-3">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>描述</th>
+                                <th>工具数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="server in mcpServers" :key="server.name">
+                                <tr>
+                                    <td x-text="server.name"></td>
+                                    <td x-text="server.transport"></td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox"
+                                                   :checked="server.enabled"
+                                                   @change="toggleMcpServer(server.name, $event)">
+                                        </div>
+                                    </td>
+                                    <td x-text="server.description || '-'"></td>
+                                    <td x-text="server.tool_count || '-'"></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-success" @click="testMcpServer(server.name)" title="测试连接">
+                                                <i class="bi bi-play"></i>
+                                            </button>
+                                            <button class="btn btn-outline-primary" @click="editMcpServer(server)" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteMcpServer(server.name)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="mcpServers.length === 0">
+                                <td colspan="6" class="text-center text-muted">暂无MCP Server配置</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-primary btn-sm" @click="showAddMcpModal = true">
+                        <i class="bi bi-plus"></i> 新增MCP Server
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -370,6 +427,75 @@
         </div>
     </div>
 
+    <!-- 新增/编辑MCP Server模态框 -->
+    <div class="modal" :class="showAddMcpModal || showEditMcpModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="showEditMcpModal ? '编辑MCP Server' : '新增MCP Server'"></h5>
+                    <button type="button" class="btn-close" @click="closeMcpModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" x-model="mcpForm.name"
+                               :disabled="showEditMcpModal" placeholder="log_downloader">
+                        <small class="text-muted">唯一标识符，创建后不可修改</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">传输类型</label>
+                        <select class="form-select" x-model="mcpForm.transport" :disabled="showEditMcpModal">
+                            <option value="stdio">stdio (本地进程)</option>
+                            <option value="websocket">websocket (远程服务)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <input type="text" class="form-control" x-model="mcpForm.description" placeholder="日志下载服务">
+                    </div>
+                    <!-- stdio配置 -->
+                    <div x-show="mcpForm.transport === 'stdio'">
+                        <div class="mb-3">
+                            <label class="form-label">命令</label>
+                            <input type="text" class="form-control" x-model="mcpForm.command" placeholder="python">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">参数 (JSON数组)</label>
+                            <input type="text" class="form-control" x-model="mcpForm.argsStr" placeholder='["mcp_servers/log_downloader/server.py"]'>
+                            <small class="text-muted">JSON数组格式，相对路径基于项目根目录</small>
+                        </div>
+                    </div>
+                    <!-- websocket配置 -->
+                    <div x-show="mcpForm.transport === 'websocket'">
+                        <div class="mb-3">
+                            <label class="form-label">URL</label>
+                            <input type="text" class="form-control" x-model="mcpForm.url" placeholder="ws://localhost:8080/mcp">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">超时时间 (秒)</label>
+                        <input type="number" class="form-control" x-model="mcpForm.timeout" min="5" max="120">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" x-model="mcpForm.enabled">
+                        <label class="form-check-label">启用</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeMcpModal()">取消</button>
+                    <button class="btn btn-success" @click="testMcpForm()" :disabled="mcpTesting">
+                        <span x-show="mcpTesting" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="mcpTesting ? '测试中...' : '测试连接'"></span>
+                    </button>
+                    <button class="btn btn-primary" @click="saveMcpServer()" :disabled="mcpSaving">
+                        <span x-show="mcpSaving" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="mcpSaving ? '保存中...' : '保存'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
@@ -411,12 +537,29 @@ function adminApp() {
         showApiKey: false,
         showEmbeddingKey: false,
         configSaving: false,
+        // MCP Server相关
+        mcpServers: [],
+        showAddMcpModal: false,
+        showEditMcpModal: false,
+        mcpForm: {
+            name: '',
+            transport: 'stdio',
+            description: '',
+            command: 'python',
+            argsStr: '',
+            url: '',
+            timeout: 30,
+            enabled: true
+        },
+        mcpTesting: false,
+        mcpSaving: false,
 
         init() {
             this.loadUsers();
             this.loadStats();
             this.loadFeedbacks();
             this.loadConfig();
+            this.loadMcpServers();
         },
 
         showToast(type, title, message) {
@@ -642,6 +785,207 @@ function adminApp() {
                 this.showToast('error', '错误', '保存配置失败');
             } finally {
                 this.configSaving = false;
+            }
+        },
+
+        // MCP Server相关函数
+        async loadMcpServers() {
+            try {
+                const response = await fetch('/api/admin/mcp/servers');
+                const data = await response.json();
+                if (data.success) {
+                    this.mcpServers = data.data;
+                }
+            } catch (e) {
+                console.error('Load MCP servers failed:', e);
+            }
+        },
+
+        async toggleMcpServer(name, event) {
+            const enabled = event.target.checked;
+            try {
+                const response = await fetch(`/api/admin/mcp/servers/${name}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', enabled ? '已启用' : '已禁用');
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                    event.target.checked = !enabled;
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '操作失败');
+                event.target.checked = !enabled;
+            }
+        },
+
+        async testMcpServer(name) {
+            try {
+                const response = await fetch(`/api/admin/mcp/servers/${name}/test`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success && data.data.connected) {
+                    this.showToast('success', '连接成功', `发现 ${data.data.tool_count} 个工具: ${data.data.tools.join(', ')}`);
+                } else {
+                    this.showToast('error', '连接失败', data.data?.error || '未知错误');
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '测试失败');
+            }
+        },
+
+        editMcpServer(server) {
+            this.mcpForm = {
+                name: server.name,
+                transport: server.transport,
+                description: server.description,
+                command: server.command || 'python',
+                argsStr: JSON.stringify(server.args || []),
+                url: server.url || '',
+                timeout: server.timeout || 30,
+                enabled: server.enabled
+            };
+            this.showEditMcpModal = true;
+        },
+
+        closeMcpModal() {
+            this.showAddMcpModal = false;
+            this.showEditMcpModal = false;
+            this.mcpForm = {
+                name: '',
+                transport: 'stdio',
+                description: '',
+                command: 'python',
+                argsStr: '',
+                url: '',
+                timeout: 30,
+                enabled: true
+            };
+        },
+
+        async testMcpForm() {
+            this.mcpTesting = true;
+            try {
+                // 先保存配置（临时），然后测试
+                const payload = this.buildMcpPayload();
+                const url = this.showEditMcpModal
+                    ? `/api/admin/mcp/servers/${this.mcpForm.name}`
+                    : '/api/admin/mcp/servers';
+
+                // 保存配置
+                let saveResponse;
+                if (this.showEditMcpModal) {
+                    saveResponse = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    // 新增时先临时保存
+                    saveResponse = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                }
+
+                const saveData = await saveResponse.json();
+                if (!saveData.success) {
+                    this.showToast('error', '保存失败', saveData.error);
+                    return;
+                }
+
+                // 测试连接
+                const testResponse = await fetch(`/api/admin/mcp/servers/${this.mcpForm.name}/test`, { method: 'POST' });
+                const testData = await testResponse.json();
+                if (testData.success && testData.data.connected) {
+                    this.showToast('success', '连接成功', `发现 ${testData.data.tool_count} 个工具`);
+                    // 更新列表中的tool_count
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '连接失败', testData.data?.error || '未知错误');
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '测试失败');
+            } finally {
+                this.mcpTesting = false;
+            }
+        },
+
+        async saveMcpServer() {
+            if (!this.mcpForm.name) {
+                this.showToast('error', '错误', '名称不能为空');
+                return;
+            }
+
+            this.mcpSaving = true;
+            try {
+                const payload = this.buildMcpPayload();
+                const url = this.showEditMcpModal
+                    ? `/api/admin/mcp/servers/${this.mcpForm.name}`
+                    : '/api/admin/mcp/servers';
+                const method = this.showEditMcpModal ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.closeMcpModal();
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '保存失败');
+            } finally {
+                this.mcpSaving = false;
+            }
+        },
+
+        buildMcpPayload() {
+            const payload = {
+                name: this.mcpForm.name,
+                transport: this.mcpForm.transport,
+                description: this.mcpForm.description,
+                timeout: parseInt(this.mcpForm.timeout),
+                enabled: this.mcpForm.enabled
+            };
+
+            if (this.mcpForm.transport === 'stdio') {
+                payload.command = this.mcpForm.command;
+                try {
+                    payload.args = JSON.parse(this.mcpForm.argsStr || '[]');
+                } catch (e) {
+                    payload.args = [];
+                }
+            } else if (this.mcpForm.transport === 'websocket') {
+                payload.url = this.mcpForm.url;
+            }
+
+            return payload;
+        },
+
+        async deleteMcpServer(name) {
+            if (!confirm(`确定要删除MCP Server "${name}" 吗？`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/mcp/servers/${name}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
             }
         }
     };

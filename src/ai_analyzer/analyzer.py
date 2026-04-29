@@ -130,6 +130,7 @@ def analyze_with_agent(
     log_metadata_manager=None,
     plugin_result: Dict = None,
     log_files: List[str] = None,
+    log_source: Dict = None,
     kb_id: str = None,
     user_prompt: str = None,
     log_rules_id: str = None,
@@ -143,7 +144,19 @@ def analyze_with_agent(
         kb_manager: 知识库管理器
         log_metadata_manager: 日志元数据管理器
         plugin_result: 插件分析结果
-        log_files: 日志文件路径列表
+        log_files: 日志文件路径列表（旧参数，兼容使用）
+        log_source: 日志来源配置（新参数）
+            {
+                "type": "local_file",  # 或 "mcp_download"
+                "paths": ["path1", "path2"],  # local_file模式
+                "mcp_config": {  # mcp_download模式
+                    "server": "log_downloader",
+                    "ip": "192.168.1.100",
+                    "username": "root",
+                    "password": "...",
+                    "log_type": "system"
+                }
+            }
         kb_id: 知识库ID
         user_prompt: 用户提示词
         log_rules_id: 日志规则ID
@@ -157,6 +170,68 @@ def analyze_with_agent(
 
     logger = get_logger('analyze_with_agent')
 
+    # 确定日志文件来源
+    final_log_files = []
+
+    if log_source:
+        source_type = log_source.get('type', 'local_file')
+
+        if source_type == 'mcp_download':
+            # 通过MCP下载日志
+            mcp_config = log_source.get('mcp_config', {})
+            if not mcp_client:
+                # 创建MCP客户端
+                mcp_config_servers = config_manager.get('mcp_servers', {})
+                if mcp_config_servers:
+                    try:
+                        mcp_client = MCPClient(config_manager)
+                    except Exception as e:
+                        logger.error(f"创建MCP客户端失败: {str(e)}")
+                        return {
+                            'html': _generate_error_html("MCP客户端创建失败", str(e)),
+                            'interaction_record': {'error': str(e)}
+                        }
+
+            if mcp_client:
+                try:
+                    # 调用MCP下载工具
+                    download_args = {
+                        'ip': mcp_config.get('ip', ''),
+                        'username': mcp_config.get('username', 'root'),
+                        'password': mcp_config.get('password', ''),
+                        'log_type': mcp_config.get('log_type', 'system')
+                    }
+                    logger.info(f"通过MCP下载日志: {download_args}")
+                    download_result = mcp_client.call_tool('download_bmc_log', download_args)
+
+                    if download_result.get('isError'):
+                        error_msg = download_result.get('content', [{}])[0].get('text', '下载失败')
+                        logger.error(f"MCP下载日志失败: {error_msg}")
+                        return {
+                            'html': _generate_error_html("日志下载失败", error_msg),
+                            'interaction_record': {'error': error_msg, 'mcp_result': download_result}
+                        }
+
+                    # 获取下载的本地路径
+                    local_path = download_result.get('local_path')
+                    if local_path and os.path.exists(local_path):
+                        final_log_files = [local_path]
+                        logger.info(f"日志已下载到: {local_path}")
+                    else:
+                        logger.warning(f"MCP下载未返回有效路径")
+                except Exception as e:
+                    logger.error(f"MCP下载日志异常: {str(e)}")
+                    return {
+                        'html': _generate_error_html("日志下载异常", str(e)),
+                        'interaction_record': {'error': str(e)}
+                    }
+        else:
+            # local_file模式
+            final_log_files = log_source.get('paths', [])
+    else:
+        # 兼容旧参数
+        final_log_files = log_files or []
+
     # 创建MCP客户端（如果未提供）
     if mcp_client is None:
         mcp_config = config_manager.get('mcp_servers', {})
@@ -167,6 +242,14 @@ def analyze_with_agent(
             except Exception as e:
                 logger.warning(f"创建MCP客户端失败: {str(e)}")
                 mcp_client = None
+
+    # 检查日志文件是否存在
+    if not final_log_files:
+        logger.warning("没有有效的日志文件")
+        return {
+            'html': _generate_error_html("无日志文件", "没有可分析的日志文件"),
+            'interaction_record': {'error': '无日志文件'}
+        }
 
     # 1. 提取机器信息
     machine_info = extract_machine_info_from_plugins(plugin_result or {})
@@ -236,7 +319,7 @@ def analyze_with_agent(
 
     result = agent.run_analysis(
         plugin_result=plugin_result or {},
-        log_files=log_files or [],
+        log_files=final_log_files,
         machine_info=machine_info,
         knowledge_content=knowledge_content,
         log_rules=log_rules,
@@ -476,3 +559,16 @@ class AIAnalyzer:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=4)
+
+
+def _generate_error_html(title: str, detail: str) -> str:
+    """生成错误HTML"""
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>分析错误</title></head>
+<body style="font-family:sans-serif;padding:20px;">
+<div style="background:white;padding:20px;margin:20px;border-radius:8px;border:1px solid #dc3545;">
+<h2 style="color:#dc3545;">{title}</h2>
+<p>{detail}</p>
+</div>
+</body></html>"""

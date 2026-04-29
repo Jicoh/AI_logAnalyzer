@@ -350,3 +350,233 @@ def update_config():
         return jsonify({'success': True, 'message': '配置已更新'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ================= MCP Server 配置 API =================
+
+@admin_bp.route('/api/admin/mcp/servers', methods=['GET'])
+@admin_required
+def get_mcp_servers():
+    """获取MCP Server配置列表"""
+    try:
+        config_manager = ConfigManager()
+        mcp_servers = config_manager.get('mcp_servers', {})
+
+        # 构建返回数据，添加状态信息
+        server_list = []
+        for name, config in mcp_servers.items():
+            server_list.append({
+                'name': name,
+                'transport': config.get('transport', 'stdio'),
+                'enabled': config.get('enabled', False),
+                'description': config.get('description', ''),
+                'command': config.get('command', ''),
+                'args': config.get('args', []),
+                'url': config.get('url', ''),
+                'timeout': config.get('timeout', 30)
+            })
+
+        return jsonify({'success': True, 'data': server_list})
+    except Exception as e:
+        logger.error(f"获取MCP Server配置失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/mcp/servers', methods=['POST'])
+@admin_required
+def add_mcp_server():
+    """新增MCP Server配置"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+
+        if not name:
+            return jsonify({'success': False, 'error': '名称不能为空'}), 400
+
+        config_manager = ConfigManager()
+        mcp_servers = config_manager.get('mcp_servers', {})
+
+        if name in mcp_servers:
+            return jsonify({'success': False, 'error': '名称已存在'}), 400
+
+        transport = data.get('transport', 'stdio')
+        if transport not in ['stdio', 'websocket']:
+            return jsonify({'success': False, 'error': '不支持的transport类型'}), 400
+
+        # 构建配置
+        new_config = {
+            'enabled': data.get('enabled', True),
+            'transport': transport,
+            'description': data.get('description', ''),
+            'timeout': data.get('timeout', 30)
+        }
+
+        if transport == 'stdio':
+            new_config['command'] = data.get('command', 'python')
+            new_config['args'] = data.get('args', [])
+        elif transport == 'websocket':
+            new_config['url'] = data.get('url', '')
+
+        mcp_servers[name] = new_config
+        config_manager.set('mcp_servers', mcp_servers)
+        config_manager.save()
+
+        logger.info(f"管理员 {current_user.employee_id} 新增MCP Server: {name}")
+
+        return jsonify({'success': True, 'message': f'MCP Server {name} 已添加'})
+    except Exception as e:
+        logger.error(f"新增MCP Server失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/mcp/servers/<name>', methods=['PUT'])
+@admin_required
+def update_mcp_server(name):
+    """更新MCP Server配置"""
+    try:
+        config_manager = ConfigManager()
+        mcp_servers = config_manager.get('mcp_servers', {})
+
+        if name not in mcp_servers:
+            return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
+
+        data = request.get_json()
+        existing = mcp_servers[name]
+
+        # 更新配置
+        if 'enabled' in data:
+            existing['enabled'] = data['enabled']
+        if 'description' in data:
+            existing['description'] = data['description']
+        if 'timeout' in data:
+            existing['timeout'] = data['timeout']
+
+        transport = existing.get('transport', 'stdio')
+        if transport == 'stdio':
+            if 'command' in data:
+                existing['command'] = data['command']
+            if 'args' in data:
+                existing['args'] = data['args']
+        elif transport == 'websocket':
+            if 'url' in data:
+                existing['url'] = data['url']
+
+        mcp_servers[name] = existing
+        config_manager.set('mcp_servers', mcp_servers)
+        config_manager.save()
+
+        logger.info(f"管理员 {current_user.employee_id} 更新MCP Server: {name}")
+
+        return jsonify({'success': True, 'message': '配置已更新'})
+    except Exception as e:
+        logger.error(f"更新MCP Server失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/mcp/servers/<name>', methods=['DELETE'])
+@admin_required
+def delete_mcp_server(name):
+    """删除MCP Server配置"""
+    try:
+        config_manager = ConfigManager()
+        mcp_servers = config_manager.get('mcp_servers', {})
+
+        if name not in mcp_servers:
+            return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
+
+        del mcp_servers[name]
+        config_manager.set('mcp_servers', mcp_servers)
+        config_manager.save()
+
+        logger.info(f"管理员 {current_user.employee_id} 删除MCP Server: {name}")
+
+        return jsonify({'success': True, 'message': f'MCP Server {name} 已删除'})
+    except Exception as e:
+        logger.error(f"删除MCP Server失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/mcp/servers/<name>/test', methods=['POST'])
+@admin_required
+def test_mcp_server(name):
+    """测试MCP Server连接"""
+    try:
+        config_manager = ConfigManager()
+        mcp_servers = config_manager.get('mcp_servers', {})
+
+        if name not in mcp_servers:
+            return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
+
+        server_config = mcp_servers[name]
+
+        # 创建临时MCP客户端测试连接
+        from src.ai_analyzer.mcp_client import MCPClient
+
+        # 禁用自动连接，手动测试单个Server
+        mcp_client = MCPClient(config_manager, auto_connect=False)
+        success = mcp_client.connect_server(name, server_config)
+
+        if success:
+            tools = mcp_client.servers.get(name)
+            tool_names = [t.name for t in tools.tools] if tools else []
+            tool_count = len(tool_names)
+
+            # 断开测试连接
+            mcp_client.disconnect(name)
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'connected': True,
+                    'tool_count': tool_count,
+                    'tools': tool_names
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'connected': False,
+                    'tool_count': 0,
+                    'tools': [],
+                    'error': '连接失败'
+                }
+            })
+    except Exception as e:
+        logger.error(f"测试MCP Server失败: {str(e)}")
+        return jsonify({
+            'success': True,
+            'data': {
+                'connected': False,
+                'tool_count': 0,
+                'tools': [],
+                'error': str(e)
+            }
+        })
+
+
+@admin_bp.route('/api/admin/mcp/tools', methods=['GET'])
+@admin_required
+def get_mcp_tools():
+    """获取所有MCP工具列表（预览）"""
+    try:
+        from src.ai_analyzer.mcp_client import MCPClient
+
+        config_manager = ConfigManager()
+        mcp_client = MCPClient(config_manager)
+
+        tools = []
+        for tool in mcp_client.all_tools:
+            tools.append({
+                'name': tool.name,
+                'description': tool.description,
+                'server': mcp_client.tool_to_server.get(tool.name, 'unknown')
+            })
+
+        # 断开连接
+        mcp_client.disconnect_all()
+
+        return jsonify({'success': True, 'data': tools})
+    except Exception as e:
+        logger.error(f"获取MCP工具列表失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
