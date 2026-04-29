@@ -3,6 +3,8 @@
 处理用户管理、系统配置等功能。
 """
 
+import os
+import json
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
@@ -582,4 +584,136 @@ def get_mcp_tools():
         return jsonify({'success': True, 'data': tools})
     except Exception as e:
         logger.error(f"获取MCP工具列表失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ================= 分析模板配置 API =================
+
+ANALYSIS_TEMPLATES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    'config', 'analysis_templates.json'
+)
+
+
+def load_templates_file():
+    """加载分析模板文件"""
+    if not os.path.exists(ANALYSIS_TEMPLATES_PATH):
+        return {'templates': [], 'usage_guide': ''}
+    with open(ANALYSIS_TEMPLATES_PATH, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def save_templates_file(data):
+    """保存分析模板文件"""
+    with open(ANALYSIS_TEMPLATES_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+@admin_bp.route('/api/admin/analysis-templates', methods=['GET'])
+@admin_required
+def get_analysis_templates():
+    """获取分析模板列表"""
+    try:
+        data = load_templates_file()
+        templates = data.get('templates', [])
+        return jsonify({'success': True, 'data': templates})
+    except Exception as e:
+        logger.error(f"获取分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/analysis-templates', methods=['POST'])
+@admin_required
+def add_analysis_template():
+    """新增分析模板"""
+    try:
+        data = request.get_json()
+        problem_type = data.get('problem_type', '').strip()
+
+        if not problem_type:
+            return jsonify({'success': False, 'error': '问题类型不能为空'}), 400
+
+        # 加载现有模板
+        file_data = load_templates_file()
+        templates = file_data.get('templates', [])
+
+        # 检查是否已存在
+        for t in templates:
+            if t.get('problem_type') == problem_type:
+                return jsonify({'success': False, 'error': '问题类型已存在'}), 400
+
+        # 构建新模板
+        new_template = {
+            'problem_type': problem_type,
+            'keywords': data.get('keywords', []),
+            'analysis_logic': data.get('analysis_logic', []),
+            'typical_causes': data.get('typical_causes', []),
+            'check_points': data.get('check_points', [])
+        }
+
+        templates.append(new_template)
+        file_data['templates'] = templates
+        save_templates_file(file_data)
+
+        logger.info(f"管理员 {current_user.employee_id} 新增分析模板: {problem_type}")
+        return jsonify({'success': True, 'message': f'模板 {problem_type} 已添加'})
+    except Exception as e:
+        logger.error(f"新增分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/analysis-templates/<problem_type>', methods=['PUT'])
+@admin_required
+def update_analysis_template(problem_type):
+    """更新分析模板"""
+    try:
+        data = request.get_json()
+        file_data = load_templates_file()
+        templates = file_data.get('templates', [])
+
+        # 查找模板
+        found = False
+        for t in templates:
+            if t.get('problem_type') == problem_type:
+                found = True
+                t['keywords'] = data.get('keywords', t.get('keywords', []))
+                t['analysis_logic'] = data.get('analysis_logic', t.get('analysis_logic', []))
+                t['typical_causes'] = data.get('typical_causes', t.get('typical_causes', []))
+                t['check_points'] = data.get('check_points', t.get('check_points', []))
+                break
+
+        if not found:
+            return jsonify({'success': False, 'error': '模板不存在'}), 404
+
+        file_data['templates'] = templates
+        save_templates_file(file_data)
+
+        logger.info(f"管理员 {current_user.employee_id} 更新分析模板: {problem_type}")
+        return jsonify({'success': True, 'message': '模板已更新'})
+    except Exception as e:
+        logger.error(f"更新分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/analysis-templates/<problem_type>', methods=['DELETE'])
+@admin_required
+def delete_analysis_template(problem_type):
+    """删除分析模板"""
+    try:
+        file_data = load_templates_file()
+        templates = file_data.get('templates', [])
+
+        # 查找并删除
+        new_templates = [t for t in templates if t.get('problem_type') != problem_type]
+
+        if len(new_templates) == len(templates):
+            return jsonify({'success': False, 'error': '模板不存在'}), 404
+
+        file_data['templates'] = new_templates
+        save_templates_file(file_data)
+
+        logger.info(f"管理员 {current_user.employee_id} 删除分析模板: {problem_type}")
+        return jsonify({'success': True, 'message': f'模板 {problem_type} 已删除'})
+    except Exception as e:
+        logger.error(f"删除分析模板失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500

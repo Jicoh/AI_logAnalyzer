@@ -331,6 +331,54 @@
                     </button>
                 </div>
             </div>
+
+            <hr>
+
+            <!-- 分析模板设置 -->
+            <h6 class="text-muted mb-3"><i class="bi bi-file-earmark-text"></i> 分析模板设置</h6>
+            <div class="row mb-4">
+                <div class="col-12 mb-3">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>问题类型</th>
+                                <th>关键词</th>
+                                <th>分析步骤</th>
+                                <th>典型原因</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="template in analysisTemplates" :key="template.problem_type">
+                                <tr>
+                                    <td x-text="template.problem_type"></td>
+                                    <td>
+                                        <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
+                                    </td>
+                                    <td x-text="template.analysis_logic.length + '步'"></td>
+                                    <td x-text="template.typical_causes.length + '个'"></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="analysisTemplates.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true">
+                        <i class="bi bi-plus"></i> 新增模板
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -497,6 +545,53 @@
         </div>
     </div>
 
+    <!-- 新增/编辑分析模板模态框 -->
+    <div class="modal" :class="showAddTemplateModal || showEditTemplateModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="showEditTemplateModal ? '编辑分析模板' : '新增分析模板'"></h5>
+                    <button type="button" class="btn-close" @click="closeTemplateModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">问题类型</label>
+                        <input type="text" class="form-control" x-model="templateForm.problem_type"
+                               :disabled="showEditTemplateModal" placeholder="BMC重启">
+                        <small class="text-muted">唯一标识，创建后不可修改</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">关键词（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.keywordsStr"
+                               placeholder="reboot, restart, reset, 重启">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">分析步骤（每行一步）</label>
+                        <textarea class="form-control" x-model="templateForm.logicStr" rows="5"
+                                  placeholder="1. 检查重启前的日志...&#10;2. 检查重启后的日志..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">典型原因（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.causesStr"
+                               placeholder="温度过高, 电源异常, 固件bug">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">检查点（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.checksStr"
+                               placeholder="温度日志, 电源状态, 用户操作记录">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeTemplateModal()">取消</button>
+                    <button class="btn btn-primary" @click="saveTemplate()" :disabled="templateSaving">
+                        <span x-show="templateSaving" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="templateSaving ? '保存中...' : '保存'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
@@ -554,6 +649,18 @@ function adminApp() {
         },
         mcpTesting: false,
         mcpSaving: false,
+        // 分析模板相关
+        analysisTemplates: [],
+        showAddTemplateModal: false,
+        showEditTemplateModal: false,
+        templateForm: {
+            problem_type: '',
+            keywordsStr: '',
+            logicStr: '',
+            causesStr: '',
+            checksStr: ''
+        },
+        templateSaving: false,
 
         init() {
             this.loadUsers();
@@ -561,6 +668,7 @@ function adminApp() {
             this.loadFeedbacks();
             this.loadConfig();
             this.loadMcpServers();
+            this.loadAnalysisTemplates();
         },
 
         showToast(type, title, message) {
@@ -982,6 +1090,100 @@ function adminApp() {
                 if (data.success) {
                     this.showToast('success', '成功', data.message);
                     this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        // 分析模板相关函数
+        async loadAnalysisTemplates() {
+            try {
+                const response = await fetch('/api/admin/analysis-templates');
+                const data = await response.json();
+                if (data.success) {
+                    this.analysisTemplates = data.data;
+                }
+            } catch (e) {
+                console.error('Load analysis templates failed:', e);
+            }
+        },
+
+        editTemplate(template) {
+            this.templateForm = {
+                problem_type: template.problem_type,
+                keywordsStr: template.keywords.join(', '),
+                logicStr: template.analysis_logic.join('\n'),
+                causesStr: template.typical_causes.join(', '),
+                checksStr: template.check_points.join(', ')
+            };
+            this.showEditTemplateModal = true;
+        },
+
+        closeTemplateModal() {
+            this.showAddTemplateModal = false;
+            this.showEditTemplateModal = false;
+            this.templateForm = {
+                problem_type: '',
+                keywordsStr: '',
+                logicStr: '',
+                causesStr: '',
+                checksStr: ''
+            };
+        },
+
+        async saveTemplate() {
+            if (!this.templateForm.problem_type) {
+                this.showToast('error', '错误', '问题类型不能为空');
+                return;
+            }
+
+            this.templateSaving = true;
+            try {
+                const payload = {
+                    problem_type: this.templateForm.problem_type,
+                    keywords: this.templateForm.keywordsStr.split(',').map(s => s.trim()).filter(s => s),
+                    analysis_logic: this.templateForm.logicStr.split('\n').map(s => s.trim()).filter(s => s),
+                    typical_causes: this.templateForm.causesStr.split(',').map(s => s.trim()).filter(s => s),
+                    check_points: this.templateForm.checksStr.split(',').map(s => s.trim()).filter(s => s)
+                };
+
+                const url = this.showEditTemplateModal
+                    ? `/api/admin/analysis-templates/${this.templateForm.problem_type}`
+                    : '/api/admin/analysis-templates';
+                const method = this.showEditTemplateModal ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.closeTemplateModal();
+                    this.loadAnalysisTemplates();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '保存失败');
+            } finally {
+                this.templateSaving = false;
+            }
+        },
+
+        async deleteTemplate(problem_type) {
+            if (!confirm(`确定要删除模板 "${problem_type}" 吗？`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/analysis-templates/${problem_type}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadAnalysisTemplates();
                 } else {
                     this.showToast('error', '错误', data.error);
                 }
