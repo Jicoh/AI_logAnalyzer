@@ -412,7 +412,10 @@ def add_mcp_server():
         }
 
         if transport == 'stdio':
-            new_config['command'] = data.get('command', 'python')
+            command = data.get('command', '').strip()
+            if not command:
+                return jsonify({'success': False, 'error': 'stdio类型必须填写command'}), 400
+            new_config['command'] = command
             new_config['args'] = data.get('args', [])
         elif transport == 'websocket':
             new_config['url'] = data.get('url', '')

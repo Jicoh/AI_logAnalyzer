@@ -24,12 +24,16 @@
                 <a href="{{ url_for('main.log_viewer') }}" class="nav-link {% if active_page == 'log_viewer' %}active{% endif %}">
                     <i class="bi bi-file-text"></i> <span>日志查看</span>
                 </a>
-                <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
-                    <i class="bi bi-database"></i> <span>知识库</span>
-                </a>
-                <a href="{{ url_for('main.log_metadata') }}" class="nav-link {% if active_page == 'log_metadata' %}active{% endif %}">
-                    <i class="bi bi-journal-text"></i> <span>日志规则</span>
-                </a>
+                <template x-if="userInfo.is_admin">
+                    <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
+                        <i class="bi bi-database"></i> <span>知识库</span>
+                    </a>
+                </template>
+                <template x-if="userInfo.is_admin">
+                    <a href="{{ url_for('main.log_metadata') }}" class="nav-link {% if active_page == 'log_metadata' %}active{% endif %}">
+                        <i class="bi bi-journal-text"></i> <span>日志规则</span>
+                    </a>
+                </template>
                 <a href="{{ url_for('main.history') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
                     <i class="bi bi-clock-history"></i> <span>历史记录</span>
                 </a>

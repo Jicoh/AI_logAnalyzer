@@ -457,7 +457,8 @@
                     <div x-show="mcpForm.transport === 'stdio'">
                         <div class="mb-3">
                             <label class="form-label">命令</label>
-                            <input type="text" class="form-control" x-model="mcpForm.command" placeholder="python">
+                            <input type="text" class="form-control" x-model="mcpForm.command" placeholder="python / uvx / npx / node 等">
+                            <small class="text-muted">填写可执行命令名称，如 python、uvx、npx、node 等</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">参数 (JSON数组)</label>
@@ -545,7 +546,7 @@ function adminApp() {
             name: '',
             transport: 'stdio',
             description: '',
-            command: 'python',
+            command: '',
             argsStr: '',
             url: '',
             timeout: 30,
@@ -842,7 +843,7 @@ function adminApp() {
                 name: server.name,
                 transport: server.transport,
                 description: server.description,
-                command: server.command || 'python',
+                command: server.command || '',
                 argsStr: JSON.stringify(server.args || []),
                 url: server.url || '',
                 timeout: server.timeout || 30,
@@ -858,7 +859,7 @@ function adminApp() {
                 name: '',
                 transport: 'stdio',
                 description: '',
-                command: 'python',
+                command: '',
                 argsStr: '',
                 url: '',
                 timeout: 30,
