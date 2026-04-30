@@ -20,6 +20,9 @@
                 <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
                     <i class="bi bi-gear"></i> 系统配置
                 </div>
+                <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
+                    <i class="bi bi-wrench-adjustable"></i> Skill列表
+                </div>
             </div>
         </div>
         <!-- 主内容区域 -->
@@ -200,6 +203,91 @@
                 <div class="col-md-4 mb-3">
                     <label class="form-label">最大Token</label>
                     <input type="number" class="form-control" x-model="config.api.max_tokens" min="100">
+                </div>
+            </div>
+
+            <hr>
+
+            <!-- Orchestrator行为设置 -->
+            <h6 class="text-muted mb-3"><i class="bi bi-robot"></i> Orchestrator行为设置</h6>
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">最大轮次</label>
+                    <input type="number" class="form-control" x-model="config.orchestrator.max_rounds" min="1">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">工具调用限制</label>
+                    <input type="number" class="form-control" x-model="config.orchestrator.tool_call_limit" min="1">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">启用MCP工具</label>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" x-model="config.orchestrator.enable_mcp_tools">
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">压缩保留轮次</label>
+                    <input type="number" class="form-control" x-model="config.orchestrator.compression_retain_rounds" min="1">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">上下文限制</label>
+                    <input type="number" class="form-control" x-model="config.orchestrator.context_limit" min="1000">
+                    <small class="text-muted">超过时触发压缩</small>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">压缩阈值</label>
+                    <input type="number" class="form-control" x-model="config.orchestrator.compression_threshold" min="0" max="1" step="0.1">
+                    <small class="text-muted">上下文使用率超过此值触发压缩</small>
+                </div>
+            </div>
+
+            <hr>
+
+            <!-- Subagent API设置 -->
+            <h6 class="text-muted mb-3">
+                <i class="bi bi-gear-wide-connected"></i> Subagent API设置
+                <small class="text-muted">(未配置则使用上方API设置)</small>
+            </h6>
+            <div class="mb-4">
+                <template x-for="subagent in configurableSubagents" :key="subagent.name">
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <div class="row align-items-center">
+                                <div class="col-md-2">
+                                    <span class="badge bg-primary" x-text="subagent.name"></span>
+                                    <small class="text-muted d-block mt-1" x-text="subagent.description"></small>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           x-model="config.subagent_api[subagent.name].base_url"
+                                           placeholder="API地址（留空用默认）">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           x-model="config.subagent_api[subagent.name].api_key"
+                                           placeholder="API密钥">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           x-model="config.subagent_api[subagent.name].model"
+                                           placeholder="模型">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control form-control-sm"
+                                           x-model="config.subagent_api[subagent.name].temperature"
+                                           min="0" max="1" step="0.1" placeholder="温度">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="form-control form-control-sm"
+                                           x-model="config.subagent_api[subagent.name].max_tokens"
+                                           min="100" placeholder="Max Tokens">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <div x-show="configurableSubagents.length === 0" class="text-muted">
+                    暂无可配置的Subagent
                 </div>
             </div>
 
@@ -396,7 +484,50 @@
                 </div>
             </div>
         </div>
-    </div>
+    <!-- Skill列表 -->
+            <div id="section-skills" class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-wrench-adjustable"></i> Skill列表</span>
+                    <small class="text-muted">每10秒自动刷新</small>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>描述</th>
+                                <th>允许工具</th>
+                                <th>版本</th>
+                                <th>路径</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="skill in skills" :key="skill.name">
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-primary" x-text="skill.name"></span>
+                                    </td>
+                                    <td x-text="skill.description || '-'"></td>
+                                    <td>
+                                        <span x-show="skill.allowed_tools && skill.allowed_tools.length > 0"
+                                              x-text="skill.allowed_tools.join(', ')"></span>
+                                        <span x-show="!skill.allowed_tools || skill.allowed_tools.length === 0" class="text-muted">-</span>
+                                    </td>
+                                    <td x-text="skill.metadata?.version || '-'"></td>
+                                    <td class="text-muted small" x-text="skill.path || '-'"></td>
+                                </tr>
+                            </template>
+                            <tr x-show="skills.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无Skill配置</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <small class="text-muted">
+                        Skill定义位于 config/skills/ 目录，使用SKILL.md标准格式定义。修改后10秒内自动生效。
+                    </small>
+                </div>
+            </div>
+        </div>
     </div>
     </div>
 
@@ -644,10 +775,20 @@ function adminApp() {
         // 系统配置相关
         config: {
             api: { base_url: '', api_key: '', model: '', temperature: 0.7, max_tokens: 60000 },
+            orchestrator: {
+                max_rounds: 20,
+                tool_call_limit: 50,
+                enable_mcp_tools: true,
+                compression_retain_rounds: 5,
+                context_limit: 120000,
+                compression_threshold: 0.8
+            },
+            subagent_api: {},
             embedding: { enabled: false, provider: '', base_url: '', api_key: '', model: '', dimension: 4096, batch_size: 100 },
             retrieval: { mode: 'bm25', bm25_weight: 0.4, vector_weight: 0.6, rrf_k: 60 },
             log_viewer: { enabled: false, exe_path: '' }
         },
+        configurableSubagents: [],
         showApiKey: false,
         showEmbeddingKey: false,
         configSaving: false,
@@ -679,6 +820,8 @@ function adminApp() {
             checksStr: ''
         },
         templateSaving: false,
+        // Skill相关
+        skills: [],
         // 二级侧边栏相关
         activeSection: 'stats',
 
@@ -686,10 +829,14 @@ function adminApp() {
             this.loadUsers();
             this.loadStats();
             this.loadFeedbacks();
+            this.loadConfigurableSubagents();
             this.loadConfig();
             this.loadMcpServers();
             this.loadAnalysisTemplates();
+            this.loadSkills();
             this.setupScrollObserver();
+            // 启动Skill自动刷新（10秒）
+            setInterval(() => this.loadSkills(), 10000);
         },
 
         scrollTo(sectionId) {
@@ -701,7 +848,7 @@ function adminApp() {
         },
 
         setupScrollObserver() {
-            const sections = ['stats', 'users', 'feedback', 'config'];
+            const sections = ['stats', 'users', 'feedback', 'config', 'skills'];
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
@@ -914,13 +1061,45 @@ function adminApp() {
                     // 合并配置，确保所有字段都有默认值
                     this.config = {
                         api: { ...this.config.api, ...data.data.api },
+                        orchestrator: { ...this.config.orchestrator, ...data.data.orchestrator },
+                        subagent_api: data.data.subagent_api || {},
                         embedding: { ...this.config.embedding, ...data.data.embedding },
                         retrieval: { ...this.config.retrieval, ...data.data.retrieval },
                         log_viewer: { ...this.config.log_viewer, ...data.data.log_viewer }
                     };
+                    // 确保每个subagent都有配置结构
+                    this.initSubagentApiConfig();
                 }
             } catch (e) {
                 console.error('Load config failed:', e);
+            }
+        },
+
+        async loadConfigurableSubagents() {
+            try {
+                const response = await fetch('/api/admin/subagents/list');
+                const data = await response.json();
+                if (data.success) {
+                    this.configurableSubagents = data.data;
+                    this.initSubagentApiConfig();
+                }
+            } catch (e) {
+                console.error('Load configurable subagents failed:', e);
+            }
+        },
+
+        initSubagentApiConfig() {
+            // 确保每个subagent都有配置结构
+            for (const subagent of this.configurableSubagents) {
+                if (!this.config.subagent_api[subagent.name]) {
+                    this.config.subagent_api[subagent.name] = {
+                        base_url: '',
+                        api_key: '',
+                        model: '',
+                        temperature: 0.1,
+                        max_tokens: 60000
+                    };
+                }
             }
         },
 
@@ -1237,6 +1416,19 @@ function adminApp() {
                 }
             } catch (e) {
                 this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        // Skill相关函数
+        async loadSkills() {
+            try {
+                const response = await fetch('/api/skills');
+                const data = await response.json();
+                if (data.success) {
+                    this.skills = data.data;
+                }
+            } catch (e) {
+                console.error('Load skills failed:', e);
             }
         }
     };

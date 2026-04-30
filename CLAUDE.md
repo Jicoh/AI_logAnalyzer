@@ -41,18 +41,11 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 2. **Knowledge Base Retrieval**: BM25/vector search retrieves relevant documents from `document/`
 3. **AI Analysis**: Combines plugin results + knowledge base context, calls LLM API with streaming
 
-### Dual-Agent Architecture (Scout + Sage)
-The AI analysis uses a two-stage agent system:
-- **Scout Agent** (`scout_agent.py`): Reconnaissance - extracts machine info, selects relevant log files, identifies key events
-- **Sage Agent** (`sage_agent.py`): Deep analysis - generates comprehensive HTML report with problem analysis and solutions
-- **Agent Coordinator** (`agent_coordinator.py`): Orchestrates Scout → Sage flow, extracts plugin summary, manages knowledge retrieval
-
-#### AI Retry & Fallback Mechanism
-Both agents implement robust error handling:
-- **JSON Retry**: When AI returns malformed JSON, agents retry up to 4 times with correction prompts
-- **Scout Fallback**: If all retries fail, generates default summary analyzing all files
-- **Sage Degradation**: If JSON parsing fails after retries, falls back to direct HTML generation mode
-- **Error HTML**: Both agents can generate error HTML reports when analysis fails completely
+### Agent Architecture
+系统采用分层Agent架构：
+- **Orchestrator Agent** (`orchestrator_agent.py`): 主编排Agent，理解用户意图、选择Skill、调用Subagent/MCP工具、整合结果
+- **Subagent Registry**: Subagent注册表，管理可用的Subagent
+- **Log Analyzer Subagent**: 日志分析Subagent（改造自原有log_analyzer_agent.py），执行具体的日志分析任务
 
 ### Key Modules
 
@@ -63,9 +56,12 @@ Both agents implement robust error handling:
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
-| Scout Agent | `src/ai_analyzer/scout_agent.py` | Log reconnaissance, machine info extraction, file selection |
-| Sage Agent | `src/ai_analyzer/sage_agent.py` | Deep analysis, HTML report generation |
-| Agent Coordinator | `src/ai_analyzer/agent_coordinator.py` | Orchestrates Scout → Sage flow |
+| Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
+| Subagent Base | `src/ai_analyzer/subagent_base.py` | Subagent基类 |
+| Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
+| Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
+| Log Analyzer Agent | `src/ai_analyzer/log_analyzer_agent.py` | 日志分析Agent |
+| Log Analyzer Subagent | `src/ai_analyzer/log_analyzer_subagent.py` | 日志分析Subagent |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
 | Plugin Selection | `src/plugin_selection/` | Web UI state: selected plugins, KB, AI settings |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
@@ -75,6 +71,7 @@ Both agents implement robust error handling:
 | User Model | `src/models/` | User data model, database management |
 | Admin API | `src/web/routes/admin_api.py` | User management, system configuration |
 | Storage | `src/storage/` | User storage quota management |
+| Session Manager | `src/session_manager/` | 智能助手会话管理 |
 
 #### SSE Streaming
 Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`), allowing real-time progress updates during long-running AI analysis.
@@ -164,6 +161,7 @@ See `plugins/README.md` for full documentation.
 - `data/uploads/` - Web-uploaded files
 - `data/temp/` - Temporary processing (work directories with timestamp_filename format)
 - `data/analysis_output/` - Analysis results (JSON + HTML)
+- `data/sessions/` - 智能助手会话目录
 - `document/` - Knowledge base storage
 - `custom_plugins/` - User-defined plugins
 - `data/app.db` - User database (SQLite)
@@ -287,8 +285,8 @@ File: `config/plugin_selection.json`
 ### Prompt files
 - `config/default_prompt_template.txt` - Read-only template
 - `config/default_prompt.txt` - User-customizable prompt (overrides template)
-- `config/scout_prompt.txt` - Scout Agent prompt for log reconnaissance
-- `config/sage_prompt.txt` - Sage Agent prompt for deep analysis
+- `config/agent_prompt.txt` - Log Analyzer Agent prompt
+- `config/orchestrator_prompt.txt` - Orchestrator Agent prompt
 - `config/log_metadata_rules.json` - Log file description rulesets for AI selection
 
 ## Knowledge Base Retrieval
@@ -309,3 +307,52 @@ RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+ra
 - CLI选项 `--ai-select` 已隐藏（`entry_point.py`）
 - 后端API参数处理保留，可通过内部调用使用
 - 配置项保留：`config/plugin_selection.json` 中的 `ai_selection_mode`
+
+## 智能助手功能
+
+聊天式交互界面，主Agent智能编排Skill/MCP/Tool，日志分析Agent作为Subagent执行具体分析任务。
+
+### 核心模块
+
+| 模块 | 位置 | 功能 |
+|------|------|------|
+| Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent，理解用户意图、调度Subagent/MCP工具 |
+| Session Manager | `src/session_manager/` | 会话管理，最多3个活跃会话 |
+| Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
+| Log Analyzer Subagent | `src/ai_analyzer/log_analyzer_subagent.py` | 日志分析Subagent |
+| Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
+
+### Skill系统
+
+Skill定义存放在`config/skills/`目录，采用SKILL.md格式：
+
+```markdown
+---
+name: skill-name
+description: 功能说明
+allowed-tools: tool1 tool2
+---
+
+# Skill标题
+
+## 使用场景
+...
+
+## 执行步骤
+...
+```
+
+### 会话目录结构
+
+```
+data/sessions/{user_id}/session_{timestamp}_{random}/
+  work_dir/           # 工作目录
+  outputs/            # 输出文件
+  conversation.json   # 对话历史
+  state.json          # 会话状态
+```
+
+### API配置
+
+- `orchestrator_api`: 主Agent API配置（base_url, model, temperature, max_tokens, max_context）
+- `subagent_api`: Subagent API配置

@@ -24,6 +24,9 @@
                 <a href="{{ url_for('main.log_viewer') }}" class="nav-link {% if active_page == 'log_viewer' %}active{% endif %}">
                     <i class="bi bi-file-text"></i> <span>日志查看</span>
                 </a>
+                <a href="{{ url_for('main.assistant') }}" class="nav-link {% if active_page == 'assistant' %}active{% endif %}">
+                    <i class="bi bi-chat-dots"></i> <span>智能助手</span>
+                </a>
                 <template x-if="userInfo.is_admin">
                     <a href="{{ url_for('main.knowledge_base') }}" class="nav-link {% if active_page == 'kb' %}active{% endif %}">
                         <i class="bi bi-database"></i> <span>知识库</span>

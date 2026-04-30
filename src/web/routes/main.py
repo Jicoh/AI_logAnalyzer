@@ -65,3 +65,10 @@ def admin_dashboard():
     if not current_user.is_admin:
         return render_template('profile.html', active_page='profile'), 403
     return render_template('admin/dashboard.html', active_page='admin')
+
+
+@main_bp.route('/assistant')
+@login_required
+def assistant():
+    """智能助手页面."""
+    return render_template('assistant.html', active_page='assistant')

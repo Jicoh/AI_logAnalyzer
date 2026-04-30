@@ -6,12 +6,20 @@
 import json
 import os
 import sys
+from src.utils import get_logger
+
+logger = get_logger('config_manager')
 
 
 class ConfigManager:
     """AI配置管理器"""
 
     DEFAULT_CONFIG = {
+        "web": {
+            "host": "127.0.0.1",
+            "port": 18888,
+            "debug": True
+        },
         "api": {
             "base_url": "",
             "api_key": "",
@@ -19,6 +27,21 @@ class ConfigManager:
             "temperature": 0.7,
             "max_tokens": 4096
         },
+        "orchestrator": {
+            "max_rounds": 20,
+            "tool_call_limit": 50,
+            "enable_mcp_tools": True,
+            "compression_retain_rounds": 5,
+            "context_limit": 120000,
+            "compression_threshold": 0.8
+        },
+        "subagent_api": {},
+        "agent": {
+            "max_tokens": 60000,
+            "max_rounds": 10,
+            "tool_call_limit": 20
+        },
+        "mcp_servers": {},
         "knowledge_base": {
             "default_id": "",
             "version": "1.0"
@@ -50,11 +73,6 @@ class ConfigManager:
             "nlist": 100,
             "nprobe": 10,
             "use_gpu": False
-        },
-        "web": {
-            "host": "127.0.0.1",
-            "port": 18888,
-            "debug": True
         }
     }
 

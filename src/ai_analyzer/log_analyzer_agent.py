@@ -312,7 +312,7 @@ class ToolExecutor:
 class LogAnalyzerAgent:
     """BMC日志分析Agent"""
 
-    def __init__(self, config_manager, kb_manager=None, mcp_client=None):
+    def __init__(self, config_manager, kb_manager=None, mcp_client=None, api_config: Dict = None):
         """
         初始化Agent
 
@@ -320,13 +320,19 @@ class LogAnalyzerAgent:
             config_manager: 配置管理器实例
             kb_manager: 知识库管理器实例
             mcp_client: MCP客户端实例（可选）
+            api_config: 传入的API配置（可选），优先级高于config_manager中的api
         """
         self.config_manager = config_manager
         self.kb_manager = kb_manager
         self.mcp_client = mcp_client
 
-        api_config = config_manager.get('api', {})
-        self.client = AIClient(api_config)
+        # API配置：优先使用传入的api_config
+        if api_config:
+            self.api_config = api_config
+        else:
+            self.api_config = config_manager.get('api', {})
+
+        self.client = AIClient(self.api_config)
 
         agent_config = config_manager.get('agent', {})
         self.max_tokens = agent_config.get('max_tokens', 60000)

@@ -11,6 +11,7 @@ BMC服务器日志AI分析工具，自动识别日志中的问题并提供可能
 - **AI智能选择**：根据日志规则自动选择合适的插件和文件进行分析
 - **历史记录**：查看过往分析记录，包括错误/警告统计、AI分析结果回顾
 - **设置管理**：Web界面直接配置API参数、检索模式、提示词模板
+- **智能助手**：聊天式交互界面，AI智能编排Skill/MCP/Tool
 - **Web界面**：图形化操作界面，支持日志上传、知识库管理、在线分析
 - **CLI命令**：简洁的命令行操作方式
 
@@ -127,20 +128,37 @@ AI_logAnalyzer/
 ├── main.py                 # CLI入口
 ├── web_app.py              # Web应用入口
 ├── config/                 # 配置目录
+│   ├── skills/             # Skill目录
+│   └── orchestrator_prompt.txt  # 主Agent提示词
 ├── data/                   # 数据目录
 │   ├── uploads/            # 上传文件
 │   ├── temp/               # 处理临时目录
-│   └── analysis_output/    # 分析结果输出（插件+AI）
+│   ├── analysis_output/    # 分析结果输出（插件+AI）
+│   ├── sessions/           # 智能助手会话目录
+│   └── users/              # 用户数据目录
 ├── document/               # 知识库存储
 ├── plugins/                # 插件目录
 │   ├── builtin/            # 内置插件
 │   └── custom/             # 自定义插件
+├── custom_plugins/         # 用户自定义插件
+├── docs/                   # 文档目录
+│   └── development_plan_assistant.md  # 智能助手开发计划
 └── src/                    # 源代码
     ├── ai_analyzer/        # AI分析模块
+    │   ├── orchestrator_agent.py  # 主Agent编排器
+    │   ├── subagent_base.py       # Subagent基类
+    │   ├── skill_loader.py        # Skill加载器
+    │   └── log_analyzer_agent.py  # 日志分析Agent
+    ├── session_manager/    # 会话管理模块
     ├── knowledge_base/     # 知识库模块
     ├── log_metadata/       # 日志元数据模块
     ├── config_manager/     # 配置管理模块
     └── web/                # Web模块
+        ├── routes/
+        │   ├── assistant_api.py    # 智能助手API
+        │   └── skill_api.py        # Skill API
+        └── templates/
+            └── assistant.html      # 智能助手页面
 ```
 
 ## 配置说明
@@ -207,3 +225,36 @@ custom_plugins/my_plugin/
 ## License
 
 MIT
+
+## 智能助手功能
+
+智能助手是一个聊天式交互界面，提供AI智能编排能力。
+
+### 核心特性
+- **聊天式交互**：类似ChatGPT的对话界面
+- **Skill系统**：基于SKILL.md标准格式的技能定义
+- **会话管理**：最多3个活跃会话，工作目录隔离
+- **上下文监控**：显示上下文使用百分比，自动压缩
+- **Subagent架构**：日志分析Agent改造为可调用的Subagent
+
+### Skill格式
+```markdown
+---
+name: analyze-log
+description: 分析BMC服务器日志
+allowed-tools: log_downloader read_log
+---
+
+# 日志分析
+
+## 使用场景
+当用户需要对日志进行分析时使用
+
+## 执行步骤
+1. 确认日志文件路径
+2. 调用LogAnalyzer Subagent
+3. 返回分析结果
+```
+
+### 使用方式
+在 Web 界面点击"智能助手"菜单进入聊天界面。

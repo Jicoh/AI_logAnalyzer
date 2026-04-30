@@ -305,6 +305,28 @@ def update_config():
             if 'max_tokens' in api_config:
                 config_manager.set('api.max_tokens', int(api_config['max_tokens']))
 
+        # 更新 Orchestrator 设置（包含context_limit和compression_threshold）
+        if 'orchestrator' in data:
+            orch_config = data['orchestrator']
+            if 'max_rounds' in orch_config:
+                config_manager.set('orchestrator.max_rounds', int(orch_config['max_rounds']))
+            if 'tool_call_limit' in orch_config:
+                config_manager.set('orchestrator.tool_call_limit', int(orch_config['tool_call_limit']))
+            if 'enable_mcp_tools' in orch_config:
+                config_manager.set('orchestrator.enable_mcp_tools', bool(orch_config['enable_mcp_tools']))
+            if 'compression_retain_rounds' in orch_config:
+                config_manager.set('orchestrator.compression_retain_rounds', int(orch_config['compression_retain_rounds']))
+            if 'context_limit' in orch_config:
+                config_manager.set('orchestrator.context_limit', int(orch_config['context_limit']))
+            if 'compression_threshold' in orch_config:
+                config_manager.set('orchestrator.compression_threshold', float(orch_config['compression_threshold']))
+
+        # 更新 Subagent API 设置（按subagent名称的结构）
+        if 'subagent_api' in data:
+            subagent_api_config = data['subagent_api']
+            # 整体替换subagent_api配置
+            config_manager.set('subagent_api', subagent_api_config)
+
         # 更新 Embedding 设置
         if 'embedding' in data:
             emb_config = data['embedding']
@@ -351,6 +373,32 @@ def update_config():
 
         return jsonify({'success': True, 'message': '配置已更新'})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ================= MCP Server 配置 API =================
+
+# ================= Subagent 配置 API =================
+
+@admin_bp.route('/api/admin/subagents/list', methods=['GET'])
+@admin_required
+def get_configurable_subagents():
+    """获取可配置的Subagent列表"""
+    try:
+        from src.ai_analyzer.subagent_registry import get_registry
+        registry = get_registry()
+
+        subagents = []
+        for info in registry.list_all():
+            subagents.append({
+                'name': info['name'],
+                'description': info['description'],
+                'capabilities': info.get('capabilities', [])
+            })
+
+        return jsonify({'success': True, 'data': subagents})
+    except Exception as e:
+        logger.error(f"获取Subagent列表失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

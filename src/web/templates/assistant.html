@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+
+{% block title %}智能助手 - AI Log Analyzer{% endblock %}
+
+{% block extra_head %}
+<style>
+/* 会话侧边栏 */
+.session-sidebar {
+    width: 220px;
+    min-width: 220px;
+    overflow-y: auto;
+}
+
+.session-card {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.session-card:hover {
+    background-color: #e9ecef;
+}
+
+.session-card.active {
+    background-color: #cfe2ff;
+}
+
+.session-title {
+    font-weight: 500;
+    max-width: 150px;
+}
+
+.session-list {
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+}
+
+/* 聊天主区域 */
+.chat-main {
+    position: relative;
+}
+
+.message-list {
+    overflow-y: auto;
+    max-height: calc(100vh - 180px);
+}
+
+.message-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.message-content pre {
+    background: #f8f9fa;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+}
+
+.message-content code {
+    background: #f8f9fa;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+}
+
+/* 文件侧边栏 */
+.file-sidebar {
+    width: 250px;
+    min-width: 250px;
+    overflow-y: auto;
+}
+
+.file-list {
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+
+.file-item:hover {
+    background-color: #e9ecef;
+}
+
+.file-name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 上下文圆环 */
+.context-ring {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    text-align: center;
+}
+
+.progress-ring {
+    width: 50px;
+    height: 50px;
+    position: relative;
+}
+
+.progress-ring-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.progress-ring-bg {
+    fill: none;
+    stroke: #e9ecef;
+    stroke-width: 3;
+}
+
+.progress-ring-fill {
+    fill: none;
+    stroke: #0d6efd;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dasharray 0.3s;
+}
+
+.progress-ring-fill.warning {
+    stroke: #dc3545;
+}
+
+.progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="assistantApp()" class="d-flex h-100">
+    <!-- 左侧会话列表 -->
+    <div class="session-sidebar bg-light border-end">
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="bi bi-chat-left-text"></i> 会话列表</h6>
+            <button class="btn btn-sm btn-primary" @click="createSession()" :disabled="creatingSession">
+                <i class="bi bi-plus"></i>
+            </button>
+        </div>
+        <div class="session-list">
+            <template x-for="session in sessions" :key="session.session_id">
+                <div class="session-card p-2 border-bottom"
+                     :class="{ 'active': currentSessionId === session.session_id }"
+                     @click="selectSession(session.session_id)">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="session-title text-truncate" x-text="session.title || '新会话'"></div>
+                        <button class="btn btn-sm btn-outline-danger" @click.stop="deleteSession(session.session_id)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted" x-text="session.updated_at"></small>
+                    <span class="badge bg-secondary ms-2" x-text="session.message_count + '条'"></span>
+                </div>
+            </template>
+            <div x-show="sessions.length === 0" class="text-center text-muted p-4">
+                <i class="bi bi-chat-left-text fs-1"></i>
+                <p class="mt-2">暂无会话，点击上方按钮创建</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 中间聊天区域 -->
+    <div class="chat-main flex-grow-1 d-flex flex-column">
+        <!-- 消息列表 -->
+        <div class="message-list flex-grow-1 p-3" id="messageList">
+            <template x-for="msg in messages" :key="msg.timestamp">
+                <div class="message mb-3" :class="msg.role === 'user' ? 'user-message' : 'assistant-message'">
+                    <div class="message-header">
+                        <span class="badge" :class="msg.role === 'user' ? 'bg-primary' : 'bg-success'"
+                              x-text="msg.role === 'user' ? '用户' : '助手'"></span>
+                        <small class="text-muted ms-2" x-text="msg.timestamp"></small>
+                    </div>
+                    <div class="message-content p-2 rounded mt-1"
+                         :class="msg.role === 'user' ? 'bg-primary-subtle' : 'bg-success-subtle'"
+                         x-html="formatMessage(msg.content)"></div>
+                </div>
+            </template>
+            <div x-show="messages.length === 0 && currentSessionId" class="text-center text-muted p-4">
+                <i class="bi bi-chat-dots fs-1"></i>
+                <p class="mt-2">开始对话吧！</p>
+            </div>
+            <div x-show="!currentSessionId" class="text-center text-muted p-4">
+                <i class="bi bi-hand-index fs-1"></i>
+                <p class="mt-2">请选择或创建一个会话</p>
+            </div>
+            <div x-show="loading" class="text-center p-3">
+                <span class="spinner-border spinner-border-sm"></span>
+                <span class="ms-2">思考中...</span>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="chat-input p-3 border-top">
+            <div class="d-flex gap-2">
+                <textarea class="form-control"
+                          x-model="inputMessage"
+                          @keydown.enter.prevent="sendMessage()"
+                          placeholder="输入消息，按 Enter 发送"
+                          rows="2"
+                          :disabled="!currentSessionId || loading"></textarea>
+                <button class="btn btn-primary" @click="sendMessage()" :disabled="!currentSessionId || loading || !inputMessage">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 上下文圆环（右下角） -->
+        <div class="context-ring" x-show="currentSessionId" x-cloak>
+            <div class="progress-ring">
+                <svg viewBox="0 0 36 36" class="progress-ring-svg">
+                    <path class="progress-ring-bg"
+                          d="M18 2.0845
+                             a 15.9155 15.9155 0 0 1 0 31.831
+                             a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    <path class="progress-ring-fill"
+                          :class="{'warning': contextUsage >= 0.8}"
+                          :stroke-dasharray="(contextUsage * 100) + ', 100'"
+                          d="M18 2.0845
+                             a 15.9155 15.9155 0 0 1 0 31.831
+                             a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                </svg>
+                <div class="progress-ring-text" x-text="Math.round(contextUsage * 100) + '%'"></div>
+            </div>
+            <small class="text-muted">上下文</small>
+        </div>
+    </div>
+
+    <!-- 右侧文件列表 -->
+    <div class="file-sidebar bg-light border-start" x-show="currentSessionId" x-cloak>
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="bi bi-folder"></i> 工作目录</h6>
+            <button class="btn btn-sm btn-outline-primary" @click="downloadAllFiles()" :disabled="files.length === 0">
+                <i class="bi bi-download"></i> 打包下载
+            </button>
+        </div>
+        <div class="file-list p-2">
+            <template x-for="file in files" :key="file.path">
+                <div class="file-item p-2 border-bottom rounded d-flex justify-content-between align-items-center">
+                    <div class="file-info">
+                        <i class="bi bi-file-earmark"></i>
+                        <span class="file-name ms-1" x-text="file.name"></span>
+                        <small class="text-muted ms-2" x-text="formatSize(file.size)"></small>
+                    </div>
+                    <a :href="'/api/assistant/sessions/' + currentSessionId + '/files/' + file.path"
+                       class="btn btn-sm btn-outline-secondary" target="_blank">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+            </template>
+            <div x-show="files.length === 0" class="text-center text-muted p-3">
+                <i class="bi bi-folder2-open"></i>
+                <p class="mt-1 small">暂无文件</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function assistantApp() {
+    return {
+        sessions: [],
+        currentSessionId: null,
+        messages: [],
+        files: [],
+        inputMessage: '',
+        loading: false,
+        creatingSession: false,
+        contextUsage: 0,
+
+        init() {
+            this.loadSessions();
+        },
+
+        async loadSessions() {
+            try {
+                const response = await fetch('/api/assistant/sessions');
+                const data = await response.json();
+                if (data.success) {
+                    this.sessions = data.data;
+                    // 如果有会话，自动选择第一个
+                    if (this.sessions.length > 0 && !this.currentSessionId) {
+                        this.selectSession(this.sessions[0].session_id);
+                    }
+                }
+            } catch (e) {
+                Utils.showToast('加载会话列表失败: ' + e.message, 'error');
+            }
+        },
+
+        async createSession() {
+            this.creatingSession = true;
+            try {
+                const response = await fetch('/api/assistant/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const newSessionId = data.data.session_id;
+                    await this.loadSessions();
+                    this.selectSession(newSessionId);
+                    Utils.showToast('会话创建成功', 'success');
+                } else {
+                    Utils.showToast(data.error || '创建失败', 'error');
+                }
+            } catch (e) {
+                Utils.showToast('创建会话失败: ' + e.message, 'error');
+            }
+            this.creatingSession = false;
+        },
+
+        async deleteSession(sessionId) {
+            if (!confirm('确定删除此会话？工作目录文件将被清理。')) return;
+
+            try {
+                const response = await fetch(`/api/assistant/sessions/${sessionId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await this.loadSessions();
+                    if (this.currentSessionId === sessionId) {
+                        this.currentSessionId = null;
+                        this.messages = [];
+                        this.files = [];
+                    }
+                    Utils.showToast('会话已删除', 'success');
+                } else {
+                    Utils.showToast(data.error || '删除失败', 'error');
+                }
+            } catch (e) {
+                Utils.showToast('删除会话失败: ' + e.message, 'error');
+            }
+        },
+
+        async selectSession(sessionId) {
+            this.currentSessionId = sessionId;
+            await this.loadMessages();
+            await this.loadFiles();
+            await this.loadState();
+        },
+
+        async loadMessages() {
+            if (!this.currentSessionId) {
+                this.messages = [];
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/messages`);
+                const data = await response.json();
+                if (data.success) {
+                    this.messages = data.data;
+                    this.scrollToBottom();
+                }
+            } catch (e) {
+                Utils.showToast('加载消息失败: ' + e.message, 'error');
+            }
+        },
+
+        async loadFiles() {
+            if (!this.currentSessionId) {
+                this.files = [];
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/files`);
+                const data = await response.json();
+                if (data.success) {
+                    this.files = data.data;
+                }
+            } catch (e) {
+                Utils.showToast('加载文件列表失败: ' + e.message, 'error');
+            }
+        },
+
+        async loadState() {
+            if (!this.currentSessionId) {
+                this.contextUsage = 0;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/state`);
+                const data = await response.json();
+                if (data.success) {
+                    this.contextUsage = data.data.context_usage || 0;
+                }
+            } catch (e) {
+                console.error('加载状态失败:', e);
+            }
+        },
+
+        async sendMessage() {
+            if (!this.currentSessionId || !this.inputMessage || this.loading) return;
+
+            const message = this.inputMessage;
+            this.inputMessage = '';
+            this.loading = true;
+
+            // 添加用户消息到列表（乐观更新）
+            const now = new Date().toLocaleString('zh-CN');
+            this.messages.push({
+                role: 'user',
+                content: message,
+                timestamp: now
+            });
+            this.scrollToBottom();
+
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 添加AI回复
+                    this.messages.push({
+                        role: 'assistant',
+                        content: data.data.response,
+                        timestamp: new Date().toLocaleString('zh-CN')
+                    });
+                    this.contextUsage = data.data.context_usage || 0;
+                    this.scrollToBottom();
+
+                    // 刷新会话列表（更新标题和时间）
+                    await this.loadSessions();
+                    // 刷新文件列表（可能有新文件）
+                    await this.loadFiles();
+                } else {
+                    Utils.showToast(data.error || '对话失败', 'error');
+                    // 移除乐观添加的用户消息
+                    this.messages.pop();
+                    this.inputMessage = message;
+                }
+            } catch (e) {
+                Utils.showToast('发送消息失败: ' + e.message, 'error');
+                this.messages.pop();
+                this.inputMessage = message;
+            }
+
+            this.loading = false;
+        },
+
+        scrollToBottom() {
+            setTimeout(() => {
+                const list = document.getElementById('messageList');
+                if (list) {
+                    list.scrollTop = list.scrollHeight;
+                }
+            }, 50);
+        },
+
+        formatMessage(content) {
+            if (!content) return '';
+            // 简单的Markdown格式化
+            return content
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>')
+                .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        },
+
+        formatSize(size) {
+            if (size < 1024) return size + ' B';
+            if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+            return (size / (1024 * 1024)).toFixed(1) + ' MB';
+        },
+
+        downloadAllFiles() {
+            if (!this.currentSessionId || this.files.length === 0) return;
+            window.open(`/api/assistant/sessions/${this.currentSessionId}/files/download-all`, '_blank');
+        }
+    };
+}
+</script>
+{% endblock %}

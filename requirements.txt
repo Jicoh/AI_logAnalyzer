@@ -10,3 +10,4 @@ flask-sqlalchemy>=3.0.0
 flask-login>=0.6.0
 bcrypt>=4.0.0
 flask-wtf>=1.0.0
+pyyaml>=6.0
