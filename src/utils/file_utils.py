@@ -430,3 +430,40 @@ def create_single_log_output_dir(base_output_dir, log_filename):
 
     ensure_dir(output_dir)
     return output_dir
+
+
+def is_safe_path(path: str, allowed_base: str) -> bool:
+    """
+    验证路径是否安全，防止路径遍历攻击
+
+    Args:
+        path: 要验证的路径（可以是相对或绝对路径）
+        allowed_base: 允许的基础目录
+
+    Returns:
+        bool: 路径是否在允许的目录范围内
+    """
+    # 解析真实路径
+    real_path = os.path.realpath(path)
+    real_base = os.path.realpath(allowed_base)
+
+    # 检查真实路径是否以允许的基础目录开头
+    return real_path.startswith(real_base + os.sep) or real_path == real_base
+
+
+def clean_filename(filename: str) -> str:
+    """
+    清理文件名，去除常见扩展名
+
+    Args:
+        filename: 原始文件名
+
+    Returns:
+        str: 清理后的文件名
+    """
+    clean_name = filename
+    for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
+        if clean_name.lower().endswith(ext):
+            clean_name = clean_name[:-len(ext)]
+            break
+    return clean_name

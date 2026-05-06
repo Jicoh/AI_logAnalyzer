@@ -35,7 +35,8 @@ def list_users():
             try:
                 user_dir = get_user_data_dir(u.employee_id)
                 storage_used = get_dir_size(user_dir)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"计算用户存储失败: {u.employee_id}, {str(e)}")
                 storage_used = 0
 
             user_list.append({
@@ -70,7 +71,8 @@ def get_user(user_id):
         try:
             user_dir = get_user_data_dir(user.employee_id)
             storage_used = get_dir_size(user_dir)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"计算用户存储失败: {user.employee_id}, {str(e)}")
             storage_used = 0
 
         return jsonify({
@@ -385,7 +387,7 @@ def update_config():
 def get_configurable_subagents():
     """获取可配置的Subagent列表"""
     try:
-        from src.ai_analyzer.subagent_registry import get_registry
+        from src.ai_analyzer.subagents import get_registry
         registry = get_registry()
 
         subagents = []

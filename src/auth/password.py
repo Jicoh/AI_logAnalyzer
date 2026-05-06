@@ -4,6 +4,9 @@
 """
 
 import bcrypt
+from src.utils import get_logger
+
+logger = get_logger('password')
 
 
 def hash_password(password: str) -> str:
@@ -37,5 +40,6 @@ def verify_password(password: str, password_hash: str) -> bool:
             password.encode('utf-8'),
             password_hash.encode('utf-8')
         )
-    except Exception:
+    except Exception as e:
+        logger.debug(f"密码验证失败: {str(e)}")
         return False

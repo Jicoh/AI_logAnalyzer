@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 from .client import AIClient, AIResponse
-from .subagent_registry import SubagentRegistry, get_registry
+from .subagents import SubagentRegistry, get_registry
 from .mcp_client import MCPClient
 from src.session_manager.manager import SessionManager
 from src.config_manager.manager import ConfigManager
@@ -161,10 +161,10 @@ class OrchestratorAgent:
         self.config_manager = config_manager
 
         # 加载Orchestrator配置
-        self._load_config()
+        self.load_config()
 
         # 初始化AI客户端（Orchestrator专用）
-        orchestrator_api_config = self._get_orchestrator_api_config()
+        orchestrator_api_config = self.get_orchestrator_api_config()
         self.client = AIClient(orchestrator_api_config)
 
         # Subagent注册表
@@ -206,14 +206,14 @@ class OrchestratorAgent:
         self.session_state.setdefault("tool_calls", 0)
 
         # 工具列表（内置 + MCP）
-        self.tools = self._build_tools()
+        self.tools = self.build_tools()
 
         # Prompt路径
-        self.prompt_path = self._get_prompt_path()
+        self.prompt_path = self.get_prompt_path()
 
         logger.info(f"OrchestratorAgent初始化完成: user={user_id}, session={session_id}")
 
-    def _load_config(self):
+    def load_config(self):
         """加载Orchestrator配置"""
         orchestrator_config = self.config_manager.get('orchestrator', {})
         self.max_rounds = orchestrator_config.get('max_rounds', 20)
@@ -225,11 +225,11 @@ class OrchestratorAgent:
         self.context_limit = orchestrator_config.get('context_limit', 120000)
         self.compression_threshold = orchestrator_config.get('compression_threshold', 0.8)
 
-    def _get_orchestrator_api_config(self) -> Dict:
+    def get_orchestrator_api_config(self) -> Dict:
         """获取Orchestrator API配置 - 直接使用api配置"""
         return self.config_manager.get('api', {})
 
-    def _get_subagent_api_config(self, subagent_name: str = None) -> Dict:
+    def get_subagent_api_config(self, subagent_name: str = None) -> Dict:
         """
         获取Subagent API配置
 
@@ -256,13 +256,13 @@ class OrchestratorAgent:
         # 回退到默认api配置
         return self.config_manager.get('api', {})
 
-    def _get_prompt_path(self) -> str:
+    def get_prompt_path(self) -> str:
         """获取prompt文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'orchestrator_prompt.txt')
 
-    def _build_tools(self) -> List[Dict]:
+    def build_tools(self) -> List[Dict]:
         """构建工具列表（内置 + MCP）"""
         tools = ORCHESTRATOR_TOOLS.copy()
 
@@ -273,14 +273,14 @@ class OrchestratorAgent:
 
         return tools
 
-    def _load_prompt(self) -> str:
+    def load_prompt(self) -> str:
         """加载prompt模板"""
         if os.path.exists(self.prompt_path):
             with open(self.prompt_path, 'r', encoding='utf-8') as f:
                 return f.read()
-        return self._default_prompt()
+        return self.default_prompt()
 
-    def _default_prompt(self) -> str:
+    def default_prompt(self) -> str:
         """默认prompt"""
         return """你是智能助手的编排器，负责理解用户意图并协调各种专业技能完成复杂任务。
 
@@ -307,9 +307,9 @@ class OrchestratorAgent:
 2. 关注上下文使用率，必要时主动压缩
 3. 将专业结果整合为用户友好的回复"""
 
-    def _build_system_prompt(self) -> str:
+    def build_system_prompt(self) -> str:
         """构建系统提示"""
-        prompt_template = self._load_prompt()
+        prompt_template = self.load_prompt()
 
         # 获取可用Subagent列表
         available_skills = []
@@ -336,11 +336,11 @@ class OrchestratorAgent:
 
         return prompt_template.format(**{k: escape_braces(v) for k, v in prompt_data.items()})
 
-    def _calculate_context_usage(self, messages: List[Dict]) -> int:
+    def calculate_context_usage(self, messages: List[Dict]) -> int:
         """计算上下文使用量"""
         return self.client.count_tokens(messages)
 
-    def _compress_context(self, messages: List[Dict]) -> List[Dict]:
+    def compress_context(self, messages: List[Dict]) -> List[Dict]:
         """压缩上下文"""
         if len(messages) <= 2:
             return messages
@@ -401,9 +401,9 @@ class OrchestratorAgent:
             new_messages.extend(recent_messages)
 
             # 验证压缩效果
-            new_tokens = self._calculate_context_usage(new_messages)
+            new_tokens = self.calculate_context_usage(new_messages)
             logger.info(f"压缩完成: {len(messages)} -> {len(new_messages)} 条消息, "
-                       f"tokens: {self._calculate_context_usage(messages)} -> {new_tokens}")
+                       f"tokens: {self.calculate_context_usage(messages)} -> {new_tokens}")
 
             return new_messages
 
@@ -425,7 +425,7 @@ class OrchestratorAgent:
 
         # 构建消息
         messages = []
-        system_prompt = self._build_system_prompt()
+        system_prompt = self.build_system_prompt()
         messages.append({"role": "system", "content": system_prompt})
 
         # 添加对话历史
@@ -436,13 +436,13 @@ class OrchestratorAgent:
             messages.append({"role": "user", "content": user_input})
 
         # 计算上下文使用率
-        current_tokens = self._calculate_context_usage(messages)
+        current_tokens = self.calculate_context_usage(messages)
         self.context_state.update(current_tokens)
 
         # 检查是否需要压缩
         if self.context_state.needs_compression:
-            messages = self._compress_context(messages)
-            current_tokens = self._calculate_context_usage(messages)
+            messages = self.compress_context(messages)
+            current_tokens = self.calculate_context_usage(messages)
             self.context_state.update(current_tokens)
 
         # 多轮交互
@@ -479,7 +479,7 @@ class OrchestratorAgent:
                     logger.debug(f"执行工具: {tool_name}")
 
                     # 执行工具
-                    result = self._execute_tool_call(tool_name, args)
+                    result = self.execute_tool_call(tool_name, args)
 
                     interactions.append({
                         "tool": tool_name,
@@ -534,12 +534,12 @@ class OrchestratorAgent:
         logger.debug(f"对话完成: {round_count}轮, {tool_call_count}次工具调用")
         return final_response, metadata
 
-    def _execute_tool_call(self, tool_name: str, args: Dict) -> Dict:
+    def execute_tool_call(self, tool_name: str, args: Dict) -> Dict:
         """执行工具调用"""
 
         # 内置工具
         if tool_name in ORCHESTRATOR_TOOL_NAMES:
-            return self._execute_builtin_tool(tool_name, args)
+            return self.execute_builtin_tool(tool_name, args)
 
         # MCP工具
         if self.mcp_client and tool_name in self.mcp_client.tool_to_server:
@@ -548,7 +548,7 @@ class OrchestratorAgent:
         # 未知工具
         return {"error": f"未知工具: {tool_name}"}
 
-    def _execute_builtin_tool(self, tool_name: str, args: Dict) -> Dict:
+    def execute_builtin_tool(self, tool_name: str, args: Dict) -> Dict:
         """执行内置工具"""
 
         if tool_name == "get_session_state":
@@ -599,18 +599,18 @@ class OrchestratorAgent:
             return {"tools": tools_info}
 
         elif tool_name == "dispatch_subagent":
-            return self._dispatch_subagent(
+            return self.dispatch_subagent(
                 args.get("subagent_name", ""),
                 args.get("request", ""),
                 args.get("user_intent", "")
             )
 
         elif tool_name == "upload_log_file":
-            return self._upload_log_file(args.get("file_path", ""))
+            return self.upload_log_file(args.get("file_path", ""))
 
         return {"error": f"未实现的内置工具: {tool_name}"}
 
-    def _dispatch_subagent(self, subagent_name: str, request: str, user_intent: str = "") -> Dict:
+    def dispatch_subagent(self, subagent_name: str, request: str, user_intent: str = "") -> Dict:
         """调度Subagent执行任务"""
         if not subagent_name:
             return {"error": "subagent_name不能为空"}
@@ -630,7 +630,7 @@ class OrchestratorAgent:
             "session_notes": self.session_state.get("notes", {}),
             "uploaded_files": self.session_state.get("uploaded_files", []),
             "kb_id": self.session_state.get("kb_id"),
-            "subagent_api_config": self._get_subagent_api_config(subagent_name),
+            "subagent_api_config": self.get_subagent_api_config(subagent_name),
             "user_intent": user_intent or request  # 如果未提供user_intent，使用request
         }
 
@@ -673,7 +673,7 @@ class OrchestratorAgent:
             logger.error(f"Subagent执行失败: {subagent_name}, {str(e)}")
             return {"error": f"Subagent执行失败: {str(e)}"}
 
-    def _upload_log_file(self, file_path: str) -> Dict:
+    def upload_log_file(self, file_path: str) -> Dict:
         """处理日志文件上传"""
         if not file_path:
             return {"error": "file_path不能为空"}

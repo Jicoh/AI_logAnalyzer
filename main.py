@@ -16,14 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config_manager import ConfigManager
 from knowledge_base import KnowledgeBaseManager
-from ai_analyzer.agent_coordinator import AgentCoordinator
-from ai_analyzer.selection_agent import SelectionAgent
+from ai_analyzer.analyzer import analyze_with_agent
 from log_metadata import LogMetadataManager
 from utils import read_file, write_json, ensure_dir, get_logger
 from utils.file_utils import (
-    is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
-    create_batch_work_directory, create_single_log_output_dir, get_data_dir,
-    find_log_files_in_directory
+    is_archive_file, is_valid_log_file, extract_archive_recursive,
+    create_single_log_output_dir, get_data_dir, find_log_files_in_directory, clean_filename
 )
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -88,11 +86,6 @@ def cmd_analyze(args):
     """分析日志命令"""
     logger.debug(f"开始分析日志: {args.path}")
 
-    # 检查 --ai-select 必须配合 --ai
-    if args.ai_select and not args.ai:
-        print("错误: --ai-select 必须配合 --ai 使用")
-        return 1
-
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
     plugin_selection_manager = PluginSelectionManager()
@@ -140,50 +133,7 @@ def cmd_analyze(args):
         # 插件分析使用解压后的目录
         analysis_path = work_dir
 
-    if args.ai and args.ai_select:
-        # AI智能选择模式
-        print("AI智能选择模式已启用...")
-
-        # 检查AI配置
-        api_config = config_manager.get('api', {})
-        if not api_config.get('base_url') or not api_config.get('api_key'):
-            print("警告: AI配置不完整，使用默认插件")
-            plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
-        else:
-            # 获取用户提示词
-            user_prompt = args.prompt
-            if user_prompt and os.path.exists(user_prompt):
-                user_prompt = read_file(user_prompt)
-
-            if not user_prompt:
-                print("警告: AI智能选择需要用户提示词(--prompt)，使用默认插件")
-                plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
-            else:
-                try:
-                    log_metadata_manager = LogMetadataManager()
-                    # 如果指定了日志规则，设置为活跃规则
-                    log_rules_id = args.log_rules
-                    if log_rules_id:
-                        log_metadata_manager.set_active_rules(log_rules_id)
-
-                    selection_agent = SelectionAgent(
-                        config_manager=config_manager,
-                        log_metadata_manager=log_metadata_manager,
-                        plugin_manager=plugin_manager
-                    )
-                    selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
-
-                    plugin_ids = selection_result['selected_plugins']
-                    log_file_paths = selection_result['selected_files']
-
-                    print(f"AI选择结果: {selection_result['reason']}")
-                    print(f"选择插件: {', '.join(plugin_ids)}")
-                    print(f"选择文件: {', '.join([os.path.basename(f) for f in log_file_paths])}")
-                except Exception as e:
-                    logger.error(f"AI智能选择失败: {e}")
-                    print(f"AI智能选择失败: {e}，使用默认插件")
-                    plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
-    elif args.plugins:
+    if args.plugins:
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
         plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
@@ -219,11 +169,7 @@ def cmd_analyze(args):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     # 使用日志文件名（去除扩展名）
     log_filename = os.path.basename(args.path)
-    clean_name = log_filename
-    for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
-        if clean_name.lower().endswith(ext):
-            clean_name = clean_name[:-len(ext)]
-            break
+    clean_name = clean_filename(log_filename)
     dir_name = f"{timestamp}_{clean_name}"
     analysis_output_dir = os.path.join('data', 'analysis_output', dir_name)
     ensure_dir(analysis_output_dir)
@@ -268,24 +214,21 @@ def cmd_analyze(args):
 
     try:
         log_metadata_manager = LogMetadataManager()
-        log_rules_id = args.log_rules
+        log_rules_id = getattr(args, 'log_rules', None)
         if log_rules_id:
             log_metadata_manager.set_active_rules(log_rules_id)
 
-        coordinator = AgentCoordinator(
+        result = analyze_with_agent(
             config_manager=config_manager,
             kb_manager=kb_manager,
-            log_metadata_manager=log_metadata_manager
-        )
-
-        html_result = coordinator.run_analysis(
+            log_metadata_manager=log_metadata_manager,
             plugin_result=result_dict,
-            log_files=log_file_paths,
+            log_source={'type': 'local_file', 'paths': log_file_paths},
             kb_id=kb_id,
             user_prompt=user_prompt,
-            log_rules_id=log_rules_id,
-            actual_log_paths=log_file_paths
+            log_rules_id=log_rules_id
         )
+        html_result = result.get('html', '')
 
         # 保存AI分析HTML结果（与Web界面一致）
         ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
@@ -530,11 +473,6 @@ def cmd_analyze_batch(args):
     """批量分析日志目录"""
     from datetime import datetime
 
-    # 检查 --ai-select 必须配合 --ai
-    if args.ai_select and not args.ai:
-        print("错误: --ai-select 必须配合 --ai 使用")
-        return 1
-
     logger.debug(f"开始批量分析: {args.path}")
     config_manager = ConfigManager()
     kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
@@ -626,13 +564,15 @@ def cmd_analyze_batch(args):
     if not kb_id:
         kb_id = config_manager.get('knowledge_base.default_id')
 
-    # AI智能选择相关
-    log_rules_id = args.log_rules
-    if args.ai and args.ai_select:
-        print("AI智能选择模式已启用...")
-        user_prompt = args.prompt
-        if user_prompt and os.path.exists(user_prompt):
-            user_prompt = read_file(user_prompt)
+    log_rules_id = getattr(args, 'log_rules', None)
+
+    # 获取用户提示词
+    user_prompt = None
+    if args.prompt:
+        if os.path.exists(args.prompt):
+            user_prompt = read_file(args.prompt)
+        else:
+            user_prompt = args.prompt
 
     # 批量分析每个单元
     batch_results = {}
@@ -651,25 +591,6 @@ def cmd_analyze_batch(args):
         # 确定当前单元使用的插件
         current_plugin_ids = plugin_ids
         current_log_files = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
-
-        if args.ai and args.ai_select and user_prompt:
-            # 对每个单元进行AI智能选择
-            try:
-                log_metadata_manager = LogMetadataManager()
-                if log_rules_id:
-                    log_metadata_manager.set_active_rules(log_rules_id)
-                selection_agent = SelectionAgent(
-                    config_manager=config_manager,
-                    log_metadata_manager=log_metadata_manager,
-                    plugin_manager=plugin_manager
-                )
-                selection_result = selection_agent.select(current_log_files, user_prompt, log_rules_id)
-                current_plugin_ids = selection_result['selected_plugins']
-                current_log_files = selection_result['selected_files']
-                print(f"  AI选择插件: {', '.join(current_plugin_ids)}")
-                print(f"  AI选择文件: {', '.join([os.path.basename(f) for f in current_log_files])}")
-            except Exception as e:
-                print(f"  AI智能选择失败: {e}，使用默认插件")
 
         try:
             # 使用主程序的 logger 作为回调，保持日志一致性
@@ -714,19 +635,17 @@ def cmd_analyze_batch(args):
                             if log_rules_id:
                                 log_metadata_manager.set_active_rules(log_rules_id)
 
-                        coordinator = AgentCoordinator(
+                        result = analyze_with_agent(
                             config_manager=config_manager,
                             kb_manager=kb_manager,
-                            log_metadata_manager=log_metadata_manager
-                        )
-                        html_result = coordinator.run_analysis(
+                            log_metadata_manager=log_metadata_manager,
                             plugin_result=plugin_result,
-                            log_files=current_log_files,
+                            log_source={'type': 'local_file', 'paths': current_log_files},
                             kb_id=kb_id,
-                            user_prompt=user_prompt if args.ai_select else None,
-                            log_rules_id=log_rules_id,
-                            actual_log_paths=current_log_files
+                            user_prompt=user_prompt,
+                            log_rules_id=log_rules_id
                         )
+                        html_result = result.get('html', '')
                         ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
                         with open(ai_html_file, 'w', encoding='utf-8') as f:
                             f.write(html_result)
@@ -980,8 +899,7 @@ def main():
     analyze_parser.add_argument('--kb', '-k', help='知识库ID')
     analyze_parser.add_argument('--prompt', '-p', help='用户提示词（配合--ai使用）')
     analyze_parser.add_argument('--ai', action='store_true', help='启用AI分析')
-    analyze_parser.add_argument('--ai-select', action='store_true', help='AI智能选择模式（需配合--ai）')
-    analyze_parser.add_argument('--log-rules', '-l', help='日志规则集ID（配合--ai-select使用）')
+    analyze_parser.add_argument('--log-rules', '-l', help='日志规则集ID')
 
     # plugin 命令
     plugin_parser = subparsers.add_parser('plugin', help='插件管理')

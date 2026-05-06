@@ -169,7 +169,7 @@ class StdioConnection(MCPServerConnection):
             )
 
             # 启动读取线程
-            self.reader_thread = threading.Thread(target=self._read_responses, daemon=True)
+            self.reader_thread = threading.Thread(target=self.read_responses, daemon=True)
             self.reader_thread.start()
 
             logger.info(f"stdio MCP Server '{self.name}' 进程已启动: {command} {args}")
@@ -180,7 +180,7 @@ class StdioConnection(MCPServerConnection):
             logger.error(f"启动stdio进程失败: {str(e)}")
             return False
 
-    def _read_responses(self):
+    def read_responses(self):
         """读取响应的后台线程"""
         while self.process and self.process.poll() is None:
             try:
@@ -191,7 +191,8 @@ class StdioConnection(MCPServerConnection):
                         self.response_queue.put(response)
                     except json.JSONDecodeError:
                         continue
-            except Exception:
+            except Exception as e:
+                logger.debug(f"StdioProcess读取中断: {str(e)}")
                 break
 
     def send_request(self, method: str, params: dict = None) -> dict:
@@ -229,7 +230,8 @@ class StdioConnection(MCPServerConnection):
             try:
                 self.process.terminate()
                 self.process.wait(timeout=5)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"进程终止超时，强制kill: {str(e)}")
                 self.process.kill()
             self.process = None
         logger.info(f"stdio MCP Server '{self.name}' 已断开")
@@ -297,8 +299,8 @@ class WebSocketConnection(MCPServerConnection):
         if self.ws:
             try:
                 self.ws.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"WebSocket关闭异常: {str(e)}")
             self.ws = None
         logger.info(f"websocket MCP Server '{self.name}' 已断开")
 

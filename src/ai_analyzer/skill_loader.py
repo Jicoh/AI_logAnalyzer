@@ -55,7 +55,7 @@ class SkillLoader:
         self._skills: Dict[str, SkillInfo] = {}
         self._loaded = False
 
-    def _parse_frontmatter(self, content: str) -> tuple:
+    def parse_frontmatter(self, content: str) -> tuple:
         """
         解析YAML frontmatter
 
@@ -93,7 +93,7 @@ class SkillLoader:
 
         return frontmatter, markdown_content
 
-    def _load_skill_file(self, file_path: str) -> Optional[SkillInfo]:
+    def load_skill_file(self, file_path: str) -> Optional[SkillInfo]:
         """
         加载单个SKILL.md文件
 
@@ -107,7 +107,7 @@ class SkillLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
-            frontmatter, markdown_content = self._parse_frontmatter(content)
+            frontmatter, markdown_content = self.parse_frontmatter(content)
 
             # 提取必要字段
             name = frontmatter.get('name', '')
@@ -158,7 +158,7 @@ class SkillLoader:
             if not os.path.exists(skill_file):
                 continue
 
-            skill_info = self._load_skill_file(skill_file)
+            skill_info = self.load_skill_file(skill_file)
             if skill_info:
                 skills.append(skill_info)
                 self._skills[skill_info.name] = skill_info

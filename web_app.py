@@ -16,7 +16,7 @@ import argparse
 import os
 import sys
 
-# 将项目根目录添加到路径
+# 将项目根目录添加到路径，用于确保项目的导入路径正确
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask

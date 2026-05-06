@@ -145,18 +145,18 @@ class ToolExecutor:
 
         try:
             if tool_name == "read_log_by_keyword":
-                return self._read_by_keyword(args)
+                return self.read_by_keyword(args)
             elif tool_name == "read_log_by_range":
-                return self._read_by_range(args)
+                return self.read_by_range(args)
             elif tool_name == "get_log_file_info":
-                return self._get_file_info()
+                return self.get_file_info()
             elif tool_name == "search_knowledge_base":
-                return self._search_kb(args)
+                return self.search_kb(args)
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, {str(e)}")
             return {"error": str(e)}
 
-    def _find_file(self, file_name: str) -> Optional[str]:
+    def find_file(self, file_name: str) -> Optional[str]:
         """查找文件完整路径"""
         if file_name in self.file_map:
             return self.file_map[file_name]
@@ -166,13 +166,13 @@ class ToolExecutor:
                 return path
         return None
 
-    def _read_by_keyword(self, args: dict) -> dict:
+    def read_by_keyword(self, args: dict) -> dict:
         """按关键词读取日志"""
         file_name = args.get('file', '')
         keyword = args.get('keyword', '')
         context_lines = args.get('context_lines', 20)
 
-        file_path = self._find_file(file_name)
+        file_path = self.find_file(file_name)
         if not file_path:
             return {"error": f"未找到文件: {file_name}", "available_files": list(self.file_map.keys())[:10]}
 
@@ -218,13 +218,13 @@ class ToolExecutor:
             "content": '\n'.join(content_lines)
         }
 
-    def _read_by_range(self, args: dict) -> dict:
+    def read_by_range(self, args: dict) -> dict:
         """按行号范围读取日志"""
         file_name = args.get('file', '')
         start_line = args.get('start_line', 1)
         end_line = args.get('end_line', 100)
 
-        file_path = self._find_file(file_name)
+        file_path = self.find_file(file_name)
         if not file_path:
             return {"error": f"未找到文件: {file_name}"}
 
@@ -250,7 +250,7 @@ class ToolExecutor:
             "content": '\n'.join(content_lines)
         }
 
-    def _get_file_info(self) -> dict:
+    def get_file_info(self) -> dict:
         """获取所有日志文件信息"""
         if self.file_info_cache:
             return self.file_info_cache
@@ -282,7 +282,7 @@ class ToolExecutor:
         }
         return self.file_info_cache
 
-    def _search_kb(self, args: dict) -> dict:
+    def search_kb(self, args: dict) -> dict:
         """搜索知识库"""
         query = args.get('query', '')
 
@@ -338,32 +338,32 @@ class LogAnalyzerAgent:
         self.max_tokens = agent_config.get('max_tokens', 60000)
         self.max_rounds = agent_config.get('max_rounds', 10)
 
-        self.prompt_path = self._get_prompt_path()
-        self.template_path = self._get_template_path()
-        self.html_template = self._load_template()
+        self.prompt_path = self.get_prompt_path()
+        self.template_path = self.get_template_path()
+        self.html_template = self.load_template()
 
         # 构建工具列表（内置工具 + MCP工具）
-        self.tools = self._build_tools()
+        self.tools = self.build_tools()
 
-    def _get_prompt_path(self) -> str:
+    def get_prompt_path(self) -> str:
         """获取prompt文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
         return os.path.join(project_root, 'config', 'agent_prompt.txt')
 
-    def _get_template_path(self) -> str:
+    def get_template_path(self) -> str:
         """获取HTML模板路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(current_dir, 'templates', 'ai_report_template.html')
 
-    def _load_template(self) -> Optional[Template]:
+    def load_template(self) -> Optional[Template]:
         """加载HTML模板"""
         if os.path.exists(self.template_path):
             with open(self.template_path, 'r', encoding='utf-8') as f:
                 return Template(f.read())
         return None
 
-    def _build_tools(self) -> list:
+    def build_tools(self) -> list:
         """构建完整工具列表（内置工具 + MCP工具）"""
         tools = BUILTIN_TOOLS.copy()
         if self.mcp_client:
@@ -372,14 +372,14 @@ class LogAnalyzerAgent:
             logger.debug(f"已加载 {len(mcp_tools)} 个MCP工具")
         return tools
 
-    def _load_prompt(self) -> str:
+    def load_prompt(self) -> str:
         """加载prompt模板"""
         if os.path.exists(self.prompt_path):
             with open(self.prompt_path, 'r', encoding='utf-8') as f:
                 return f.read()
-        return self._default_prompt()
+        return self.default_prompt()
 
-    def _default_prompt(self) -> str:
+    def default_prompt(self) -> str:
         """默认prompt"""
         return """你是BMC服务器日志分析专家。
 
@@ -397,7 +397,7 @@ class LogAnalyzerAgent:
 
 直接输出JSON对象，不要包裹在代码块中。"""
 
-    def _escape_braces(self, text: str) -> str:
+    def escape_braces(self, text: str) -> str:
         """转义花括号"""
         if not text:
             return ""
@@ -437,17 +437,17 @@ class LogAnalyzerAgent:
 
         # 构建初始prompt
         prompt_data = {
-            'plugin_result': self._format_plugin_result(plugin_result),
-            'machine_info': self._format_machine_info(machine_info),
+            'plugin_result': self.format_plugin_result(plugin_result),
+            'machine_info': self.format_machine_info(machine_info),
             'knowledge_content': knowledge_content or "无知识库内容",
             'log_rules': log_rules or "无日志规则",
-            'log_files_overview': self._format_log_files(log_files),
+            'log_files_overview': self.format_log_files(log_files),
             'analysis_templates': analysis_templates or "无分析模板",
             'user_prompt': user_prompt or "无用户提示词"
         }
 
-        prompt_template = self._load_prompt()
-        system_prompt = prompt_template.format(**{k: self._escape_braces(v) for k, v in prompt_data.items()})
+        prompt_template = self.load_prompt()
+        system_prompt = prompt_template.format(**{k: self.escape_braces(v) for k, v in prompt_data.items()})
 
         # 构建初始消息
         messages = [
@@ -529,14 +529,14 @@ class LogAnalyzerAgent:
                 final_response = response.content
 
                 # 验证输出
-                data, errors = self._validate_output(final_response)
+                data, errors = self.validate_output(final_response)
                 if not errors:
                     # 验证通过，渲染HTML
-                    html = self._render_html(data)
+                    html = self.render_html(data)
                     logger.info(f"分析完成，共{round_count}轮交互")
                     return {
                         'html': html,
-                        'interaction_record': self._build_interaction_record(
+                        'interaction_record': self.build_interaction_record(
                             system_prompt, prompt_data, interactions, data, True, []
                         )
                     }
@@ -546,7 +546,7 @@ class LogAnalyzerAgent:
                 logger.warning(f"验证失败: {errors}")
 
                 if round_count < 2:  # 只重试一次
-                    retry_prompt = self._build_retry_prompt(errors, final_response)
+                    retry_prompt = self.build_retry_prompt(errors, final_response)
                     messages.append(response.to_message())
                     messages.append({"role": "user", "content": retry_prompt})
                     continue
@@ -555,19 +555,19 @@ class LogAnalyzerAgent:
 
         # 重试失败，启用降级方案
         logger.warning("验证重试失败，启用降级HTML生成")
-        html, fallback_interaction = self._generate_html_fallback(
+        html, fallback_interaction = self.generate_html_fallback(
             prompt_data, final_response, validation_errors
         )
 
         return {
             'html': html,
-            'interaction_record': self._build_interaction_record(
+            'interaction_record': self.build_interaction_record(
                 system_prompt, prompt_data, interactions, None, False, validation_errors,
                 fallback_interaction
             )
         }
 
-    def _validate_output(self, response_text: str) -> tuple:
+    def validate_output(self, response_text: str) -> tuple:
         """
         验证AI输出
 
@@ -578,7 +578,7 @@ class LogAnalyzerAgent:
             return None, ["AI返回空内容"]
 
         # 提取JSON
-        json_text = self._extract_json(response_text)
+        json_text = self.extract_json(response_text)
 
         # JSON格式验证
         try:
@@ -608,7 +608,7 @@ class LogAnalyzerAgent:
 
         return data, []
 
-    def _extract_json(self, text: str) -> str:
+    def extract_json(self, text: str) -> str:
         """从响应中提取JSON"""
         text = text.strip()
 
@@ -635,7 +635,7 @@ class LogAnalyzerAgent:
 
         return text
 
-    def _build_retry_prompt(self, errors: List[str], failed_response: str) -> str:
+    def build_retry_prompt(self, errors: List[str], failed_response: str) -> str:
         """构建重试提示词"""
         error_preview = failed_response[:1000] if failed_response else ""
         return f"""你之前的JSON输出验证失败，请修正后重新输出。
@@ -653,7 +653,7 @@ class LogAnalyzerAgent:
 
 请直接输出修正后的JSON，不要包含其他内容。"""
 
-    def _generate_html_fallback(
+    def generate_html_fallback(
         self,
         prompt_data: dict,
         original_response: str,
@@ -684,14 +684,14 @@ class LogAnalyzerAgent:
 
         try:
             response = self.client.chat_with_tools(messages)
-            html = self._extract_html(response.content)
+            html = self.extract_html(response.content)
             fallback_record = {
                 "prompt": fallback_prompt,
                 "response": response.content[:2000],
                 "success": True
             }
         except Exception as e:
-            html = self._generate_error_html("降级HTML生成失败", str(e))
+            html = self.generate_error_html("降级HTML生成失败", str(e))
             fallback_record = {
                 "success": False,
                 "error": str(e)
@@ -699,7 +699,7 @@ class LogAnalyzerAgent:
 
         return html, fallback_record
 
-    def _extract_html(self, text: str) -> str:
+    def extract_html(self, text: str) -> str:
         """从响应中提取HTML"""
         text = text.strip()
 
@@ -718,9 +718,9 @@ class LogAnalyzerAgent:
             return text[html_start:]
 
         # 生成简单HTML包装
-        return self._generate_simple_html(text)
+        return self.generate_simple_html(text)
 
-    def _generate_simple_html(self, content: str) -> str:
+    def generate_simple_html(self, content: str) -> str:
         """生成简单HTML"""
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -732,7 +732,7 @@ class LogAnalyzerAgent:
 </div>
 </body></html>"""
 
-    def _render_html(self, data: dict) -> str:
+    def render_html(self, data: dict) -> str:
         """渲染HTML报告"""
         # 计算问题摘要统计
         problems = data.get('problems', [])
@@ -754,9 +754,9 @@ class LogAnalyzerAgent:
                 analysis_coverage=data.get('analysis_coverage', {}),
                 analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
-        return self._generate_fallback_html(data)
+        return self.generate_fallback_html(data)
 
-    def _generate_fallback_html(self, data: dict) -> str:
+    def generate_fallback_html(self, data: dict) -> str:
         """生成备用HTML"""
         html_parts = ['<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">']
         html_parts.append('<title>AI日志分析报告</title>')
@@ -847,7 +847,7 @@ class LogAnalyzerAgent:
         html_parts.append('</body></html>')
         return ''.join(html_parts)
 
-    def _generate_error_html(self, title: str, detail: str) -> str:
+    def generate_error_html(self, title: str, detail: str) -> str:
         """生成错误HTML"""
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -859,7 +859,7 @@ class LogAnalyzerAgent:
 </div>
 </body></html>"""
 
-    def _build_interaction_record(
+    def build_interaction_record(
         self,
         system_prompt: str,
         prompt_data: dict,
@@ -890,7 +890,7 @@ class LogAnalyzerAgent:
             }
         }
 
-    def _format_plugin_result(self, plugin_result: Dict) -> str:
+    def format_plugin_result(self, plugin_result: Dict) -> str:
         """格式化插件结果"""
         lines = []
         for plugin_id, plugin_data in plugin_result.items():
@@ -926,7 +926,7 @@ class LogAnalyzerAgent:
 
         return '\n'.join(lines)
 
-    def _format_machine_info(self, machine_info: Dict) -> str:
+    def format_machine_info(self, machine_info: Dict) -> str:
         """格式化机器信息"""
         if not machine_info:
             return "暂无机器信息"
@@ -935,7 +935,7 @@ class LogAnalyzerAgent:
             lines.append(f"- {k}: {v}")
         return '\n'.join(lines)
 
-    def _format_log_files(self, log_files: List[str]) -> str:
+    def format_log_files(self, log_files: List[str]) -> str:
         """格式化日志文件列表"""
         if not log_files:
             return "无日志文件"

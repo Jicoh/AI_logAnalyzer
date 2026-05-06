@@ -1,14 +1,49 @@
 """
 配置管理模块
 负责AI配置的读取、修改和保存
+支持环境变量占位符解析：${VAR_NAME}
 """
 
 import json
 import os
+import re
 import sys
 from src.utils import get_logger
 
 logger = get_logger('config_manager')
+
+# 环境变量占位符模式：${VAR_NAME}
+ENV_VAR_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
+
+def resolve_env_vars(value):
+    """
+    解析环境变量占位符
+
+    Args:
+        value: 配置值，可以是字符串或任意类型
+
+    Returns:
+        解析后的值，字符串中的 ${VAR_NAME} 会替换为对应的环境变量值
+        如果环境变量不存在，保持原值不变
+    """
+    if isinstance(value, str):
+        def replace_env_var(match):
+            var_name = match.group(1)
+            env_value = os.environ.get(var_name)
+            if env_value is not None:
+                logger.debug(f"解析环境变量: {var_name}")
+                return env_value
+            else:
+                logger.warning(f"环境变量不存在: {var_name}")
+                return match.group(0)  # 保持原值
+        return ENV_VAR_PATTERN.sub(replace_env_var, value)
+    elif isinstance(value, dict):
+        return {k: resolve_env_vars(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [resolve_env_vars(item) for item in value]
+    else:
+        return value
 
 
 class ConfigManager:
@@ -90,10 +125,13 @@ class ConfigManager:
         self.config = self.load_config()
 
     def load_config(self):
-        """加载配置文件"""
+        """加载配置文件并解析环境变量"""
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                raw_config = json.load(f)
+            # 解析环境变量占位符
+            self.config = resolve_env_vars(raw_config)
+            return self.config
         return self.create_default_config()
 
     def create_default_config(self):

@@ -6,21 +6,20 @@ import os
 import json
 import subprocess
 from datetime import datetime
-from flask import Blueprint, request, Response, stream_with_context, jsonify, send_from_directory
+from flask import Blueprint, request, Response, stream_with_context, jsonify
 from flask_login import current_user
 
 from src.ai_analyzer.analyzer import analyze_with_agent
-from src.ai_analyzer.selection_agent import SelectionAgent
+from src.ai_analyzer.subagents import LogAnalyzerSubagent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.config_manager.manager import ConfigManager
 from src.settings_manager.manager import SettingsManager
-from src.plugin_selection.manager import PluginSelectionManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
-    get_project_root, get_data_dir, get_user_data_dir
+    get_project_root, get_data_dir, get_user_data_dir, is_safe_path, clean_filename
 )
 from src.storage.quota import StorageQuota, format_size
 from src.utils import get_logger
@@ -48,11 +47,8 @@ def log_callback(message: str, level: str = "info"):
     log_method(message)
 
 # 全局实例
-config_manager = None
-settings_manager = None
 kb_manager = None
 log_metadata_manager = None
-plugin_selection_manager = None
 
 
 def get_plugin_manager_with_custom():
@@ -94,14 +90,6 @@ def get_log_metadata_manager():
     if log_metadata_manager is None:
         log_metadata_manager = LogMetadataManager()
     return log_metadata_manager
-
-
-def get_plugin_selection_manager():
-    """获取或创建 PluginSelectionManager 实例。"""
-    global plugin_selection_manager
-    if plugin_selection_manager is None:
-        plugin_selection_manager = PluginSelectionManager()
-    return plugin_selection_manager
 
 
 def allowed_log_file(filename):
@@ -211,8 +199,109 @@ def get_file_category(filename):
 
 
 def generate_sse_event(data):
-    """将数据格式化为 SSE 事件。"""
+    """生成SSE事件字符串。"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def create_analysis_output_dir(user_id: str, filename: str) -> tuple:
+    """
+    创建分析输出目录。
+
+    Returns:
+        tuple: (analysis_output_dir, plugin_output_file, timestamp)
+    """
+    analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    clean_name = clean_filename(filename)
+    dir_name = f"{timestamp}_{clean_name}"
+    analysis_output_dir = os.path.join(analysis_output_base, dir_name)
+    ensure_dir(analysis_output_dir)
+    plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
+    return analysis_output_dir, plugin_output_file, timestamp
+
+
+def save_and_render_plugin_result(plugin_result: dict, output_file: str) -> str:
+    """
+    保存插件分析结果并生成 HTML。
+
+    Returns:
+        str: HTML 文件的相对路径
+    """
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(plugin_result, f, indent=4, ensure_ascii=False)
+    render_html(output_file)
+    root_dir = get_project_root()
+    html_path = os.path.relpath(output_file.replace('.json', '.html'), root_dir)
+    return html_path
+
+
+def run_ai_analysis(
+    plugin_result: dict,
+    log_file_paths: list,
+    analysis_output_dir: str,
+    kb_id: str = None,
+    user_prompt: str = None,
+    log_rules_id: str = None
+) -> dict:
+    """
+    执行 AI 分析并保存结果。
+
+    Returns:
+        dict: AI 分析结果信息，包含 html_path 和 analysis_time
+    """
+    log_source = {'type': 'local_file', 'paths': log_file_paths}
+
+    result = analyze_with_agent(
+        config_manager=get_config_manager(),
+        kb_manager=get_kb_manager(),
+        log_metadata_manager=get_log_metadata_manager(),
+        plugin_result=plugin_result,
+        log_source=log_source,
+        kb_id=kb_id,
+        user_prompt=user_prompt,
+        log_rules_id=log_rules_id
+    )
+
+    html_result = result.get('html', '')
+    ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
+    with open(ai_html_file, 'w', encoding='utf-8') as f:
+        f.write(html_result)
+
+    ai_html_relative = os.path.relpath(ai_html_file, get_project_root())
+    return {
+        'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'kb_id': kb_id,
+        'html_path': ai_html_relative
+    }
+
+
+def handle_ai_selection(
+    log_file_paths: list,
+    user_prompt: str,
+    log_rules_id: str,
+    plugin_manager
+) -> tuple:
+    """
+    处理 AI 智能选择插件和文件。
+
+    Returns:
+        tuple: (selected_plugins, selected_log_files, selection_result)
+    """
+    if log_rules_id:
+        get_log_metadata_manager().set_active_rules(log_rules_id)
+
+    selection_subagent = LogAnalyzerSubagent(
+        config_manager=get_config_manager(),
+        log_metadata_manager=get_log_metadata_manager(),
+        plugin_manager=plugin_manager
+    )
+    selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
+
+    return (
+        selection_result['selected_plugins'],
+        selection_result['selected_files'],
+        selection_result
+    )
 
 
 @analyze_bp.route('/api/analyze/stream', methods=['POST'])
@@ -323,12 +412,12 @@ def analyze_stream():
                     if log_rules_id:
                         get_log_metadata_manager().set_active_rules(log_rules_id)
 
-                    selection_agent = SelectionAgent(
+                    selection_subagent = LogAnalyzerSubagent(
                         config_manager=get_config_manager(),
                         log_metadata_manager=get_log_metadata_manager(),
                         plugin_manager=plugin_manager
                     )
-                    selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
+                    selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
 
                     selected_plugins = selection_result['selected_plugins']
                     selected_log_files = selection_result['selected_files']
@@ -376,23 +465,8 @@ def analyze_stream():
                 return
 
             # 保存插件分析结果（用户隔离）
-            analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            # 使用原始上传文件名（去除扩展名）
-            clean_name = filename
-            for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
-                if clean_name.lower().endswith(ext):
-                    clean_name = clean_name[:-len(ext)]
-                    break
-            dir_name = f"{timestamp}_{clean_name}"
-            analysis_output_dir = os.path.join(analysis_output_base, dir_name)
-            ensure_dir(analysis_output_dir)
-            plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
-            with open(plugin_output_file, 'w', encoding='utf-8') as f:
-                json.dump(combined_result, f, indent=4, ensure_ascii=False)
-
-            # 生成HTML文件
-            render_html(plugin_output_file)
+            analysis_output_dir, plugin_output_file, _ = create_analysis_output_dir(user_id, filename)
+            html_relative_path = save_and_render_plugin_result(combined_result, plugin_output_file)
 
             yield generate_sse_event({
                 'stage': 'plugin',
@@ -406,41 +480,15 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
 
                 try:
-                    # 构建log_source参数
-                    log_source = {'type': 'local_file', 'paths': log_file_paths}
-
-                    result = analyze_with_agent(
-                        config_manager=get_config_manager(),
-                        kb_manager=get_kb_manager(),
-                        log_metadata_manager=get_log_metadata_manager(),
-                        plugin_result=combined_result,
-                        log_source=log_source,
-                        kb_id=kb_id,
-                        user_prompt=user_prompt,
-                        log_rules_id=log_rules_id
+                    ai_result_data = run_ai_analysis(
+                        combined_result, log_file_paths, analysis_output_dir,
+                        kb_id, user_prompt, log_rules_id
                     )
-
-                    html_result = result.get('html', '')
-
-                    # 保存 HTML 结果
-                    ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
-                    with open(ai_html_file, 'w', encoding='utf-8') as f:
-                        f.write(html_result)
-
-                    # 生成相对路径（用于web访问）
-                    root_dir = get_project_root()
-                    ai_html_relative = os.path.relpath(ai_html_file, root_dir)
-
-                    ai_result_data = {
-                        'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'kb_id': kb_id,
-                        'html_path': ai_html_relative
-                    }
 
                     yield generate_sse_event({
                         'stage': 'ai',
                         'status': 'complete',
-                        'html_path': ai_html_relative
+                        'html_path': ai_result_data['html_path']
                     })
 
                 except Exception as e:
@@ -452,9 +500,6 @@ def analyze_stream():
                     })
 
             # 第3阶段：完成
-            # 生成HTML相对路径（用于web访问）
-            root_dir = get_project_root()
-            html_relative_path = os.path.relpath(plugin_output_file.replace('.json', '.html'), root_dir)
 
             # 构建完成事件数据
             complete_data = {
@@ -676,12 +721,12 @@ def analyze_local_stream():
                     try:
                         if log_rules_id:
                             get_log_metadata_manager().set_active_rules(log_rules_id)
-                        selection_agent = SelectionAgent(
+                        selection_subagent = LogAnalyzerSubagent(
                             config_manager=get_config_manager(),
                             log_metadata_manager=get_log_metadata_manager(),
                             plugin_manager=plugin_manager
                         )
-                        selection_result = selection_agent.select(log_file_paths, user_prompt, log_rules_id)
+                        selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
                         selected_plugins = selection_result['selected_plugins']
                         selected_log_files = selection_result['selected_files']
                         yield generate_sse_event({
@@ -714,21 +759,8 @@ def analyze_local_stream():
                 )
 
                 # 保存结果（用户隔离）
-                analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                clean_name = filename
-                for ext in ['.tar.gz', '.tgz', '.tar', '.zip', '.log', '.txt']:
-                    if clean_name.lower().endswith(ext):
-                        clean_name = clean_name[:-len(ext)]
-                        break
-                dir_name = f"{timestamp}_{clean_name}"
-                analysis_output_dir = os.path.join(analysis_output_base, dir_name)
-                ensure_dir(analysis_output_dir)
-                plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
-                with open(plugin_output_file, 'w', encoding='utf-8') as f:
-                    json.dump(combined_result, f, indent=4, ensure_ascii=False)
-
-                render_html(plugin_output_file)
+                analysis_output_dir, plugin_output_file, _ = create_analysis_output_dir(user_id, filename)
+                html_relative_path = save_and_render_plugin_result(combined_result, plugin_output_file)
 
                 yield generate_sse_event({
                     'stage': 'plugin',
@@ -741,33 +773,14 @@ def analyze_local_stream():
                 if enable_ai:
                     yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
                     try:
-                        # 构建log_source参数
-                        log_source = {'type': 'local_file', 'paths': log_file_paths}
-
-                        result = analyze_with_agent(
-                            config_manager=get_config_manager(),
-                            kb_manager=get_kb_manager(),
-                            log_metadata_manager=get_log_metadata_manager(),
-                            plugin_result=combined_result,
-                            log_source=log_source,
-                            kb_id=kb_id,
-                            user_prompt=user_prompt,
-                            log_rules_id=log_rules_id
+                        ai_result_data = run_ai_analysis(
+                            combined_result, log_file_paths, analysis_output_dir,
+                            kb_id, user_prompt, log_rules_id
                         )
-                        html_result = result.get('html', '')
-                        ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
-                        with open(ai_html_file, 'w', encoding='utf-8') as f:
-                            f.write(html_result)
-                        ai_html_relative = os.path.relpath(ai_html_file, get_project_root())
-                        ai_result_data = {
-                            'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'kb_id': kb_id,
-                            'html_path': ai_html_relative
-                        }
                         yield generate_sse_event({
                             'stage': 'ai',
                             'status': 'complete',
-                            'html_path': ai_html_relative
+                            'html_path': ai_result_data['html_path']
                         })
                     except Exception as e:
                         logger.error(f"AI分析失败: {str(e)}")
@@ -888,14 +901,7 @@ def analyze_local_stream():
                         continue
 
                     plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
-                    with open(plugin_output_file, 'w', encoding='utf-8') as f:
-                        json.dump(plugin_result, f, indent=4, ensure_ascii=False)
-                    render_html(plugin_output_file)
-
-                    root_dir = get_project_root()
-                    html_relative_path = os.path.relpath(
-                        plugin_output_file.replace('.json', '.html'), root_dir
-                    )
+                    html_relative_path = save_and_render_plugin_result(plugin_result, plugin_output_file)
 
                     log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
 
@@ -908,29 +914,10 @@ def analyze_local_stream():
                             'message': f'AI分析: {unit_name}'
                         })
                         try:
-                            # 构建log_source参数
-                            log_source = {'type': 'local_file', 'paths': log_files_in_unit}
-
-                            result = analyze_with_agent(
-                                config_manager=get_config_manager(),
-                                kb_manager=get_kb_manager(),
-                                log_metadata_manager=get_log_metadata_manager(),
-                                plugin_result=plugin_result,
-                                log_source=log_source,
-                                kb_id=kb_id,
-                                user_prompt=user_prompt,
-                                log_rules_id=log_rules_id
+                            ai_result = run_ai_analysis(
+                                plugin_result, log_files_in_unit, single_output_dir,
+                                kb_id, user_prompt, log_rules_id
                             )
-                            html_result = result.get('html', '')
-                            ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
-                            with open(ai_html_file, 'w', encoding='utf-8') as f:
-                                f.write(html_result)
-                            ai_html_relative = os.path.relpath(ai_html_file, root_dir)
-                            ai_result = {
-                                'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                'kb_id': kb_id,
-                                'html_path': ai_html_relative
-                            }
                             yield generate_sse_event({
                                 'stage': 'batch',
                                 'status': 'ai_complete',
@@ -1015,254 +1002,6 @@ def analyze_local_stream():
             'X-Accel-Buffering': 'no'
         }
     )
-
-
-@analyze_bp.route('/api/plugin-result/html/<path:html_path>')
-def get_plugin_result_html(html_path):
-    """获取插件分析结果的HTML文件。"""
-    root_dir = get_project_root()
-    full_path = os.path.join(root_dir, html_path)
-    if not os.path.exists(full_path):
-        # 返回友好的 HTML 页面，而不是 JSON 错误
-        return '''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>结果已清理</title>
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: #f8f9fa;
-            font-family: system-ui, -apple-system, sans-serif;
-        }
-    </style>
-</head>
-<body>
-    <div style="text-align: center; padding: 40px;">
-        <i class="bi bi-trash3" style="font-size: 64px; color: #6c757d;"></i>
-        <p style="margin-top: 24px; color: #495057; font-size: 18px; font-weight: 500;">分析结果已被清理</p>
-        <p style="color: #6c757d; font-size: 14px; margin-top: 8px;">请重新上传日志文件进行分析</p>
-    </div>
-</body>
-</html>''', 200
-
-    directory = os.path.dirname(full_path)
-    filename = os.path.basename(full_path)
-    return send_from_directory(directory, filename)
-
-
-@analyze_bp.route('/api/analyze/plugins', methods=['GET'])
-def get_plugins():
-    """获取可用的分析插件。"""
-    try:
-        manager = get_plugin_manager_with_custom()
-        plugins = manager.get_plugins_info()
-        return jsonify({'success': True, 'data': plugins})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/analyze/plugins/categories', methods=['GET'])
-def get_plugins_categories():
-    """获取按分类组织的插件列表。"""
-    try:
-        manager = get_plugin_manager_with_custom()
-        categories = manager.get_plugins_categories()
-        return jsonify({'success': True, 'data': categories})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/config', methods=['GET'])
-def get_config():
-    """获取当前 AI 配置。"""
-    try:
-        manager = get_config_manager()
-        manager.reload()  # 每次请求都重新加载配置文件
-        config = manager.get_all()
-        return jsonify({'success': True, 'data': config})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/config', methods=['POST'])
-def update_config():
-    """更新 AI 配置。"""
-    try:
-        data = request.get_json()
-        manager = get_config_manager()
-
-        # 更新 API 设置
-        if 'api' in data:
-            api_config = data['api']
-            if 'base_url' in api_config:
-                manager.set('api.base_url', api_config['base_url'])
-            if 'api_key' in api_config and api_config['api_key']:
-                manager.set('api.api_key', api_config['api_key'])
-            if 'model' in api_config:
-                manager.set('api.model', api_config['model'])
-            if 'temperature' in api_config:
-                manager.set('api.temperature', float(api_config['temperature']))
-            if 'max_tokens' in api_config:
-                manager.set('api.max_tokens', int(api_config['max_tokens']))
-
-        # 更新 BM25 设置
-        if 'bm25' in data:
-            bm25_config = data['bm25']
-            if 'k1' in bm25_config:
-                manager.set('bm25.k1', float(bm25_config['k1']))
-            if 'b' in bm25_config:
-                manager.set('bm25.b', float(bm25_config['b']))
-
-        # 更新 Embedding 设置
-        if 'embedding' in data:
-            emb_config = data['embedding']
-            if 'enabled' in emb_config:
-                manager.set('embedding.enabled', emb_config['enabled'])
-            if 'provider' in emb_config:
-                manager.set('embedding.provider', emb_config['provider'])
-            if 'base_url' in emb_config:
-                manager.set('embedding.base_url', emb_config['base_url'])
-            if 'api_key' in emb_config:
-                manager.set('embedding.api_key', emb_config['api_key'])
-            if 'model' in emb_config:
-                manager.set('embedding.model', emb_config['model'])
-            if 'dimension' in emb_config:
-                manager.set('embedding.dimension', int(emb_config['dimension']))
-            if 'batch_size' in emb_config:
-                manager.set('embedding.batch_size', int(emb_config['batch_size']))
-
-        # 更新 Retrieval 设置
-        if 'retrieval' in data:
-            ret_config = data['retrieval']
-            if 'mode' in ret_config:
-                manager.set('retrieval.mode', ret_config['mode'])
-            if 'bm25_weight' in ret_config:
-                manager.set('retrieval.bm25_weight', float(ret_config['bm25_weight']))
-            if 'vector_weight' in ret_config:
-                manager.set('retrieval.vector_weight', float(ret_config['vector_weight']))
-            if 'rrf_k' in ret_config:
-                manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
-
-        manager.save()
-
-        return jsonify({'success': True, 'message': 'Configuration updated'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/log-viewer/test', methods=['POST'])
-def test_log_viewer():
-    """测试日志查看器是否能正常打开。"""
-    try:
-        data = request.get_json()
-        exe_path = data.get('exe_path', '')
-
-        if not exe_path:
-            return jsonify({'success': False, 'error': '请先设置查看工具路径'})
-
-        # 规范化路径
-        exe_path = normalize_path(exe_path)
-
-        if not os.path.exists(exe_path):
-            return jsonify({'success': False, 'error': f'路径不存在: {exe_path}'})
-
-        # 自动检测工具类型
-        tool_type = detect_tool_type(exe_path)
-
-        # 打开 data/temp 目录进行测试
-        temp_dir = get_data_dir('temp')
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-
-        try:
-            if tool_type == 'notepad++':
-                subprocess.Popen([exe_path, '-multiInst', '-nosession', '-openFoldersAsWorkspace', temp_dir], shell=False)
-            else:
-                subprocess.Popen([exe_path, temp_dir], shell=False)
-            return jsonify({'success': True, 'message': f'已使用 {tool_type} 打开 temp 目录'})
-        except Exception as e:
-            return jsonify({'success': False, 'error': f'打开失败: {str(e)}'})
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/settings', methods=['GET'])
-def get_settings():
-    """获取通用设置。"""
-    try:
-        manager = get_settings_manager()
-        manager.reload()
-        settings = manager.get_all()
-        return jsonify({'success': True, 'data': settings})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/settings', methods=['POST'])
-def update_settings():
-    """更新通用设置。"""
-    try:
-        data = request.get_json()
-        manager = get_settings_manager()
-
-        # 更新 log_viewer 设置
-        if 'log_viewer' in data:
-            viewer_config = data['log_viewer']
-            if 'enabled' in viewer_config:
-                manager.set('log_viewer.enabled', viewer_config['enabled'])
-            if 'exe_path' in viewer_config:
-                manager.set('log_viewer.exe_path', viewer_config['exe_path'])
-
-        manager.save()
-        return jsonify({'success': True, 'message': '设置已更新'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/plugin-selection', methods=['GET'])
-def get_plugin_selection():
-    """获取插件选择和 AI 设置。"""
-    try:
-        manager = get_plugin_selection_manager()
-        manager.reload()
-        config = manager.get_all()
-        return jsonify({'success': True, 'data': config})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@analyze_bp.route('/api/plugin-selection', methods=['POST'])
-def update_plugin_selection():
-    """更新插件选择和 AI 设置。"""
-    try:
-        data = request.get_json()
-        manager = get_plugin_selection_manager()
-
-        if 'selected_plugins' in data:
-            manager.set('selected_plugins', data['selected_plugins'])
-        if 'selected_kb_id' in data:
-            manager.set('selected_kb_id', data['selected_kb_id'])
-        if 'selected_log_rules_id' in data:
-            manager.set('selected_log_rules_id', data['selected_log_rules_id'])
-        if 'enable_ai' in data:
-            manager.set('enable_ai', data['enable_ai'])
-        if 'ai_selection_mode' in data:
-            manager.set('ai_selection_mode', data['ai_selection_mode'])
-        if 'last_selected_category' in data:
-            manager.set('last_selected_category', data['last_selected_category'])
-
-        manager.save()
-
-        return jsonify({'success': True, 'message': 'Plugin selection updated'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @analyze_bp.route('/api/analyze/batch/stream', methods=['POST'])
@@ -1422,17 +1161,7 @@ def analyze_batch_stream():
 
                 # 保存插件结果
                 plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
-                with open(plugin_output_file, 'w', encoding='utf-8') as f:
-                    json.dump(plugin_result, f, indent=4, ensure_ascii=False)
-
-                # 生成HTML
-                render_html(plugin_output_file)
-
-                # 计算相对路径
-                root_dir = get_project_root()
-                html_relative_path = os.path.relpath(
-                    plugin_output_file.replace('.json', '.html'), root_dir
-                )
+                html_relative_path = save_and_render_plugin_result(plugin_result, plugin_output_file)
 
                 # 获取该单元内的日志文件列表（用于AI分析）
                 log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
@@ -1448,36 +1177,10 @@ def analyze_batch_stream():
                     })
 
                     try:
-                        # 构建log_source参数
-                        log_source = {'type': 'local_file', 'paths': log_files_in_unit}
-
-                        result = analyze_with_agent(
-                            config_manager=get_config_manager(),
-                            kb_manager=get_kb_manager(),
-                            log_metadata_manager=get_log_metadata_manager(),
-                            plugin_result=plugin_result,
-                            log_source=log_source,
-                            kb_id=kb_id,
-                            user_prompt=user_prompt,
-                            log_rules_id=log_rules_id
+                        ai_result = run_ai_analysis(
+                            plugin_result, log_files_in_unit, single_output_dir,
+                            kb_id, user_prompt, log_rules_id
                         )
-
-                        html_result = result.get('html', '')
-
-                        # 保存HTML结果
-                        ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
-                        with open(ai_html_file, 'w', encoding='utf-8') as f:
-                            f.write(html_result)
-
-                        # 生成相对路径
-                        root_dir = get_project_root()
-                        ai_html_relative = os.path.relpath(ai_html_file, root_dir)
-
-                        ai_result = {
-                            'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            'kb_id': kb_id,
-                            'html_path': ai_html_relative
-                        }
 
                         yield generate_sse_event({
                             'stage': 'batch',

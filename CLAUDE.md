@@ -25,7 +25,7 @@ python main.py kb create --name "Knowledge Base Name"
 python main.py kb add --kb-id <id> --file <document>
 python main.py analyze <path>                       # 插件分析（无AI）
 python main.py analyze <path> --ai                  # 插件分析+AI分析
-# python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择（已隐藏）
+python main.py analyze <path> --log-rules <rules_id>  # 使用日志规则辅助分析
 python main.py plugin list
 python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
 python main.py log-rules list  # 日志规则管理
@@ -55,7 +55,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Settings Manager | `src/settings_manager/` | User preferences (log viewer settings) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
-| Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection based on user prompt |
+| Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection（内部使用，Subagent自动调用） |
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
 | Subagent Base | `src/ai_analyzer/subagent_base.py` | Subagent基类 |
 | Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
@@ -302,10 +302,9 @@ RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+ra
 ## 已隐藏功能
 
 ### AI智能选择模式 (SelectionAgent)
-- 功能代码保留在 `src/ai_analyzer/selection_agent.py`
-- Web UI开关已隐藏（`src/web/templates/analyzer.html`）
-- CLI选项 `--ai-select` 已隐藏（`entry_point.py`）
-- 后端API参数处理保留，可通过内部调用使用
+- 功能代码保留在 `src/ai_analyzer/selection_agent.py`，供 Log Analyzer Subagent 内部使用
+- Web UI 和 CLI 的用户界面已完全移除（不再暴露给用户）
+- 后端API参数处理保留在 `analyze_api.py`，Subagent 自动调用
 - 配置项保留：`config/plugin_selection.json` 中的 `ai_selection_mode`
 
 ## 智能助手功能

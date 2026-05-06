@@ -6,7 +6,7 @@ Subagent注册表模块
 from typing import Dict, List, Optional, Type
 from src.utils import get_logger
 
-from .subagent_base import SubagentBase, SubagentResult
+from .base import SubagentBase, SubagentResult
 
 logger = get_logger('subagent_registry')
 

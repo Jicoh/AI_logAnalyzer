@@ -8,7 +8,6 @@ BMC服务器日志AI分析工具，自动识别日志中的问题并提供可能
 - **插件系统**：可扩展的插件架构，支持自定义分析插件
 - **知识库管理**：支持多知识库创建、文档添加、混合检索（BM25/向量/混合）
 - **日志规则**：自定义日志文件描述规则，帮助AI智能识别日志类型
-- **AI智能选择**：根据日志规则自动选择合适的插件和文件进行分析
 - **历史记录**：查看过往分析记录，包括错误/警告统计、AI分析结果回顾
 - **设置管理**：Web界面直接配置API参数、检索模式、提示词模板
 - **智能助手**：聊天式交互界面，AI智能编排Skill/MCP/Tool
@@ -62,7 +61,7 @@ python web_app.py --no-debug
 python main.py analyze <path>                       # 插件分析（无AI）
 python main.py analyze <path> --ai                  # 插件分析+AI分析
 python main.py analyze <path> --ai --prompt <提示词>  # AI分析+提示词
-# python main.py analyze <path> --ai --ai-select --prompt <提示词>  # AI智能选择（已隐藏）
+python main.py analyze <path> --log-rules <rules_id>  # 使用日志规则辅助分析
 ```
 
 #### 插件管理

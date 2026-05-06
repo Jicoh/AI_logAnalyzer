@@ -13,6 +13,9 @@ from typing import Generator, Dict, Any, List
 from .client import AIClient
 from .log_analyzer_agent import LogAnalyzerAgent
 from .mcp_client import MCPClient
+from src.utils import get_logger
+
+logger = get_logger('analyzer')
 
 
 def extract_machine_info_from_plugins(plugin_result: Dict) -> Dict[str, Any]:
@@ -120,7 +123,8 @@ def load_analysis_templates() -> str:
             lines.append("")
 
         return '\n'.join(lines)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"格式化分析模板失败: {str(e)}")
         return ""
 
 
@@ -188,7 +192,7 @@ def analyze_with_agent(
                     except Exception as e:
                         logger.error(f"创建MCP客户端失败: {str(e)}")
                         return {
-                            'html': _generate_error_html("MCP客户端创建失败", str(e)),
+                            'html': generate_error_html("MCP客户端创建失败", str(e)),
                             'interaction_record': {'error': str(e)}
                         }
 
@@ -208,7 +212,7 @@ def analyze_with_agent(
                         error_msg = download_result.get('content', [{}])[0].get('text', '下载失败')
                         logger.error(f"MCP下载日志失败: {error_msg}")
                         return {
-                            'html': _generate_error_html("日志下载失败", error_msg),
+                            'html': generate_error_html("日志下载失败", error_msg),
                             'interaction_record': {'error': error_msg, 'mcp_result': download_result}
                         }
 
@@ -222,7 +226,7 @@ def analyze_with_agent(
                 except Exception as e:
                     logger.error(f"MCP下载日志异常: {str(e)}")
                     return {
-                        'html': _generate_error_html("日志下载异常", str(e)),
+                        'html': generate_error_html("日志下载异常", str(e)),
                         'interaction_record': {'error': str(e)}
                     }
         else:
@@ -247,7 +251,7 @@ def analyze_with_agent(
     if not final_log_files:
         logger.warning("没有有效的日志文件")
         return {
-            'html': _generate_error_html("无日志文件", "没有可分析的日志文件"),
+            'html': generate_error_html("无日志文件", "没有可分析的日志文件"),
             'interaction_record': {'error': '无日志文件'}
         }
 
@@ -479,8 +483,9 @@ class AIAnalyzer:
                 try:
                     results = future.result()
                     all_results.extend(results)
-                except Exception:
-                    pass  # 忽略单个查询失败
+                except Exception as e:
+                    query = future_to_query.get(future, '未知')
+                    logger.warning(f"知识库查询失败 [{query}]: {str(e)}")
 
         # 去重并合并
         seen = set()
@@ -561,7 +566,7 @@ class AIAnalyzer:
             json.dump(result, f, ensure_ascii=False, indent=4)
 
 
-def _generate_error_html(title: str, detail: str) -> str:
+def generate_error_html(title: str, detail: str) -> str:
     """生成错误HTML"""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">

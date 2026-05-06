@@ -177,7 +177,8 @@ def is_file_text_readable(file_path: str) -> bool:
                 if sample.startswith(header):
                     return False
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug(f"文件类型检测失败: {str(e)}")
         return False
 
 
@@ -316,7 +317,8 @@ def validate_path():
         try:
             # 转换为绝对路径
             abs_path = os.path.abspath(path)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"路径格式无效: {path}, {str(e)}")
             return jsonify({'success': False, 'error': '路径格式无效'})
 
         if not os.path.exists(abs_path):
@@ -466,8 +468,8 @@ def get_file_content():
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 for _ in f:
                     total_lines += 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"计算文件行数失败: {path}, {str(e)}")
 
         return jsonify({
             'success': True,
