@@ -698,7 +698,7 @@ function analyzerApp() {
 
         async loadPluginSelection() {
             try {
-                const response = await fetch('/api/plugin-selection');
+                const response = await fetch('/api/user/config');
                 const data = await response.json();
                 if (data.success) {
                     const config = data.data;
@@ -716,7 +716,7 @@ function analyzerApp() {
 
         async savePluginSelection() {
             try {
-                const response = await fetch('/api/plugin-selection', {
+                const response = await fetch('/api/user/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

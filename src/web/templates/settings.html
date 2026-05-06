@@ -5,15 +5,507 @@
 {% block content %}
 <div x-data="settingsApp()" x-init="init()">
     <div class="row">
-        <div class="col-12">
-            <h4 class="mb-4"><i class="bi bi-gear"></i> 系统设置</h4>
+        <!-- 二级侧边栏 -->
+        <div class="col-auto pe-0" style="width: 180px;">
+            <div class="settings-sidebar">
+                <!-- 管理员菜单 -->
+                <template x-if="userInfo.is_admin">
+                    <div>
+                        <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
+                            <i class="bi bi-gear"></i> 系统配置
+                        </div>
+                        <div class="nav-item" :class="{ active: activeSection === 'kb' }" @click="scrollTo('kb')">
+                            <i class="bi bi-database"></i> 知识库
+                        </div>
+                    </div>
+                </template>
+                <div class="nav-item" :class="{ active: activeSection === 'rules' }" @click="scrollTo('rules')">
+                    <i class="bi bi-journal-text"></i> 日志规则
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'mcp' }" @click="scrollTo('mcp')">
+                    <i class="bi bi-plug"></i> MCP Server
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'templates' }" @click="scrollTo('templates')">
+                    <i class="bi bi-file-earmark-text"></i> 分析模板
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
+                    <i class="bi bi-wrench-adjustable"></i> Skill列表
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'cache' }" @click="scrollTo('cache')">
+                    <i class="bi bi-trash"></i> 缓存清理
+                </div>
+            </div>
         </div>
-    </div>
+        <!-- 主内容区域 -->
+        <div class="col">
+            <h4 class="mb-4"><i class="bi bi-gear"></i> 系统设置</h4>
 
-    <div class="row">
-        <div class="col-12">
-            <!-- 缓存设置 -->
-            <div class="card mb-4">
+            <!-- 系统配置（仅管理员） -->
+            <div id="section-config" class="card mb-4" x-show="userInfo.is_admin">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-gear"></i> 系统配置</span>
+                    <button class="btn btn-primary btn-sm" @click="saveConfig()" :disabled="configSaving">
+                        <span x-show="configSaving" class="spinner-border spinner-border-sm"></span>
+                        <span x-text="configSaving ? '保存中...' : '保存配置'"></span>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- API设置 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-cloud"></i> API设置</h6>
+                    <div class="row mb-4">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">API地址</label>
+                            <input type="text" class="form-control" x-model="config.api.base_url" placeholder="http://127.0.0.1:18000/v1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">API密钥</label>
+                            <div class="input-group">
+                                <input :type="showApiKey ? 'text' : 'password'" class="form-control" x-model="config.api.api_key" placeholder="sk-xxx">
+                                <button class="btn btn-outline-secondary" type="button" @click="showApiKey = !showApiKey">
+                                    <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">模型</label>
+                            <input type="text" class="form-control" x-model="config.api.model" placeholder="MiniMax-M2.5">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">温度 (0-1)</label>
+                            <input type="number" class="form-control" x-model="config.api.temperature" min="0" max="1" step="0.1">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">最大Token</label>
+                            <input type="number" class="form-control" x-model="config.api.max_tokens" min="100">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- 智能助手行为设置 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-robot"></i> 智能助手设置</h6>
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">最大轮次</label>
+                            <input type="number" class="form-control" x-model="config.orchestrator.max_rounds" min="1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">工具调用限制</label>
+                            <input type="number" class="form-control" x-model="config.orchestrator.tool_call_limit" min="1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">启用MCP工具</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" x-model="config.orchestrator.enable_mcp_tools">
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">压缩保留轮次</label>
+                            <input type="number" class="form-control" x-model="config.orchestrator.compression_retain_rounds" min="1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">上下文限制</label>
+                            <input type="number" class="form-control" x-model="config.orchestrator.context_limit" min="1000">
+                            <small class="text-muted">超过时触发压缩</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">压缩阈值</label>
+                            <input type="number" class="form-control" x-model="config.orchestrator.compression_threshold" min="0" max="1" step="0.1">
+                            <small class="text-muted">上下文使用率超过此值触发压缩</small>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Subagent API设置 -->
+                    <h6 class="text-muted mb-3">
+                        <i class="bi bi-gear-wide-connected"></i> Subagent API设置
+                        <small class="text-muted">(未配置则使用上方API设置)</small>
+                    </h6>
+                    <div class="mb-4">
+                        <template x-for="subagent in configurableSubagents" :key="subagent.name">
+                            <div class="card mb-2">
+                                <div class="card-body py-2">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-2">
+                                            <span class="badge bg-primary" x-text="subagent.name"></span>
+                                            <small class="text-muted d-block mt-1" x-text="subagent.description"></small>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   x-model="config.subagent_api[subagent.name].base_url"
+                                                   placeholder="API地址（留空用默认）">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   x-model="config.subagent_api[subagent.name].api_key"
+                                                   placeholder="API密钥">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   x-model="config.subagent_api[subagent.name].model"
+                                                   placeholder="模型">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="number" class="form-control form-control-sm"
+                                                   x-model="config.subagent_api[subagent.name].temperature"
+                                                   min="0" max="1" step="0.1" placeholder="温度">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="number" class="form-control form-control-sm"
+                                                   x-model="config.subagent_api[subagent.name].max_tokens"
+                                                   min="100" placeholder="Max Tokens">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="configurableSubagents.length === 0" class="text-muted">
+                            暂无可配置的Subagent
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Embedding设置 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-vector-pen"></i> Embedding设置</h6>
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">启用向量检索</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" x-model="config.embedding.enabled">
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">提供商</label>
+                            <input type="text" class="form-control" x-model="config.embedding.provider" placeholder="ollama">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Embedding地址</label>
+                            <input type="text" class="form-control" x-model="config.embedding.base_url" placeholder="http://localhost:11434/v1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Embedding密钥</label>
+                            <div class="input-group">
+                                <input :type="showEmbeddingKey ? 'text' : 'password'" class="form-control" x-model="config.embedding.api_key" placeholder="ollama">
+                                <button class="btn btn-outline-secondary" type="button" @click="showEmbeddingKey = !showEmbeddingKey">
+                                    <i class="bi" :class="showEmbeddingKey ? 'bi-eye-slash' : 'bi-eye'"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">模型</label>
+                            <input type="text" class="form-control" x-model="config.embedding.model" placeholder="qwen3-embedding">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">维度</label>
+                            <input type="number" class="form-control" x-model="config.embedding.dimension" min="128">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">批处理大小</label>
+                            <input type="number" class="form-control" x-model="config.embedding.batch_size" min="1">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- 检索设置 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-search"></i> 检索设置</h6>
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">检索模式</label>
+                            <select class="form-select" x-model="config.retrieval.mode">
+                                <option value="bm25">BM25关键词</option>
+                                <option value="vector">向量检索</option>
+                                <option value="hybrid">混合检索</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">BM25权重</label>
+                            <input type="number" class="form-control" x-model="config.retrieval.bm25_weight" min="0" max="1" step="0.1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">向量权重</label>
+                            <input type="number" class="form-control" x-model="config.retrieval.vector_weight" min="0" max="1" step="0.1">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">RRF参数K</label>
+                            <input type="number" class="form-control" x-model="config.retrieval.rrf_k" min="1">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- 日志查看器设置 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-file-text"></i> 日志查看器设置</h6>
+                    <div class="row mb-4">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">启用自动打开</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" x-model="config.log_viewer.enabled">
+                                <small class="text-muted d-block">分析完成后自动打开日志目录</small>
+                            </div>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">查看工具路径</label>
+                            <input type="text" class="form-control" x-model="config.log_viewer.exe_path" placeholder="C:\path\to\viewer.exe 或快捷方式 .lnk">
+                            <small class="text-muted">支持exe程序或.lnk快捷方式路径</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识库管理 -->
+            <div id="section-kb" class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-database"></i> 知识库</span>
+                    <button class="btn btn-primary btn-sm" @click="showCreateKbModal = true" x-show="userInfo.is_admin">
+                        <i class="bi bi-plus"></i> 新增
+                    </button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>描述</th>
+                                <th>文档数</th>
+                                <th>向量索引</th>
+                                <th>创建时间</th>
+                                <th x-show="userInfo.is_admin">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="kb in kbList" :key="kb.id">
+                                <tr>
+                                    <td x-text="kb.name"></td>
+                                    <td x-text="kb.description || '-'"></td>
+                                    <td x-text="kb.document_count || 0"></td>
+                                    <td>
+                                        <span class="badge bg-success" x-show="kb.vector_indexed">已构建</span>
+                                        <span class="badge bg-secondary" x-show="!kb.vector_indexed">未构建</span>
+                                    </td>
+                                    <td x-text="formatDate(kb.created_at)"></td>
+                                    <td x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="showKbDetail(kb)" title="详情">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="confirmDeleteKb(kb)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td x-show="!userInfo.is_admin">
+                                        <button class="btn btn-outline-primary btn-sm" @click="showKbDetail(kb)" title="详情">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="kbList.length === 0">
+                                <td colspan="6" class="text-center text-muted">暂无知识库</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 日志规则管理 -->
+            <div id="section-rules" class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-journal-text"></i> 日志规则</span>
+                    <button class="btn btn-primary btn-sm" @click="showCreateRulesModal = true" x-show="userInfo.is_admin">
+                        <i class="bi bi-plus"></i> 新增
+                    </button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>ID</th>
+                                <th>描述</th>
+                                <th>规则数</th>
+                                <th x-show="userInfo.is_admin">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="rules in ruleSets" :key="rules.rules_id">
+                                <tr>
+                                    <td x-text="rules.name"></td>
+                                    <td><code x-text="rules.rules_id"></code></td>
+                                    <td x-text="rules.description || '-'"></td>
+                                    <td x-text="rules.rule_count || 0"></td>
+                                    <td x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="showRulesDetail(rules)" title="详情">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="confirmDeleteRules(rules)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td x-show="!userInfo.is_admin">
+                                        <button class="btn btn-outline-primary btn-sm" @click="showRulesDetail(rules)" title="详情">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="ruleSets.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无日志规则</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MCP Server管理 -->
+            <div id="section-mcp" class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-plug"></i> MCP Server</span>
+                    <button class="btn btn-primary btn-sm" @click="showAddMcpModal = true" x-show="userInfo.is_admin">
+                        <i class="bi bi-plus"></i> 新增
+                    </button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>描述</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="server in mcpServers" :key="server.name">
+                                <tr>
+                                    <td x-text="server.name"></td>
+                                    <td x-text="server.transport"></td>
+                                    <td>
+                                        <span class="badge bg-success" x-show="server.enabled">启用</span>
+                                        <span class="badge bg-secondary" x-show="!server.enabled">禁用</span>
+                                    </td>
+                                    <td x-text="server.description || '-'"></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
+                                            <button class="btn btn-outline-success" @click="testMcpServer(server.name)" title="测试">
+                                                <i class="bi bi-play"></i>
+                                            </button>
+                                            <button class="btn btn-outline-primary" @click="editMcpServer(server)" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteMcpServer(server.name)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                        <button class="btn btn-outline-success btn-sm" @click="testMcpServer(server.name)" title="测试" x-show="!userInfo.is_admin">
+                                            <i class="bi bi-play"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="mcpServers.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无MCP Server</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 分析模板管理 -->
+            <div id="section-templates" class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text"></i> 分析模板</span>
+                    <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true" x-show="userInfo.is_admin">
+                        <i class="bi bi-plus"></i> 新增
+                    </button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>问题类型</th>
+                                <th>关键词</th>
+                                <th>分析步骤</th>
+                                <th>典型原因</th>
+                                <th x-show="userInfo.is_admin">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="template in analysisTemplates" :key="template.problem_type">
+                                <tr>
+                                    <td x-text="template.problem_type"></td>
+                                    <td>
+                                        <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
+                                    </td>
+                                    <td x-text="template.analysis_logic.length + '步'"></td>
+                                    <td x-text="template.typical_causes.length + '个'"></td>
+                                    <td x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="analysisTemplates.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Skill列表 -->
+            <div id="section-skills" class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-wrench-adjustable"></i> Skill列表
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>描述</th>
+                                <th>允许工具</th>
+                                <th>版本</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="skill in skills" :key="skill.name">
+                                <tr>
+                                    <td><span class="badge bg-primary" x-text="skill.name"></span></td>
+                                    <td x-text="skill.description || '-'"></td>
+                                    <td>
+                                        <span x-show="skill.allowed_tools && skill.allowed_tools.length > 0"
+                                              x-text="skill.allowed_tools.join(', ')"></span>
+                                        <span x-show="!skill.allowed_tools || skill.allowed_tools.length === 0" class="text-muted">-</span>
+                                    </td>
+                                    <td x-text="skill.metadata?.version || '-'"></td>
+                                </tr>
+                            </template>
+                            <tr x-show="skills.length === 0">
+                                <td colspan="4" class="text-center text-muted">暂无Skill</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <small class="text-muted">
+                        Skill定义位于 config/skills/ 目录，使用SKILL.md标准格式定义。
+                    </small>
+                </div>
+            </div>
+
+            <!-- 缓存清理 -->
+            <div id="section-cache" class="card mb-4">
                 <div class="card-header">
                     <i class="bi bi-trash"></i> 缓存清理
                 </div>
@@ -46,17 +538,381 @@
         </div>
     </div>
 
+    <!-- 知识库详情模态框 -->
+    <div class="modal" :class="showKbDetailModal ? 'show d-block' : ''" :style="showKbDetailModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">知识库详情</h5>
+                    <button type="button" class="btn-close" @click="showKbDetailModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <template x-if="selectedKb">
+                        <div>
+                            <div class="row mb-3">
+                                <div class="col-md-4"><strong>名称：</strong> <span x-text="selectedKb.name"></span></div>
+                                <div class="col-md-4"><strong>ID：</strong> <code x-text="selectedKb.kb_id || selectedKb.id"></code></div>
+                                <div class="col-md-4"><strong>文档数：</strong> <span x-text="selectedKb.document_count || 0"></span></div>
+                            </div>
+                            <div class="mb-3">
+                                <strong>描述：</strong> <span x-text="selectedKb.description || '无'"></span>
+                            </div>
+                            <hr>
+                            <!-- 上传文档（仅管理员） -->
+                            <form @submit.prevent="uploadDocument()" class="mb-3" x-show="userInfo.is_admin">
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="docFile" accept=".txt,.md,.pdf,.docx,.doc"
+                                           @change="docFile = $event.target.files[0]">
+                                    <button class="btn btn-primary" type="submit" :disabled="!docFile || uploading">
+                                        <span x-show="uploading" class="spinner-border spinner-border-sm"></span>
+                                        <span x-text="uploading ? '上传中...' : '上传'"></span>
+                                    </button>
+                                </div>
+                                <small class="text-muted">支持：txt, md, pdf, docx, doc</small>
+                            </form>
+                            <!-- 重建索引（仅管理员） -->
+                            <div class="mb-3 d-flex justify-content-between" x-show="userInfo.is_admin">
+                                <h6>文档列表</h6>
+                                <button class="btn btn-outline-secondary btn-sm" @click="reindexKb()" :disabled="reindexing">
+                                    <span x-show="reindexing" class="spinner-border spinner-border-sm"></span>
+                                    <span x-text="reindexing ? '重建中...' : '重建索引'"></span>
+                                </button>
+                            </div>
+                            <!-- 文档列表 -->
+                            <div class="list-group">
+                                <div x-show="!selectedKb.documents || selectedKb.documents.length === 0" class="list-group-item text-muted">暂无文档</div>
+                                <template x-for="doc in selectedKb.documents" :key="doc.doc_id">
+                                    <div class="list-group-item d-flex justify-content-between">
+                                        <span><i class="bi bi-file-earmark-text"></i> <span x-text="doc.file_name || doc.doc_id"></span></span>
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteDocument(doc.doc_id)" x-show="userInfo.is_admin">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增知识库模态框 -->
+    <div class="modal" :class="showCreateKbModal ? 'show d-block' : ''" :style="showCreateKbModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增知识库</h5>
+                    <button type="button" class="btn-close" @click="showCreateKbModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" x-model="newKb.name" placeholder="输入知识库名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="newKb.description" placeholder="输入描述（可选）"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showCreateKbModal = false">取消</button>
+                    <button class="btn btn-primary" @click="createKb()" :disabled="!newKb.name || creatingKb">
+                        <span x-show="creatingKb" class="spinner-border spinner-border-sm"></span>
+                        创建
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除知识库确认模态框 -->
+    <div class="modal" :class="showDeleteKbModal ? 'show d-block' : ''" :style="showDeleteKbModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认删除</h5>
+                    <button type="button" class="btn-close" @click="showDeleteKbModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除知识库 "<strong x-text="deleteKbTarget?.name"></strong>" 吗？</p>
+                    <p class="text-danger"><small>此操作不可恢复！</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showDeleteKbModal = false">取消</button>
+                    <button class="btn btn-danger" @click="deleteKb()" :disabled="deletingKb">
+                        <span x-show="deletingKb" class="spinner-border spinner-border-sm"></span>
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 日志规则详情模态框 -->
+    <div class="modal" :class="showRulesDetailModal ? 'show d-block' : ''" :style="showRulesDetailModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">规则集详情</h5>
+                    <button type="button" class="btn-close" @click="showRulesDetailModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <template x-if="selectedRules">
+                        <div>
+                            <div class="row mb-3">
+                                <div class="col-md-4"><strong>名称：</strong> <span x-text="selectedRules.name"></span></div>
+                                <div class="col-md-4"><strong>ID：</strong> <code x-text="selectedRules.rules_id"></code></div>
+                                <div class="col-md-4"><strong>规则数：</strong> <span x-text="selectedRules.rules?.length || 0"></span></div>
+                            </div>
+                            <hr>
+                            <!-- 添加规则（仅管理员） -->
+                            <div class="mb-3" x-show="userInfo.is_admin">
+                                <h6>添加规则</h6>
+                                <form @submit.prevent="addRule()" class="row g-2">
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.file_path" placeholder="日志路径 *" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.description" placeholder="描述">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control" x-model="newRule.keywordsText" placeholder="关键词">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-primary w-100" type="submit" :disabled="!newRule.file_path">
+                                            添加
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- 规则列表 -->
+                            <h6 class="mb-3">规则列表</h6>
+                            <div class="list-group">
+                                <div x-show="!selectedRules.rules || selectedRules.rules.length === 0" class="list-group-item text-muted">暂无规则</div>
+                                <template x-for="rule in selectedRules.rules" :key="rule.rule_id">
+                                    <div class="list-group-item d-flex justify-content-between">
+                                        <div>
+                                            <code x-text="rule.file_path"></code>
+                                            <div class="text-muted small" x-text="rule.description"></div>
+                                            <small class="text-info" x-show="rule.keywords?.length > 0">
+                                                <i class="bi bi-tags"></i> <span x-text="rule.keywords.join(', ')"></span>
+                                            </small>
+                                        </div>
+                                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
+                                            <button class="btn btn-outline-primary" @click="openEditRuleModal(rule)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteRule(rule.rule_id)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增日志规则模态框 -->
+    <div class="modal" :class="showCreateRulesModal ? 'show d-block' : ''" :style="showCreateRulesModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增规则集</h5>
+                    <button type="button" class="btn-close" @click="showCreateRulesModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" x-model="newRules.name" placeholder="输入规则集名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="newRules.description" placeholder="输入描述（可选）"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showCreateRulesModal = false">取消</button>
+                    <button class="btn btn-primary" @click="createRules()" :disabled="!newRules.name || creatingRules">
+                        <span x-show="creatingRules" class="spinner-border spinner-border-sm"></span>
+                        创建
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除日志规则确认模态框 -->
+    <div class="modal" :class="showDeleteRulesModal ? 'show d-block' : ''" :style="showDeleteRulesModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认删除</h5>
+                    <button type="button" class="btn-close" @click="showDeleteRulesModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除规则集 "<strong x-text="deleteRulesTarget?.name"></strong>" 吗？</p>
+                    <p class="text-danger"><small>此操作不可恢复！</small></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showDeleteRulesModal = false">取消</button>
+                    <button class="btn btn-danger" @click="deleteRules()" :disabled="deletingRules">
+                        <span x-show="deletingRules" class="spinner-border spinner-border-sm"></span>
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑规则模态框 -->
+    <div class="modal" :class="showEditRuleModal ? 'show d-block' : ''" :style="showEditRuleModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑规则</h5>
+                    <button type="button" class="btn-close" @click="showEditRuleModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">日志路径</label>
+                        <input type="text" class="form-control" x-model="editingRule.file_path">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" x-model="editingRule.description"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">关键词（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="editingRule.keywordsText">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showEditRuleModal = false">取消</button>
+                    <button class="btn btn-primary" @click="updateRule()" :disabled="updatingRule">
+                        <span x-show="updatingRule" class="spinner-border spinner-border-sm"></span>
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP Server模态框 -->
+    <div class="modal" :class="showAddMcpModal || showEditMcpModal ? 'show d-block' : ''" :style="(showAddMcpModal || showEditMcpModal) ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="showEditMcpModal ? '编辑MCP Server' : '新增MCP Server'"></h5>
+                    <button type="button" class="btn-close" @click="closeMcpModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" x-model="mcpForm.name" :disabled="showEditMcpModal" placeholder="log_downloader">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">传输类型</label>
+                        <select class="form-select" x-model="mcpForm.transport" :disabled="showEditMcpModal">
+                            <option value="stdio">stdio</option>
+                            <option value="websocket">websocket</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <input type="text" class="form-control" x-model="mcpForm.description">
+                    </div>
+                    <div x-show="mcpForm.transport === 'stdio'">
+                        <div class="mb-3">
+                            <label class="form-label">命令</label>
+                            <input type="text" class="form-control" x-model="mcpForm.command" placeholder="python">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">参数 (JSON)</label>
+                            <input type="text" class="form-control" x-model="mcpForm.argsStr" placeholder='["server.py"]'>
+                        </div>
+                    </div>
+                    <div x-show="mcpForm.transport === 'websocket'">
+                        <div class="mb-3">
+                            <label class="form-label">URL</label>
+                            <input type="text" class="form-control" x-model="mcpForm.url" placeholder="ws://localhost:8080">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">超时 (秒)</label>
+                        <input type="number" class="form-control" x-model="mcpForm.timeout" min="5" max="120">
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" x-model="mcpForm.enabled">
+                        <label class="form-check-label">启用</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeMcpModal()">取消</button>
+                    <button class="btn btn-success" @click="testMcpForm()" :disabled="mcpTesting" x-show="showAddMcpModal">
+                        <span x-show="mcpTesting" class="spinner-border spinner-border-sm"></span>
+                        测试
+                    </button>
+                    <button class="btn btn-primary" @click="saveMcpServer()" :disabled="mcpSaving">
+                        <span x-show="mcpSaving" class="spinner-border spinner-border-sm"></span>
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分析模板模态框 -->
+    <div class="modal" :class="showAddTemplateModal || showEditTemplateModal ? 'show d-block' : ''" :style="(showAddTemplateModal || showEditTemplateModal) ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="showEditTemplateModal ? '编辑分析模板' : '新增分析模板'"></h5>
+                    <button type="button" class="btn-close" @click="closeTemplateModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">问题类型</label>
+                        <input type="text" class="form-control" x-model="templateForm.problem_type" :disabled="showEditTemplateModal">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">关键词（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.keywordsStr">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">分析步骤（每行一步）</label>
+                        <textarea class="form-control" x-model="templateForm.logicStr" rows="5"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">典型原因（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.causesStr">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">检查点（逗号分隔）</label>
+                        <input type="text" class="form-control" x-model="templateForm.checksStr">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeTemplateModal()">取消</button>
+                    <button class="btn btn-primary" @click="saveTemplate()" :disabled="templateSaving">
+                        <span x-show="templateSaving" class="spinner-border spinner-border-sm"></span>
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
-        <div class="toast" :class="toast.show ? 'show' : ''" role="alert" x-show="toast.show" x-cloak>
-            <div class="toast-header"
-                :class="{
-                    'bg-danger text-white': toast.type === 'error',
-                    'bg-warning': toast.type === 'warning',
-                    'bg-success text-white': toast.type === 'success'
-                }">
+        <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
+            <div class="toast-header" :class="toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'">
                 <strong class="me-auto" x-text="toast.title"></strong>
-                <button type="button" class="btn-close" :class="toast.type === 'warning' ? '' : 'btn-close-white'" @click="toast.show = false"></button>
+                <button type="button" class="btn-close btn-close-white" @click="toast.show = false"></button>
             </div>
             <div class="toast-body" x-text="toast.message"></div>
         </div>
@@ -68,88 +924,722 @@
 <script>
 function settingsApp() {
     return {
-        cacheStats: {},
-        toast: {
-            show: false,
-            type: 'success',
-            title: '',
-            message: ''
+        userInfo: { is_admin: false },
+        activeSection: 'config',
+        toast: { show: false, type: 'success', title: '', message: '' },
+
+        // 系统配置
+        config: {
+            api: { base_url: '', api_key: '', model: '', temperature: 0.7, max_tokens: 60000 },
+            orchestrator: { max_rounds: 20, tool_call_limit: 50, enable_mcp_tools: true, compression_retain_rounds: 5, context_limit: 120000, compression_threshold: 0.8 },
+            subagent_api: {},
+            embedding: { enabled: false, provider: '', base_url: '', api_key: '', model: '', dimension: 4096, batch_size: 100 },
+            retrieval: { mode: 'bm25', bm25_weight: 0.4, vector_weight: 0.6, rrf_k: 60 },
+            log_viewer: { enabled: false, exe_path: '' }
         },
+        configurableSubagents: [],
+        showApiKey: false,
+        showEmbeddingKey: false,
+        configSaving: false,
+
+        // 知识库
+        kbList: [],
+        showKbDetailModal: false,
+        showCreateKbModal: false,
+        showDeleteKbModal: false,
+        selectedKb: null,
+        deleteKbTarget: null,
+        newKb: { name: '', description: '' },
+        creatingKb: false,
+        deletingKb: false,
+        uploading: false,
+        reindexing: false,
+        docFile: null,
+
+        // 日志规则
+        ruleSets: [],
+        showRulesDetailModal: false,
+        showCreateRulesModal: false,
+        showDeleteRulesModal: false,
+        showEditRuleModal: false,
+        selectedRules: null,
+        deleteRulesTarget: null,
+        newRules: { name: '', description: '' },
+        creatingRules: false,
+        deletingRules: false,
+        newRule: { file_path: '', description: '', keywordsText: '' },
+        editingRule: { rule_id: '', file_path: '', description: '', keywordsText: '' },
+        updatingRule: false,
+
+        // MCP Server
+        mcpServers: [],
+        showAddMcpModal: false,
+        showEditMcpModal: false,
+        mcpForm: { name: '', transport: 'stdio', description: '', command: '', argsStr: '', url: '', timeout: 30, enabled: true },
+        mcpTesting: false,
+        mcpSaving: false,
+
+        // 分析模板
+        analysisTemplates: [],
+        showAddTemplateModal: false,
+        showEditTemplateModal: false,
+        templateForm: { problem_type: '', keywordsStr: '', logicStr: '', causesStr: '', checksStr: '' },
+        templateSaving: false,
+
+        // Skill列表
+        skills: [],
+
+        // 缓存统计
+        cacheStats: {},
 
         init() {
+            this.loadUserInfo();
+            this.loadConfig();
+            this.loadConfigurableSubagents();
+            this.loadKbList();
+            this.loadRuleSets();
+            this.loadMcpServers();
+            this.loadAnalysisTemplates();
+            this.loadSkills();
             this.loadCacheStats();
+            this.setupScrollObserver();
+
+            // 默认选中第一个可见的section
+            if (!this.userInfo.is_admin) {
+                this.activeSection = 'rules';
+            }
+
+            // Skill自动刷新
+            setInterval(() => this.loadSkills(), 10000);
+        },
+
+        loadUserInfo() {
+            fetch('/api/auth/me').then(r => r.json()).then(d => {
+                if (d.success) this.userInfo = d.data;
+            });
+        },
+
+        scrollTo(sectionId) {
+            const element = document.getElementById('section-' + sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                this.activeSection = sectionId;
+            }
+        },
+
+        setupScrollObserver() {
+            const sections = ['config', 'kb', 'rules', 'mcp', 'templates', 'skills', 'cache'];
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const sectionId = entry.target.id.replace('section-', '');
+                        // 只更新可见的section
+                        if (sectionId === 'config' && !this.userInfo.is_admin) return;
+                        this.activeSection = sectionId;
+                    }
+                });
+            }, { threshold: 0.3 });
+            sections.forEach(section => {
+                const element = document.getElementById('section-' + section);
+                if (element) observer.observe(element);
+            });
         },
 
         showToast(type, title, message) {
-            this.toast = {
-                show: true,
-                type: type,
-                title: title,
-                message: message
-            };
-            setTimeout(() => {
-                this.toast.show = false;
-            }, 3000);
+            this.toast = { show: true, type, title, message };
+            setTimeout(() => { this.toast.show = false; }, 3000);
         },
 
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        // 系统配置
+        async loadConfig() {
+            try {
+                const response = await fetch('/api/admin/config');
+                const data = await response.json();
+                if (data.success) {
+                    this.config = {
+                        api: { ...this.config.api, ...data.data.api },
+                        orchestrator: { ...this.config.orchestrator, ...data.data.orchestrator },
+                        subagent_api: data.data.subagent_api || {},
+                        embedding: { ...this.config.embedding, ...data.data.embedding },
+                        retrieval: { ...this.config.retrieval, ...data.data.retrieval },
+                        log_viewer: { ...this.config.log_viewer, ...data.data.log_viewer }
+                    };
+                    this.initSubagentApiConfig();
+                }
+            } catch (e) { console.error('Load config failed:', e); }
+        },
+
+        async loadConfigurableSubagents() {
+            try {
+                const response = await fetch('/api/admin/subagents/list');
+                const data = await response.json();
+                if (data.success) {
+                    this.configurableSubagents = data.data;
+                    this.initSubagentApiConfig();
+                }
+            } catch (e) { console.error('Load subagents failed:', e); }
+        },
+
+        initSubagentApiConfig() {
+            for (const subagent of this.configurableSubagents) {
+                if (!this.config.subagent_api[subagent.name]) {
+                    this.config.subagent_api[subagent.name] = { base_url: '', api_key: '', model: '', temperature: 0.1, max_tokens: 60000 };
+                }
+            }
+        },
+
+        async saveConfig() {
+            if (!this.userInfo.is_admin) return;
+            this.configSaving = true;
+            try {
+                const response = await fetch('/api/admin/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.config)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '配置已保存');
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '保存失败');
+            } finally {
+                this.configSaving = false;
+            }
+        },
+
+        // 知识库
+        async loadKbList() {
+            try {
+                const response = await fetch('/api/kb');
+                const data = await response.json();
+                if (data.success) this.kbList = data.data;
+            } catch (e) { console.error('Load KB failed:', e); }
+        },
+
+        async showKbDetail(kb) {
+            const kbId = kb.id || kb.kb_id;
+            const response = await fetch(`/api/kb/${kbId}`);
+            const data = await response.json();
+            if (data.success) {
+                this.selectedKb = data.data;
+                this.showKbDetailModal = true;
+            }
+        },
+
+        async createKb() {
+            this.creatingKb = true;
+            try {
+                const response = await fetch('/api/kb', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newKb)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '知识库创建成功');
+                    this.showCreateKbModal = false;
+                    this.newKb = { name: '', description: '' };
+                    this.loadKbList();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '创建失败');
+            } finally {
+                this.creatingKb = false;
+            }
+        },
+
+        confirmDeleteKb(kb) {
+            this.deleteKbTarget = kb;
+            this.showDeleteKbModal = true;
+        },
+
+        async deleteKb() {
+            this.deletingKb = true;
+            try {
+                const kbId = this.deleteKbTarget.id || this.deleteKbTarget.kb_id;
+                const response = await fetch(`/api/kb/${kbId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '知识库已删除');
+                    this.showDeleteKbModal = false;
+                    this.deleteKbTarget = null;
+                    this.loadKbList();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            } finally {
+                this.deletingKb = false;
+            }
+        },
+
+        async uploadDocument() {
+            if (!this.docFile || !this.selectedKb) return;
+            this.uploading = true;
+            try {
+                const formData = new FormData();
+                formData.append('file', this.docFile);
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/documents`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '文档上传成功');
+                    this.docFile = null;
+                    document.getElementById('docFile').value = '';
+                    this.showKbDetail(this.selectedKb);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '上传失败');
+            } finally {
+                this.uploading = false;
+            }
+        },
+
+        async deleteDocument(docId) {
+            if (!confirm('确定删除此文档？')) return;
+            try {
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/documents/${docId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '文档已删除');
+                    this.showKbDetail(this.selectedKb);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        async reindexKb() {
+            this.reindexing = true;
+            try {
+                const kbId = this.selectedKb.id || this.selectedKb.kb_id;
+                const response = await fetch(`/api/kb/${kbId}/reindex`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '索引重建完成');
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '重建失败');
+            } finally {
+                this.reindexing = false;
+            }
+        },
+
+        // 日志规则
+        async loadRuleSets() {
+            try {
+                const response = await fetch('/api/log-rules');
+                const data = await response.json();
+                if (data.success) this.ruleSets = data.data;
+            } catch (e) { console.error('Load rules failed:', e); }
+        },
+
+        async showRulesDetail(rules) {
+            const response = await fetch(`/api/log-rules/${rules.rules_id}`);
+            const data = await response.json();
+            if (data.success) {
+                this.selectedRules = data.data;
+                this.showRulesDetailModal = true;
+            }
+        },
+
+        async createRules() {
+            this.creatingRules = true;
+            try {
+                const response = await fetch('/api/log-rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newRules)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则集创建成功');
+                    this.showCreateRulesModal = false;
+                    this.newRules = { name: '', description: '' };
+                    this.loadRuleSets();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '创建失败');
+            } finally {
+                this.creatingRules = false;
+            }
+        },
+
+        confirmDeleteRules(rules) {
+            this.deleteRulesTarget = rules;
+            this.showDeleteRulesModal = true;
+        },
+
+        async deleteRules() {
+            this.deletingRules = true;
+            try {
+                const response = await fetch(`/api/log-rules/${this.deleteRulesTarget.rules_id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则集已删除');
+                    this.showDeleteRulesModal = false;
+                    this.deleteRulesTarget = null;
+                    this.loadRuleSets();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            } finally {
+                this.deletingRules = false;
+            }
+        },
+
+        async addRule() {
+            this.updatingRule = true;
+            try {
+                const keywords = this.newRule.keywordsText.split(',').map(k => k.trim()).filter(k => k);
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: this.newRule.file_path, description: this.newRule.description, keywords })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则添加成功');
+                    this.newRule = { file_path: '', description: '', keywordsText: '' };
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '添加失败');
+            } finally {
+                this.updatingRule = false;
+            }
+        },
+
+        openEditRuleModal(rule) {
+            this.editingRule = {
+                rule_id: rule.rule_id,
+                file_path: rule.file_path || '',
+                description: rule.description || '',
+                keywordsText: (rule.keywords || []).join(', ')
+            };
+            this.showEditRuleModal = true;
+        },
+
+        async updateRule() {
+            this.updatingRule = true;
+            try {
+                const keywords = this.editingRule.keywordsText.split(',').map(k => k.trim()).filter(k => k);
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules/${this.editingRule.rule_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_path: this.editingRule.file_path, description: this.editingRule.description, keywords })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则更新成功');
+                    this.showEditRuleModal = false;
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '更新失败');
+            } finally {
+                this.updatingRule = false;
+            }
+        },
+
+        async deleteRule(ruleId) {
+            if (!confirm('确定删除此规则？')) return;
+            try {
+                const response = await fetch(`/api/log-rules/${this.selectedRules.rules_id}/rules/${ruleId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', '规则已删除');
+                    this.showRulesDetail(this.selectedRules);
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        // MCP Server
+        async loadMcpServers() {
+            try {
+                const response = await fetch('/api/admin/mcp/servers');
+                const data = await response.json();
+                if (data.success) this.mcpServers = data.data;
+            } catch (e) { console.error('Load MCP failed:', e); }
+        },
+
+        editMcpServer(server) {
+            this.mcpForm = {
+                name: server.name,
+                transport: server.transport,
+                description: server.description || '',
+                command: server.command || '',
+                argsStr: JSON.stringify(server.args || []),
+                url: server.url || '',
+                timeout: server.timeout || 30,
+                enabled: server.enabled
+            };
+            this.showEditMcpModal = true;
+        },
+
+        closeMcpModal() {
+            this.showAddMcpModal = false;
+            this.showEditMcpModal = false;
+            this.mcpForm = { name: '', transport: 'stdio', description: '', command: '', argsStr: '', url: '', timeout: 30, enabled: true };
+        },
+
+        async testMcpServer(name) {
+            try {
+                const response = await fetch(`/api/admin/mcp/servers/${name}/test`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success && data.data.connected) {
+                    this.showToast('success', '连接成功', `发现 ${data.data.tool_count} 个工具`);
+                } else {
+                    this.showToast('error', '连接失败', data.data?.error || '未知错误');
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '测试失败');
+            }
+        },
+
+        async testMcpForm() {
+            this.mcpTesting = true;
+            try {
+                const payload = this.buildMcpPayload();
+                const response = await fetch('/api/admin/mcp/servers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const testResponse = await fetch(`/api/admin/mcp/servers/${this.mcpForm.name}/test`, { method: 'POST' });
+                    const testData = await testResponse.json();
+                    if (testData.success && testData.data.connected) {
+                        this.showToast('success', '连接成功', `发现 ${testData.data.tool_count} 个工具`);
+                    } else {
+                        this.showToast('error', '连接失败', testData.data?.error || '未知错误');
+                    }
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '测试失败');
+            } finally {
+                this.mcpTesting = false;
+            }
+        },
+
+        async saveMcpServer() {
+            this.mcpSaving = true;
+            try {
+                const payload = this.buildMcpPayload();
+                const url = this.showEditMcpModal ? `/api/admin/mcp/servers/${this.mcpForm.name}` : '/api/admin/mcp/servers';
+                const method = this.showEditMcpModal ? 'PUT' : 'POST';
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.closeMcpModal();
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '保存失败');
+            } finally {
+                this.mcpSaving = false;
+            }
+        },
+
+        buildMcpPayload() {
+            const payload = {
+                name: this.mcpForm.name,
+                transport: this.mcpForm.transport,
+                description: this.mcpForm.description,
+                timeout: parseInt(this.mcpForm.timeout),
+                enabled: this.mcpForm.enabled
+            };
+            if (this.mcpForm.transport === 'stdio') {
+                payload.command = this.mcpForm.command;
+                try { payload.args = JSON.parse(this.mcpForm.argsStr || '[]'); } catch (e) { payload.args = []; }
+            } else {
+                payload.url = this.mcpForm.url;
+            }
+            return payload;
+        },
+
+        async deleteMcpServer(name) {
+            if (!confirm(`确定删除MCP Server "${name}"？`)) return;
+            try {
+                const response = await fetch(`/api/admin/mcp/servers/${name}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadMcpServers();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        // 分析模板
+        async loadAnalysisTemplates() {
+            try {
+                const response = await fetch('/api/admin/analysis-templates');
+                const data = await response.json();
+                if (data.success) this.analysisTemplates = data.data;
+            } catch (e) { console.error('Load templates failed:', e); }
+        },
+
+        editTemplate(template) {
+            this.templateForm = {
+                problem_type: template.problem_type,
+                keywordsStr: template.keywords.join(', '),
+                logicStr: template.analysis_logic.join('\n'),
+                causesStr: template.typical_causes.join(', '),
+                checksStr: template.check_points.join(', ')
+            };
+            this.showEditTemplateModal = true;
+        },
+
+        closeTemplateModal() {
+            this.showAddTemplateModal = false;
+            this.showEditTemplateModal = false;
+            this.templateForm = { problem_type: '', keywordsStr: '', logicStr: '', causesStr: '', checksStr: '' };
+        },
+
+        async saveTemplate() {
+            this.templateSaving = true;
+            try {
+                const payload = {
+                    problem_type: this.templateForm.problem_type,
+                    keywords: this.templateForm.keywordsStr.split(',').map(s => s.trim()).filter(s => s),
+                    analysis_logic: this.templateForm.logicStr.split('\n').map(s => s.trim()).filter(s => s),
+                    typical_causes: this.templateForm.causesStr.split(',').map(s => s.trim()).filter(s => s),
+                    check_points: this.templateForm.checksStr.split(',').map(s => s.trim()).filter(s => s)
+                };
+                const url = this.showEditTemplateModal ? `/api/admin/analysis-templates/${this.templateForm.problem_type}` : '/api/admin/analysis-templates';
+                const method = this.showEditTemplateModal ? 'PUT' : 'POST';
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.closeTemplateModal();
+                    this.loadAnalysisTemplates();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '保存失败');
+            } finally {
+                this.templateSaving = false;
+            }
+        },
+
+        async deleteTemplate(problemType) {
+            if (!confirm(`确定删除模板 "${problemType}"？`)) return;
+            try {
+                const response = await fetch(`/api/admin/analysis-templates/${problemType}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadAnalysisTemplates();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
+            }
+        },
+
+        // Skill列表
+        async loadSkills() {
+            try {
+                const response = await fetch('/api/skills');
+                const data = await response.json();
+                if (data.success) this.skills = data.data;
+            } catch (e) { console.error('Load skills failed:', e); }
+        },
+
+        // 缓存清理
         async loadCacheStats() {
             try {
                 const response = await fetch('/api/cache/stats');
                 const data = await response.json();
-                if (data.success) {
-                    this.cacheStats = data.data;
-                }
-            } catch (error) {
-                console.error('Failed to load cache stats:', error);
-            }
+                if (data.success) this.cacheStats = data.data;
+            } catch (e) { console.error('Load cache stats failed:', e); }
         },
 
         async clearTemp() {
-            if (confirm('确定要清理缓存文件吗？此操作不可恢复！')) {
+            if (confirm('确定清理缓存文件？此操作不可恢复！')) {
                 try {
-                    const response = await fetch('/api/cache/clear-temp', {
-                        method: 'POST'
-                    });
+                    const response = await fetch('/api/cache/clear-temp', { method: 'POST' });
                     const data = await response.json();
                     if (data.success) {
-                        if (data.stats && data.stats.failed > 0) {
-                            this.showToast('warning', '清理完成',
-                                `删除 ${data.stats.deleted} 个文件，${data.stats.failed} 个失败`);
-                        } else {
-                            this.showToast('success', '清理成功', data.message);
-                        }
+                        this.showToast('success', '成功', data.message);
                         this.loadCacheStats();
                     } else {
-                        this.showToast('error', '清理失败', data.error || '未知错误');
+                        this.showToast('error', '错误', data.error);
                     }
-                } catch (error) {
-                    console.error('Failed to clear temp:', error);
-                    this.showToast('error', '清理失败', error.message);
+                } catch (e) {
+                    this.showToast('error', '错误', '清理失败');
                 }
             }
         },
 
         async clearResults() {
-            if (confirm('确定要清理分析结果吗？此操作不可恢复！')) {
+            if (confirm('确定清理分析结果？此操作不可恢复！')) {
                 try {
-                    const response = await fetch('/api/cache/clear-results', {
-                        method: 'POST'
-                    });
+                    const response = await fetch('/api/cache/clear-results', { method: 'POST' });
                     const data = await response.json();
                     if (data.success) {
-                        if (data.stats && data.stats.failed > 0) {
-                            this.showToast('warning', '清理完成',
-                                `删除 ${data.stats.deleted} 个文件，${data.stats.failed} 个失败`);
-                        } else {
-                            this.showToast('success', '清理成功', data.message);
-                        }
+                        this.showToast('success', '成功', data.message);
                         this.loadCacheStats();
                     } else {
-                        this.showToast('error', '清理失败', data.error || '未知错误');
+                        this.showToast('error', '错误', data.error);
                     }
-                } catch (error) {
-                    console.error('Failed to clear results:', error);
-                    this.showToast('error', '清理失败', error.message);
+                } catch (e) {
+                    this.showToast('error', '错误', '清理失败');
                 }
             }
         }
@@ -158,6 +1648,25 @@ function settingsApp() {
 </script>
 
 <style>
+.settings-sidebar {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 10px;
+}
+.settings-sidebar .nav-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+.settings-sidebar .nav-item:hover {
+    background: #e9ecef;
+}
+.settings-sidebar .nav-item.active {
+    background: #0d6efd;
+    color: white;
+}
+.modal.show { display: block; }
 [x-cloak] { display: none !important; }
 </style>
 {% endblock %}

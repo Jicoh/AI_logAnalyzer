@@ -17,12 +17,6 @@
                 <div class="nav-item" :class="{ active: activeSection === 'feedback' }" @click="scrollTo('feedback')">
                     <i class="bi bi-chat-dots"></i> 意见管理
                 </div>
-                <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
-                    <i class="bi bi-gear"></i> 系统配置
-                </div>
-                <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
-                    <i class="bi bi-wrench-adjustable"></i> Skill列表
-                </div>
             </div>
         </div>
         <!-- 主内容区域 -->
@@ -31,508 +25,145 @@
 
             <!-- 统计概览 -->
             <div id="section-stats" class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title text-muted">用户总数</h5>
-                    <h2 x-text="stats.users?.total || 0">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title text-muted">活跃用户</h5>
-                    <h2 class="text-success" x-text="stats.users?.active || 0">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title text-muted">管理员</h5>
-                    <h2 class="text-primary" x-text="stats.users?.admins || 0">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h5 class="card-title text-muted">待处理意见</h5>
-                    <h2 class="text-warning" x-text="feedbackStats.pending || 0">0</h2>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 用户管理 -->
-    <div id="section-users" class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-people"></i> 用户管理</span>
-            <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
-                <i class="bi bi-plus"></i> 新增用户
-            </button>
-        </div>
-        <div class="card-body">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>工号</th>
-                        <th>角色</th>
-                        <th>状态</th>
-                        <th>注册时间</th>
-                        <th>存储使用</th>
-                        <th>配额</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="user in users" :key="user.id">
-                        <tr>
-                            <td x-text="user.employee_id"></td>
-                            <td>
-                                <span class="badge" :class="user.is_admin ? 'bg-danger' : 'bg-secondary'"
-                                      x-text="user.is_admin ? '管理员' : '普通用户'"></span>
-                            </td>
-                            <td>
-                                <span class="badge" :class="user.is_active ? 'bg-success' : 'bg-warning'"
-                                      x-text="user.is_active ? '正常' : '禁用'"></span>
-                            </td>
-                            <td x-text="user.created_at"></td>
-                            <td>
-                                <span x-text="user.storage_used_formatted"></span>
-                                <span class="text-muted" x-text="'(' + user.storage_percent + '%)'"></span>
-                            </td>
-                            <td x-text="user.storage_quota_formatted"></td>
-                            <td>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-primary" @click="editQuota(user)" title="修改配额">
-                                        <i class="bi bi-sliders"></i>
-                                    </button>
-                                    <button class="btn btn-outline-warning" @click="resetPassword(user)" title="重置密码">
-                                        <i class="bi bi-key"></i>
-                                    </button>
-                                    <button class="btn btn-outline-secondary"
-                                            :class="user.is_active ? '' : 'active'"
-                                            @click="toggleActive(user)" title="启用/禁用">
-                                        <i class="bi" :class="user.is_active ? 'bi-pause' : 'bi-play'"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- 意见管理 -->
-    <div id="section-feedback" class="card mb-4">
-        <div class="card-header">
-            <i class="bi bi-chat-dots"></i> 意见管理
-        </div>
-        <div class="card-body">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>用户</th>
-                        <th>意见内容</th>
-                        <th>提交时间</th>
-                        <th>状态</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="fb in feedbacks" :key="fb.id">
-                        <tr>
-                            <td x-text="fb.employee_id"></td>
-                            <td>
-                                <span x-text="fb.content.length > 50 ? fb.content.substring(0, 50) + '...' : fb.content"></span>
-                            </td>
-                            <td x-text="fb.created_at"></td>
-                            <td>
-                                <span class="badge" :class="fb.status === 'replied' ? 'bg-success' : 'bg-warning'"
-                                      x-text="fb.status === 'replied' ? '已回复' : '待处理'"></span>
-                            </td>
-                            <td>
-                                <button class="btn btn-outline-primary btn-sm" @click="showReplyModal(fb)">
-                                    <i class="bi bi-reply"></i> 回复
-                                </button>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- 系统配置 -->
-    <div id="section-config" class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-gear"></i> 系统配置</span>
-            <button class="btn btn-primary btn-sm" @click="saveConfig()" :disabled="configSaving">
-                <span x-show="configSaving" class="spinner-border spinner-border-sm"></span>
-                <span x-text="configSaving ? '保存中...' : '保存配置'"></span>
-            </button>
-        </div>
-        <div class="card-body">
-            <!-- API设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-cloud"></i> API设置</h6>
-            <div class="row mb-4">
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">API地址</label>
-                    <input type="text" class="form-control" x-model="config.api.base_url" placeholder="http://127.0.0.1:18000/v1">
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">API密钥</label>
-                    <div class="input-group">
-                        <input :type="showApiKey ? 'text' : 'password'" class="form-control" x-model="config.api.api_key" placeholder="sk-xxx">
-                        <button class="btn btn-outline-secondary" type="button" @click="showApiKey = !showApiKey">
-                            <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">模型</label>
-                    <input type="text" class="form-control" x-model="config.api.model" placeholder="MiniMax-M2.5">
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">温度 (0-1)</label>
-                    <input type="number" class="form-control" x-model="config.api.temperature" min="0" max="1" step="0.1">
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">最大Token</label>
-                    <input type="number" class="form-control" x-model="config.api.max_tokens" min="100">
-                </div>
-            </div>
-
-            <hr>
-
-            <!-- Orchestrator行为设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-robot"></i> Orchestrator行为设置</h6>
-            <div class="row mb-4">
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">最大轮次</label>
-                    <input type="number" class="form-control" x-model="config.orchestrator.max_rounds" min="1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">工具调用限制</label>
-                    <input type="number" class="form-control" x-model="config.orchestrator.tool_call_limit" min="1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">启用MCP工具</label>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" x-model="config.orchestrator.enable_mcp_tools">
-                    </div>
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">压缩保留轮次</label>
-                    <input type="number" class="form-control" x-model="config.orchestrator.compression_retain_rounds" min="1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">上下文限制</label>
-                    <input type="number" class="form-control" x-model="config.orchestrator.context_limit" min="1000">
-                    <small class="text-muted">超过时触发压缩</small>
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">压缩阈值</label>
-                    <input type="number" class="form-control" x-model="config.orchestrator.compression_threshold" min="0" max="1" step="0.1">
-                    <small class="text-muted">上下文使用率超过此值触发压缩</small>
-                </div>
-            </div>
-
-            <hr>
-
-            <!-- Subagent API设置 -->
-            <h6 class="text-muted mb-3">
-                <i class="bi bi-gear-wide-connected"></i> Subagent API设置
-                <small class="text-muted">(未配置则使用上方API设置)</small>
-            </h6>
-            <div class="mb-4">
-                <template x-for="subagent in configurableSubagents" :key="subagent.name">
-                    <div class="card mb-2">
-                        <div class="card-body py-2">
-                            <div class="row align-items-center">
-                                <div class="col-md-2">
-                                    <span class="badge bg-primary" x-text="subagent.name"></span>
-                                    <small class="text-muted d-block mt-1" x-text="subagent.description"></small>
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                           x-model="config.subagent_api[subagent.name].base_url"
-                                           placeholder="API地址（留空用默认）">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                           x-model="config.subagent_api[subagent.name].api_key"
-                                           placeholder="API密钥">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                           x-model="config.subagent_api[subagent.name].model"
-                                           placeholder="模型">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="number" class="form-control form-control-sm"
-                                           x-model="config.subagent_api[subagent.name].temperature"
-                                           min="0" max="1" step="0.1" placeholder="温度">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="number" class="form-control form-control-sm"
-                                           x-model="config.subagent_api[subagent.name].max_tokens"
-                                           min="100" placeholder="Max Tokens">
-                                </div>
-                            </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title text-muted">用户总数</h5>
+                            <h2 x-text="stats.users?.total || 0">0</h2>
                         </div>
                     </div>
-                </template>
-                <div x-show="configurableSubagents.length === 0" class="text-muted">
-                    暂无可配置的Subagent
                 </div>
-            </div>
-
-            <hr>
-
-            <!-- Embedding设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-vector-pen"></i> Embedding设置</h6>
-            <div class="row mb-4">
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">启用向量检索</label>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" x-model="config.embedding.enabled">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title text-muted">活跃用户</h5>
+                            <h2 class="text-success" x-text="stats.users?.active || 0">0</h2>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">提供商</label>
-                    <input type="text" class="form-control" x-model="config.embedding.provider" placeholder="ollama">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">Embedding地址</label>
-                    <input type="text" class="form-control" x-model="config.embedding.base_url" placeholder="http://localhost:11434/v1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">Embedding密钥</label>
-                    <div class="input-group">
-                        <input :type="showEmbeddingKey ? 'text' : 'password'" class="form-control" x-model="config.embedding.api_key" placeholder="ollama">
-                        <button class="btn btn-outline-secondary" type="button" @click="showEmbeddingKey = !showEmbeddingKey">
-                            <i class="bi" :class="showEmbeddingKey ? 'bi-eye-slash' : 'bi-eye'"></i>
-                        </button>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title text-muted">管理员</h5>
+                            <h2 class="text-primary" x-text="stats.users?.admins || 0">0</h2>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">模型</label>
-                    <input type="text" class="form-control" x-model="config.embedding.model" placeholder="qwen3-embedding">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">维度</label>
-                    <input type="number" class="form-control" x-model="config.embedding.dimension" min="128">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">批处理大小</label>
-                    <input type="number" class="form-control" x-model="config.embedding.batch_size" min="1">
-                </div>
-            </div>
-
-            <hr>
-
-            <!-- 检索设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-search"></i> 检索设置</h6>
-            <div class="row mb-4">
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">检索模式</label>
-                    <select class="form-select" x-model="config.retrieval.mode">
-                        <option value="bm25">BM25关键词</option>
-                        <option value="vector">向量检索</option>
-                        <option value="hybrid">混合检索</option>
-                    </select>
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">BM25权重</label>
-                    <input type="number" class="form-control" x-model="config.retrieval.bm25_weight" min="0" max="1" step="0.1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">向量权重</label>
-                    <input type="number" class="form-control" x-model="config.retrieval.vector_weight" min="0" max="1" step="0.1">
-                </div>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">RRF参数K</label>
-                    <input type="number" class="form-control" x-model="config.retrieval.rrf_k" min="1">
-                </div>
-            </div>
-
-            <hr>
-
-            <!-- 日志查看器设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-file-text"></i> 日志查看器设置</h6>
-            <div class="row mb-4">
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">启用自动打开</label>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" x-model="config.log_viewer.enabled">
-                        <small class="text-muted d-block">分析完成后自动打开日志目录</small>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="card-title text-muted">待处理意见</h5>
+                            <h2 class="text-warning" x-text="feedbackStats.pending || 0">0</h2>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-8 mb-3">
-                    <label class="form-label">查看工具路径</label>
-                    <input type="text" class="form-control" x-model="config.log_viewer.exe_path" placeholder="C:\path\to\viewer.exe 或快捷方式 .lnk">
-                    <small class="text-muted">支持exe程序或.lnk快捷方式路径</small>
-                </div>
             </div>
 
-            <hr>
-
-            <!-- MCP Server设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-plug"></i> MCP Server设置</h6>
-            <div class="row mb-4">
-                <div class="col-12 mb-3">
-                    <table class="table table-sm table-hover">
-                        <thead>
-                            <tr>
-                                <th>名称</th>
-                                <th>类型</th>
-                                <th>状态</th>
-                                <th>描述</th>
-                                <th>工具数</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="server in mcpServers" :key="server.name">
-                                <tr>
-                                    <td x-text="server.name"></td>
-                                    <td x-text="server.transport"></td>
-                                    <td>
-                                        <div class="form-check form-switch">
-                                            <input class="form-check-input" type="checkbox"
-                                                   :checked="server.enabled"
-                                                   @change="toggleMcpServer(server.name, $event)">
-                                        </div>
-                                    </td>
-                                    <td x-text="server.description || '-'"></td>
-                                    <td x-text="server.tool_count || '-'"></td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-success" @click="testMcpServer(server.name)" title="测试连接">
-                                                <i class="bi bi-play"></i>
-                                            </button>
-                                            <button class="btn btn-outline-primary" @click="editMcpServer(server)" title="编辑">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-outline-danger" @click="deleteMcpServer(server.name)" title="删除">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
-                            <tr x-show="mcpServers.length === 0">
-                                <td colspan="6" class="text-center text-muted">暂无MCP Server配置</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <button class="btn btn-primary btn-sm" @click="showAddMcpModal = true">
-                        <i class="bi bi-plus"></i> 新增MCP Server
-                    </button>
-                </div>
-            </div>
-
-            <hr>
-
-            <!-- 分析模板设置 -->
-            <h6 class="text-muted mb-3"><i class="bi bi-file-earmark-text"></i> 分析模板设置</h6>
-            <div class="row mb-4">
-                <div class="col-12 mb-3">
-                    <table class="table table-sm table-hover">
-                        <thead>
-                            <tr>
-                                <th>问题类型</th>
-                                <th>关键词</th>
-                                <th>分析步骤</th>
-                                <th>典型原因</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="template in analysisTemplates" :key="template.problem_type">
-                                <tr>
-                                    <td x-text="template.problem_type"></td>
-                                    <td>
-                                        <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
-                                    </td>
-                                    <td x-text="template.analysis_logic.length + '步'"></td>
-                                    <td x-text="template.typical_causes.length + '个'"></td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
-                            <tr x-show="analysisTemplates.length === 0">
-                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true">
-                        <i class="bi bi-plus"></i> 新增模板
-                    </button>
-                </div>
-            </div>
-        </div>
-    <!-- Skill列表 -->
-            <div id="section-skills" class="card mb-4">
+            <!-- 用户管理 -->
+            <div id="section-users" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-wrench-adjustable"></i> Skill列表</span>
-                    <small class="text-muted">每10秒自动刷新</small>
+                    <span><i class="bi bi-people"></i> 用户管理</span>
+                    <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
+                        <i class="bi bi-plus"></i> 新增用户
+                    </button>
                 </div>
                 <div class="card-body">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>名称</th>
-                                <th>描述</th>
-                                <th>允许工具</th>
-                                <th>版本</th>
-                                <th>路径</th>
+                                <th>工号</th>
+                                <th>角色</th>
+                                <th>状态</th>
+                                <th>注册时间</th>
+                                <th>存储使用</th>
+                                <th>配额</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <template x-for="skill in skills" :key="skill.name">
+                            <template x-for="user in users" :key="user.id">
                                 <tr>
+                                    <td x-text="user.employee_id"></td>
                                     <td>
-                                        <span class="badge bg-primary" x-text="skill.name"></span>
+                                        <span class="badge" :class="user.is_admin ? 'bg-danger' : 'bg-secondary'"
+                                              x-text="user.is_admin ? '管理员' : '普通用户'"></span>
                                     </td>
-                                    <td x-text="skill.description || '-'"></td>
                                     <td>
-                                        <span x-show="skill.allowed_tools && skill.allowed_tools.length > 0"
-                                              x-text="skill.allowed_tools.join(', ')"></span>
-                                        <span x-show="!skill.allowed_tools || skill.allowed_tools.length === 0" class="text-muted">-</span>
+                                        <span class="badge" :class="user.is_active ? 'bg-success' : 'bg-warning'"
+                                              x-text="user.is_active ? '正常' : '禁用'"></span>
                                     </td>
-                                    <td x-text="skill.metadata?.version || '-'"></td>
-                                    <td class="text-muted small" x-text="skill.path || '-'"></td>
+                                    <td x-text="user.created_at"></td>
+                                    <td>
+                                        <span x-text="user.storage_used_formatted"></span>
+                                        <span class="text-muted" x-text="'(' + user.storage_percent + '%)'"></span>
+                                    </td>
+                                    <td x-text="user.storage_quota_formatted"></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="editQuota(user)" title="修改配额">
+                                                <i class="bi bi-sliders"></i>
+                                            </button>
+                                            <button class="btn btn-outline-warning" @click="resetPassword(user)" title="重置密码">
+                                                <i class="bi bi-key"></i>
+                                            </button>
+                                            <button class="btn btn-outline-secondary"
+                                                    :class="user.is_active ? '' : 'active'"
+                                                    @click="toggleActive(user)" title="启用/禁用">
+                                                <i class="bi" :class="user.is_active ? 'bi-pause' : 'bi-play'"></i>
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             </template>
-                            <tr x-show="skills.length === 0">
-                                <td colspan="5" class="text-center text-muted">暂无Skill配置</td>
-                            </tr>
                         </tbody>
                     </table>
-                    <small class="text-muted">
-                        Skill定义位于 config/skills/ 目录，使用SKILL.md标准格式定义。修改后10秒内自动生效。
-                    </small>
+                </div>
+            </div>
+
+            <!-- 意见管理 -->
+            <div id="section-feedback" class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-chat-dots"></i> 意见管理
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>用户</th>
+                                <th>意见内容</th>
+                                <th>提交时间</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="fb in feedbacks" :key="fb.id">
+                                <tr>
+                                    <td x-text="fb.employee_id"></td>
+                                    <td>
+                                        <span x-text="fb.content.length > 50 ? fb.content.substring(0, 50) + '...' : fb.content"></span>
+                                    </td>
+                                    <td x-text="fb.created_at"></td>
+                                    <td>
+                                        <span class="badge" :class="fb.status === 'replied' ? 'bg-success' : 'bg-warning'"
+                                              x-text="fb.status === 'replied' ? '已回复' : '待处理'"></span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm" @click="showReplyModal(fb)">
+                                            <i class="bi bi-reply"></i> 回复
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-    </div>
     </div>
 
     <!-- 新增用户模态框 -->
-    <div class="modal" :class="showCreateModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+    <div class="modal" :class="showCreateModal ? 'show d-block' : ''" :style="showCreateModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -562,7 +193,7 @@
     </div>
 
     <!-- 修改配额模态框 -->
-    <div class="modal" :class="showQuotaModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+    <div class="modal" :class="showQuotaModal ? 'show d-block' : ''" :style="showQuotaModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -586,7 +217,7 @@
     </div>
 
     <!-- 回复意见模态框 -->
-    <div class="modal" :class="showFeedbackReplyModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
+    <div class="modal" :class="showFeedbackReplyModal ? 'show d-block' : ''" :style="showFeedbackReplyModal ? 'background: rgba(0,0,0,0.5);' : ''" x-cloak>
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -624,123 +255,6 @@
         </div>
     </div>
 
-    <!-- 新增/编辑MCP Server模态框 -->
-    <div class="modal" :class="showAddMcpModal || showEditMcpModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" x-text="showEditMcpModal ? '编辑MCP Server' : '新增MCP Server'"></h5>
-                    <button type="button" class="btn-close" @click="closeMcpModal()"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">名称</label>
-                        <input type="text" class="form-control" x-model="mcpForm.name"
-                               :disabled="showEditMcpModal" placeholder="log_downloader">
-                        <small class="text-muted">唯一标识符，创建后不可修改</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">传输类型</label>
-                        <select class="form-select" x-model="mcpForm.transport" :disabled="showEditMcpModal">
-                            <option value="stdio">stdio (本地进程)</option>
-                            <option value="websocket">websocket (远程服务)</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">描述</label>
-                        <input type="text" class="form-control" x-model="mcpForm.description" placeholder="日志下载服务">
-                    </div>
-                    <!-- stdio配置 -->
-                    <div x-show="mcpForm.transport === 'stdio'">
-                        <div class="mb-3">
-                            <label class="form-label">命令</label>
-                            <input type="text" class="form-control" x-model="mcpForm.command" placeholder="python / uvx / npx / node 等">
-                            <small class="text-muted">填写可执行命令名称，如 python、uvx、npx、node 等</small>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">参数 (JSON数组)</label>
-                            <input type="text" class="form-control" x-model="mcpForm.argsStr" placeholder='["mcp_servers/log_downloader/server.py"]'>
-                            <small class="text-muted">JSON数组格式，相对路径基于项目根目录</small>
-                        </div>
-                    </div>
-                    <!-- websocket配置 -->
-                    <div x-show="mcpForm.transport === 'websocket'">
-                        <div class="mb-3">
-                            <label class="form-label">URL</label>
-                            <input type="text" class="form-control" x-model="mcpForm.url" placeholder="ws://localhost:8080/mcp">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">超时时间 (秒)</label>
-                        <input type="number" class="form-control" x-model="mcpForm.timeout" min="5" max="120">
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" x-model="mcpForm.enabled">
-                        <label class="form-check-label">启用</label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="closeMcpModal()">取消</button>
-                    <button class="btn btn-success" @click="testMcpForm()" :disabled="mcpTesting">
-                        <span x-show="mcpTesting" class="spinner-border spinner-border-sm"></span>
-                        <span x-text="mcpTesting ? '测试中...' : '测试连接'"></span>
-                    </button>
-                    <button class="btn btn-primary" @click="saveMcpServer()" :disabled="mcpSaving">
-                        <span x-show="mcpSaving" class="spinner-border spinner-border-sm"></span>
-                        <span x-text="mcpSaving ? '保存中...' : '保存'"></span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 新增/编辑分析模板模态框 -->
-    <div class="modal" :class="showAddTemplateModal || showEditTemplateModal ? 'show d-block' : ''" style="background: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" x-text="showEditTemplateModal ? '编辑分析模板' : '新增分析模板'"></h5>
-                    <button type="button" class="btn-close" @click="closeTemplateModal()"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">问题类型</label>
-                        <input type="text" class="form-control" x-model="templateForm.problem_type"
-                               :disabled="showEditTemplateModal" placeholder="BMC重启">
-                        <small class="text-muted">唯一标识，创建后不可修改</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">关键词（逗号分隔）</label>
-                        <input type="text" class="form-control" x-model="templateForm.keywordsStr"
-                               placeholder="reboot, restart, reset, 重启">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">分析步骤（每行一步）</label>
-                        <textarea class="form-control" x-model="templateForm.logicStr" rows="5"
-                                  placeholder="1. 检查重启前的日志...&#10;2. 检查重启后的日志..."></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">典型原因（逗号分隔）</label>
-                        <input type="text" class="form-control" x-model="templateForm.causesStr"
-                               placeholder="温度过高, 电源异常, 固件bug">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">检查点（逗号分隔）</label>
-                        <input type="text" class="form-control" x-model="templateForm.checksStr"
-                               placeholder="温度日志, 电源状态, 用户操作记录">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="closeTemplateModal()">取消</button>
-                    <button class="btn btn-primary" @click="saveTemplate()" :disabled="templateSaving">
-                        <span x-show="templateSaving" class="spinner-border spinner-border-sm"></span>
-                        <span x-text="templateSaving ? '保存中...' : '保存'"></span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Toast -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
         <div class="toast" :class="toast.show ? 'show' : ''" x-show="toast.show">
@@ -772,71 +286,13 @@ function adminApp() {
         feedbackReplyContent: '',
         feedbackReplySubmitting: false,
         toast: { show: false, type: '', title: '', message: '' },
-        // 系统配置相关
-        config: {
-            api: { base_url: '', api_key: '', model: '', temperature: 0.7, max_tokens: 60000 },
-            orchestrator: {
-                max_rounds: 20,
-                tool_call_limit: 50,
-                enable_mcp_tools: true,
-                compression_retain_rounds: 5,
-                context_limit: 120000,
-                compression_threshold: 0.8
-            },
-            subagent_api: {},
-            embedding: { enabled: false, provider: '', base_url: '', api_key: '', model: '', dimension: 4096, batch_size: 100 },
-            retrieval: { mode: 'bm25', bm25_weight: 0.4, vector_weight: 0.6, rrf_k: 60 },
-            log_viewer: { enabled: false, exe_path: '' }
-        },
-        configurableSubagents: [],
-        showApiKey: false,
-        showEmbeddingKey: false,
-        configSaving: false,
-        // MCP Server相关
-        mcpServers: [],
-        showAddMcpModal: false,
-        showEditMcpModal: false,
-        mcpForm: {
-            name: '',
-            transport: 'stdio',
-            description: '',
-            command: '',
-            argsStr: '',
-            url: '',
-            timeout: 30,
-            enabled: true
-        },
-        mcpTesting: false,
-        mcpSaving: false,
-        // 分析模板相关
-        analysisTemplates: [],
-        showAddTemplateModal: false,
-        showEditTemplateModal: false,
-        templateForm: {
-            problem_type: '',
-            keywordsStr: '',
-            logicStr: '',
-            causesStr: '',
-            checksStr: ''
-        },
-        templateSaving: false,
-        // Skill相关
-        skills: [],
-        // 二级侧边栏相关
         activeSection: 'stats',
 
         init() {
             this.loadUsers();
             this.loadStats();
             this.loadFeedbacks();
-            this.loadConfigurableSubagents();
-            this.loadConfig();
-            this.loadMcpServers();
-            this.loadAnalysisTemplates();
-            this.loadSkills();
             this.setupScrollObserver();
-            // 启动Skill自动刷新（10秒）
-            setInterval(() => this.loadSkills(), 10000);
         },
 
         scrollTo(sectionId) {
@@ -848,7 +304,7 @@ function adminApp() {
         },
 
         setupScrollObserver() {
-            const sections = ['stats', 'users', 'feedback', 'config', 'skills'];
+            const sections = ['stats', 'users', 'feedback'];
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
@@ -1051,385 +507,6 @@ function adminApp() {
             } finally {
                 this.feedbackReplySubmitting = false;
             }
-        },
-
-        async loadConfig() {
-            try {
-                const response = await fetch('/api/admin/config');
-                const data = await response.json();
-                if (data.success) {
-                    // 合并配置，确保所有字段都有默认值
-                    this.config = {
-                        api: { ...this.config.api, ...data.data.api },
-                        orchestrator: { ...this.config.orchestrator, ...data.data.orchestrator },
-                        subagent_api: data.data.subagent_api || {},
-                        embedding: { ...this.config.embedding, ...data.data.embedding },
-                        retrieval: { ...this.config.retrieval, ...data.data.retrieval },
-                        log_viewer: { ...this.config.log_viewer, ...data.data.log_viewer }
-                    };
-                    // 确保每个subagent都有配置结构
-                    this.initSubagentApiConfig();
-                }
-            } catch (e) {
-                console.error('Load config failed:', e);
-            }
-        },
-
-        async loadConfigurableSubagents() {
-            try {
-                const response = await fetch('/api/admin/subagents/list');
-                const data = await response.json();
-                if (data.success) {
-                    this.configurableSubagents = data.data;
-                    this.initSubagentApiConfig();
-                }
-            } catch (e) {
-                console.error('Load configurable subagents failed:', e);
-            }
-        },
-
-        initSubagentApiConfig() {
-            // 确保每个subagent都有配置结构
-            for (const subagent of this.configurableSubagents) {
-                if (!this.config.subagent_api[subagent.name]) {
-                    this.config.subagent_api[subagent.name] = {
-                        base_url: '',
-                        api_key: '',
-                        model: '',
-                        temperature: 0.1,
-                        max_tokens: 60000
-                    };
-                }
-            }
-        },
-
-        async saveConfig() {
-            this.configSaving = true;
-            try {
-                const response = await fetch('/api/admin/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.config)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', '配置已保存');
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '保存配置失败');
-            } finally {
-                this.configSaving = false;
-            }
-        },
-
-        // MCP Server相关函数
-        async loadMcpServers() {
-            try {
-                const response = await fetch('/api/admin/mcp/servers');
-                const data = await response.json();
-                if (data.success) {
-                    this.mcpServers = data.data;
-                }
-            } catch (e) {
-                console.error('Load MCP servers failed:', e);
-            }
-        },
-
-        async toggleMcpServer(name, event) {
-            const enabled = event.target.checked;
-            try {
-                const response = await fetch(`/api/admin/mcp/servers/${name}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', enabled ? '已启用' : '已禁用');
-                    this.loadMcpServers();
-                } else {
-                    this.showToast('error', '错误', data.error);
-                    event.target.checked = !enabled;
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '操作失败');
-                event.target.checked = !enabled;
-            }
-        },
-
-        async testMcpServer(name) {
-            try {
-                const response = await fetch(`/api/admin/mcp/servers/${name}/test`, { method: 'POST' });
-                const data = await response.json();
-                if (data.success && data.data.connected) {
-                    this.showToast('success', '连接成功', `发现 ${data.data.tool_count} 个工具: ${data.data.tools.join(', ')}`);
-                } else {
-                    this.showToast('error', '连接失败', data.data?.error || '未知错误');
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '测试失败');
-            }
-        },
-
-        editMcpServer(server) {
-            this.mcpForm = {
-                name: server.name,
-                transport: server.transport,
-                description: server.description,
-                command: server.command || '',
-                argsStr: JSON.stringify(server.args || []),
-                url: server.url || '',
-                timeout: server.timeout || 30,
-                enabled: server.enabled
-            };
-            this.showEditMcpModal = true;
-        },
-
-        closeMcpModal() {
-            this.showAddMcpModal = false;
-            this.showEditMcpModal = false;
-            this.mcpForm = {
-                name: '',
-                transport: 'stdio',
-                description: '',
-                command: '',
-                argsStr: '',
-                url: '',
-                timeout: 30,
-                enabled: true
-            };
-        },
-
-        async testMcpForm() {
-            this.mcpTesting = true;
-            try {
-                // 先保存配置（临时），然后测试
-                const payload = this.buildMcpPayload();
-                const url = this.showEditMcpModal
-                    ? `/api/admin/mcp/servers/${this.mcpForm.name}`
-                    : '/api/admin/mcp/servers';
-
-                // 保存配置
-                let saveResponse;
-                if (this.showEditMcpModal) {
-                    saveResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                } else {
-                    // 新增时先临时保存
-                    saveResponse = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                }
-
-                const saveData = await saveResponse.json();
-                if (!saveData.success) {
-                    this.showToast('error', '保存失败', saveData.error);
-                    return;
-                }
-
-                // 测试连接
-                const testResponse = await fetch(`/api/admin/mcp/servers/${this.mcpForm.name}/test`, { method: 'POST' });
-                const testData = await testResponse.json();
-                if (testData.success && testData.data.connected) {
-                    this.showToast('success', '连接成功', `发现 ${testData.data.tool_count} 个工具`);
-                    // 更新列表中的tool_count
-                    this.loadMcpServers();
-                } else {
-                    this.showToast('error', '连接失败', testData.data?.error || '未知错误');
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '测试失败');
-            } finally {
-                this.mcpTesting = false;
-            }
-        },
-
-        async saveMcpServer() {
-            if (!this.mcpForm.name) {
-                this.showToast('error', '错误', '名称不能为空');
-                return;
-            }
-
-            this.mcpSaving = true;
-            try {
-                const payload = this.buildMcpPayload();
-                const url = this.showEditMcpModal
-                    ? `/api/admin/mcp/servers/${this.mcpForm.name}`
-                    : '/api/admin/mcp/servers';
-                const method = this.showEditMcpModal ? 'PUT' : 'POST';
-
-                const response = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', data.message);
-                    this.closeMcpModal();
-                    this.loadMcpServers();
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '保存失败');
-            } finally {
-                this.mcpSaving = false;
-            }
-        },
-
-        buildMcpPayload() {
-            const payload = {
-                name: this.mcpForm.name,
-                transport: this.mcpForm.transport,
-                description: this.mcpForm.description,
-                timeout: parseInt(this.mcpForm.timeout),
-                enabled: this.mcpForm.enabled
-            };
-
-            if (this.mcpForm.transport === 'stdio') {
-                payload.command = this.mcpForm.command;
-                try {
-                    payload.args = JSON.parse(this.mcpForm.argsStr || '[]');
-                } catch (e) {
-                    payload.args = [];
-                }
-            } else if (this.mcpForm.transport === 'websocket') {
-                payload.url = this.mcpForm.url;
-            }
-
-            return payload;
-        },
-
-        async deleteMcpServer(name) {
-            if (!confirm(`确定要删除MCP Server "${name}" 吗？`)) return;
-
-            try {
-                const response = await fetch(`/api/admin/mcp/servers/${name}`, { method: 'DELETE' });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', data.message);
-                    this.loadMcpServers();
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '删除失败');
-            }
-        },
-
-        // 分析模板相关函数
-        async loadAnalysisTemplates() {
-            try {
-                const response = await fetch('/api/admin/analysis-templates');
-                const data = await response.json();
-                if (data.success) {
-                    this.analysisTemplates = data.data;
-                }
-            } catch (e) {
-                console.error('Load analysis templates failed:', e);
-            }
-        },
-
-        editTemplate(template) {
-            this.templateForm = {
-                problem_type: template.problem_type,
-                keywordsStr: template.keywords.join(', '),
-                logicStr: template.analysis_logic.join('\n'),
-                causesStr: template.typical_causes.join(', '),
-                checksStr: template.check_points.join(', ')
-            };
-            this.showEditTemplateModal = true;
-        },
-
-        closeTemplateModal() {
-            this.showAddTemplateModal = false;
-            this.showEditTemplateModal = false;
-            this.templateForm = {
-                problem_type: '',
-                keywordsStr: '',
-                logicStr: '',
-                causesStr: '',
-                checksStr: ''
-            };
-        },
-
-        async saveTemplate() {
-            if (!this.templateForm.problem_type) {
-                this.showToast('error', '错误', '问题类型不能为空');
-                return;
-            }
-
-            this.templateSaving = true;
-            try {
-                const payload = {
-                    problem_type: this.templateForm.problem_type,
-                    keywords: this.templateForm.keywordsStr.split(',').map(s => s.trim()).filter(s => s),
-                    analysis_logic: this.templateForm.logicStr.split('\n').map(s => s.trim()).filter(s => s),
-                    typical_causes: this.templateForm.causesStr.split(',').map(s => s.trim()).filter(s => s),
-                    check_points: this.templateForm.checksStr.split(',').map(s => s.trim()).filter(s => s)
-                };
-
-                const url = this.showEditTemplateModal
-                    ? `/api/admin/analysis-templates/${this.templateForm.problem_type}`
-                    : '/api/admin/analysis-templates';
-                const method = this.showEditTemplateModal ? 'PUT' : 'POST';
-
-                const response = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', data.message);
-                    this.closeTemplateModal();
-                    this.loadAnalysisTemplates();
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '保存失败');
-            } finally {
-                this.templateSaving = false;
-            }
-        },
-
-        async deleteTemplate(problem_type) {
-            if (!confirm(`确定要删除模板 "${problem_type}" 吗？`)) return;
-
-            try {
-                const response = await fetch(`/api/admin/analysis-templates/${problem_type}`, { method: 'DELETE' });
-                const data = await response.json();
-                if (data.success) {
-                    this.showToast('success', '成功', data.message);
-                    this.loadAnalysisTemplates();
-                } else {
-                    this.showToast('error', '错误', data.error);
-                }
-            } catch (e) {
-                this.showToast('error', '错误', '删除失败');
-            }
-        },
-
-        // Skill相关函数
-        async loadSkills() {
-            try {
-                const response = await fetch('/api/skills');
-                const data = await response.json();
-                if (data.success) {
-                    this.skills = data.data;
-                }
-            } catch (e) {
-                console.error('Load skills failed:', e);
-            }
         }
     };
 }
@@ -1438,5 +515,23 @@ function adminApp() {
 <style>
 .modal.show { display: block; }
 [x-cloak] { display: none !important; }
+.settings-sidebar {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 10px;
+}
+.settings-sidebar .nav-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+.settings-sidebar .nav-item:hover {
+    background: #e9ecef;
+}
+.settings-sidebar .nav-item.active {
+    background: #0d6efd;
+    color: white;
+}
 </style>
 {% endblock %}
