@@ -77,6 +77,13 @@ def create_app():
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
     logger.info(f"可用插件: {[p.id for p in plugin_manager.get_all_plugins()]}")
 
+    # 预加载Skill
+    logger.info("正在预加载Skill...")
+    from src.ai_analyzer.skill_loader import get_skill_loader
+    skill_loader = get_skill_loader()
+    skills = skill_loader.scan()
+    logger.info(f"已加载 {len(skills)} 个Skill: {[s.name for s in skills]}")
+
     # 注册路由
     register_routes(app)
 

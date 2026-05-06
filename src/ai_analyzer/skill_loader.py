@@ -43,13 +43,13 @@ class SkillLoader:
         初始化SkillLoader
 
         Args:
-            skills_dir: Skill目录路径，默认为项目根目录下的config/skills
+            skills_dir: Skill目录路径，默认为项目根目录下的skills
         """
         if skills_dir is None:
             # 获取项目根目录
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(os.path.dirname(current_dir))
-            skills_dir = os.path.join(project_root, 'config', 'skills')
+            skills_dir = os.path.join(project_root, 'skills')
 
         self.skills_dir = skills_dir
         self._skills: Dict[str, SkillInfo] = {}
@@ -178,10 +178,6 @@ class SkillLoader:
         Returns:
             SkillInfo: Skill信息，不存在时返回None
         """
-        # 如果未加载过，先扫描
-        if not self._loaded:
-            self.scan()
-
         return self._skills.get(name)
 
     def list_all(self) -> List[Dict[str, Any]]:
@@ -191,10 +187,6 @@ class SkillLoader:
         Returns:
             List[Dict]: Skill信息列表
         """
-        # 如果未加载过，先扫描
-        if not self._loaded:
-            self.scan()
-
         return [skill.to_dict() for skill in self._skills.values()]
 
     def reload(self) -> List[SkillInfo]:
@@ -218,8 +210,6 @@ class SkillLoader:
         Returns:
             bool: 是否存在
         """
-        if not self._loaded:
-            self.scan()
         return name in self._skills
 
 

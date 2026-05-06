@@ -4,7 +4,7 @@ Skill API路由。
 """
 
 from flask import Blueprint, jsonify
-from src.auth.decorators import login_required
+from src.auth.decorators import login_required, admin_required
 from src.ai_analyzer.skill_loader import get_skill_loader
 from src.utils import get_logger
 
@@ -19,19 +19,15 @@ def list_skills():
     """获取所有Skill列表。"""
     try:
         loader = get_skill_loader()
-        # 每次请求都重新扫描，确保数据最新
-        loader.reload()
         skills = loader.list_all()
 
-        # 返回简化信息（不含content）
+        # 返回简化信息（名称、描述、版本）
         result = []
         for skill in skills:
             result.append({
                 'name': skill.get('name', ''),
                 'description': skill.get('description', ''),
-                'allowed_tools': skill.get('allowed_tools', []),
-                'metadata': skill.get('metadata', {}),
-                'path': skill.get('path', '')
+                'metadata': skill.get('metadata', {})
             })
 
         return jsonify({'success': True, 'data': result})
@@ -40,18 +36,14 @@ def list_skills():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@skill_bp.route('/api/skills/<name>', methods=['GET'])
-@login_required
-def get_skill(name):
-    """获取单个Skill详情。"""
+@skill_bp.route('/api/skills/reload', methods=['POST'])
+@admin_required
+def reload_skills():
+    """刷新Skill列表（管理员）。"""
     try:
         loader = get_skill_loader()
-        skill = loader.get(name)
-
-        if not skill:
-            return jsonify({'success': False, 'error': f'Skill不存在: {name}'}), 404
-
-        return jsonify({'success': True, 'data': skill.to_dict()})
+        loader.reload()
+        return jsonify({'success': True, 'message': 'Skill列表已刷新'})
     except Exception as e:
-        logger.error(f"获取Skill详情失败: {str(e)}")
+        logger.error(f"刷新Skill列表失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500

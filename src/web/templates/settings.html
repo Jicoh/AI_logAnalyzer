@@ -449,8 +449,13 @@
 
             <!-- Skill列表 -->
             <div id="section-skills" class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-wrench-adjustable"></i> Skill列表
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-wrench-adjustable"></i> Skill列表</span>
+                    <button class="btn btn-outline-primary btn-sm" @click="reloadSkills()" x-show="userInfo.is_admin" :disabled="skillsReloading">
+                        <span x-show="skillsReloading" class="spinner-border spinner-border-sm"></span>
+                        <i x-show="!skillsReloading" class="bi bi-refresh"></i>
+                        <span x-text="skillsReloading ? '刷新中...' : '刷新'"></span>
+                    </button>
                 </div>
                 <div class="card-body">
                     <table class="table table-sm table-hover">
@@ -458,7 +463,6 @@
                             <tr>
                                 <th>名称</th>
                                 <th>描述</th>
-                                <th>允许工具</th>
                                 <th>版本</th>
                             </tr>
                         </thead>
@@ -467,22 +471,14 @@
                                 <tr>
                                     <td><span class="badge bg-primary" x-text="skill.name"></span></td>
                                     <td x-text="skill.description || '-'"></td>
-                                    <td>
-                                        <span x-show="skill.allowed_tools && skill.allowed_tools.length > 0"
-                                              x-text="skill.allowed_tools.join(', ')"></span>
-                                        <span x-show="!skill.allowed_tools || skill.allowed_tools.length === 0" class="text-muted">-</span>
-                                    </td>
                                     <td x-text="skill.metadata?.version || '-'"></td>
                                 </tr>
                             </template>
                             <tr x-show="skills.length === 0">
-                                <td colspan="4" class="text-center text-muted">暂无Skill</td>
+                                <td colspan="3" class="text-center text-muted">暂无Skill</td>
                             </tr>
                         </tbody>
                     </table>
-                    <small class="text-muted">
-                        Skill定义位于 config/skills/ 目录，使用SKILL.md标准格式定义。
-                    </small>
                 </div>
             </div>
 
@@ -969,6 +965,7 @@ function settingsApp() {
 
         // Skill列表
         skills: [],
+        skillsReloading: false,
 
         // 缓存统计
         cacheStats: {},
@@ -989,9 +986,6 @@ function settingsApp() {
             if (!this.userInfo.is_admin) {
                 this.activeSection = 'rules';
             }
-
-            // Skill自动刷新
-            setInterval(() => this.loadSkills(), 10000);
         },
 
         loadUserInfo() {
@@ -1579,6 +1573,24 @@ function settingsApp() {
                 const data = await response.json();
                 if (data.success) this.skills = data.data;
             } catch (e) { console.error('Load skills failed:', e); }
+        },
+
+        async reloadSkills() {
+            this.skillsReloading = true;
+            try {
+                const response = await fetch('/api/skills/reload', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadSkills();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '刷新失败');
+            } finally {
+                this.skillsReloading = false;
+            }
         },
 
         // 缓存清理
