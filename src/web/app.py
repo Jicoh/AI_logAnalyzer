@@ -9,7 +9,7 @@ import sys
 
 from flask import Flask
 from src.web.routes import register_routes
-from src.config_manager.manager import ConfigManager
+from src.settings_manager.manager import SettingsManager
 from src.utils import get_logger
 
 logger = get_logger('web')
@@ -17,11 +17,11 @@ logger = get_logger('web')
 
 def get_web_config():
     """从配置文件读取 Web 配置。"""
-    config_manager = ConfigManager()
+    settings_manager = SettingsManager()
     return {
-        "host": config_manager.get("web.host", "0.0.0.0"),
-        "port": config_manager.get("web.port", 18888),
-        "debug": config_manager.get("web.debug", False)
+        "host": settings_manager.get("web.host", "0.0.0.0"),
+        "port": settings_manager.get("web.port", 18888),
+        "debug": settings_manager.get("web.debug", False)
     }
 
 

@@ -243,10 +243,10 @@ class TestMCPIntegration:
     )
     def test_real_stdio_connection(self):
         """测试真实的stdio连接"""
-        from src.config_manager.manager import ConfigManager
+        from src.settings_manager.manager import SettingsManager
 
-        config_manager = ConfigManager()
-        client = MCPClient(config_manager)
+        settings_manager = SettingsManager()
+        client = MCPClient(settings_manager)
 
         if len(client.servers) == 0:
             pytest.skip("未配置MCP Server")

@@ -51,8 +51,8 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Config Manager | `src/config_manager/` | AI config (API, BM25 params, embedding settings) |
-| Settings Manager | `src/settings_manager/` | User preferences (log viewer settings) |
+| Settings Manager | `src/settings_manager/` | System config (API, BM25, embedding, log_viewer) |
+| User Config | `src/user_config/` | User-level preferences (plugin selection, KB selection) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
@@ -60,7 +60,6 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Subagent Registry | `src/ai_analyzer/subagents/registry.py` | Subagent注册表 |
 | Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
-| Plugin Selection | `src/plugin_selection/` | Web UI state: selected plugins, KB, AI settings |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
 | Custom Plugins | `custom_plugins/` | User-defined plugins |
 | Web Interface | `src/web/` | Flask routes, SSE streaming for analysis |
@@ -263,21 +262,29 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 
 ## Configuration
 
-### AI Config
-File: `config/ai_config.json`
+### System Settings (管理员配置)
+File: `config/settings.json`
+- `web.*` - Web server settings (host, port, debug)
 - `api.*` - LLM API settings (base_url, api_key, model, temperature, max_tokens)
+- `orchestrator.*` - Orchestrator Agent settings (max_rounds, context_limit, etc.)
 - `bm25.*` - BM25 parameters (k1, b)
 - `embedding.*` - Vector embedding settings (enabled, provider, model, dimension)
 - `retrieval.*` - Search mode (bm25/vector/hybrid), weights, RRF parameters
+- `log_viewer.*` - Log viewer settings (enabled, exe_path)
 
-### User Settings
-File: `config/settings.json`
-- `log_viewer.enabled` - 是否在分析完成后自动打开日志目录
-- `log_viewer.exe_path` - 日志查看工具路径（支持 exe 或 .lnk 快捷方式）
+支持环境变量占位符：`${VAR_NAME}`
 
-### Plugin Selection State
-File: `config/plugin_selection.json`
-- Web UI 状态存储（选中的插件、知识库、AI 设置等）
+### User Config (用户配置)
+File: `data/users/{employee_id}/user_config.json`
+- `selected_plugins` - 用户选中的插件列表
+- `selected_kb_id` - 用户选中的知识库ID
+- `default_kb_id` - 默认知识库ID
+- `enable_ai` - 是否启用AI分析
+- 用户配置通过 Web 界面管理，CLI 不保存用户配置
+
+### User Config Template
+File: `config/user_config_template.json`
+- 新用户初始化配置的模板
 
 ### Prompt files
 - `config/default_prompt_template.txt` - Read-only template

@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 
 from src.cli.parser import get_parser
 
-from src.config_manager import ConfigManager
+from src.settings_manager import SettingsManager
 from src.knowledge_base import KnowledgeBaseManager
 from src.ai_analyzer.analyzer import analyze_with_agent
 from src.log_metadata import LogMetadataManager
@@ -23,7 +23,6 @@ from src.utils.file_utils import (
 from plugins.manager import get_plugin_manager
 from plugins import render_html
 from plugins.base import count_severity
-from src.plugin_selection import PluginSelectionManager
 
 logger = get_logger('cli')
 
@@ -83,9 +82,8 @@ def cmd_analyze(args):
     """分析日志命令"""
     logger.debug(f"开始分析日志: {args.path}")
 
-    config_manager = ConfigManager()
-    kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
-    plugin_selection_manager = PluginSelectionManager()
+    settings_manager = SettingsManager()
+    kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     # 检查日志文件
     if not os.path.exists(args.path):
@@ -130,10 +128,12 @@ def cmd_analyze(args):
         # 插件分析使用解压后的目录
         analysis_path = work_dir
 
+    # CLI 使用用户指定的插件或默认插件
     if args.plugins:
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
+        # 默认使用 log_parser 插件
+        plugin_ids = ['log_parser']
 
     if not plugin_ids:
         logger.error("没有可用的插件")
@@ -183,7 +183,7 @@ def cmd_analyze(args):
         return 0
 
     # 检查AI配置
-    api_config = config_manager.get('api', {})
+    api_config = settings_manager.get('api', {})
     if not api_config.get('base_url') or not api_config.get('api_key'):
         print("警告: AI配置不完整，请先配置API信息")
         print("使用命令: python main.py config set api.base_url <url>")
@@ -193,7 +193,7 @@ def cmd_analyze(args):
     # 获取知识库ID
     kb_id = args.kb
     if not kb_id:
-        kb_id = config_manager.get('knowledge_base.default_id')
+        kb_id = settings_manager.get('knowledge_base.default_id')
 
     if kb_id:
         print(f"使用知识库: {kb_id}")
@@ -216,7 +216,7 @@ def cmd_analyze(args):
             log_metadata_manager.set_active_rules(log_rules_id)
 
         result = analyze_with_agent(
-            config_manager=config_manager,
+            settings_manager=settings_manager,
             kb_manager=kb_manager,
             log_metadata_manager=log_metadata_manager,
             plugin_result=result_dict,
@@ -249,8 +249,8 @@ def cmd_analyze(args):
 
 def cmd_kb(args):
     """知识库管理命令"""
-    config_manager = ConfigManager()
-    kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
+    settings_manager = SettingsManager()
+    kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     if args.kb_action == 'create':
         kb_id = kb_manager.create(args.name, args.description or '')
@@ -336,10 +336,10 @@ def cmd_kb(args):
 
 def cmd_config(args):
     """配置管理命令"""
-    config_manager = ConfigManager()
+    settings_manager = SettingsManager()
 
     if args.config_action == 'get':
-        value = config_manager.get(args.key)
+        value = settings_manager.get(args.key)
         if value is None:
             print(f"配置项不存在: {args.key}")
             return 1
@@ -351,14 +351,14 @@ def cmd_config(args):
         return 0
 
     elif args.config_action == 'set':
-        config_manager.set(args.key, args.value)
-        config_manager.save()
+        settings_manager.set(args.key, args.value)
+        settings_manager.save()
         print(f"配置已更新: {args.key} = {args.value}")
         return 0
 
     elif args.config_action == 'list':
         import json
-        print(json.dumps(config_manager.get_all(), indent=2, ensure_ascii=False))
+        print(json.dumps(settings_manager.get_all(), indent=2, ensure_ascii=False))
         return 0
 
     return 1
@@ -396,25 +396,18 @@ def cmd_plugin(args):
         return 0
 
     if args.plugin_action == 'select':
-        plugin_selection_manager = PluginSelectionManager()
         categories = plugin_manager.get_plugins_categories()
 
         if not args.category:
-            # 显示当前选择的插件
-            selected = plugin_selection_manager.get('selected_plugins', [])
-            if selected:
-                # 显示选中插件的类别
-                plugin_type = None
-                for p in plugin_manager.get_all_plugins():
-                    if p.id in selected:
-                        plugin_type = p.get_plugin_type()
-                        break
-                print(f"当前选择: [{plugin_type}] {', '.join(selected)}")
-            else:
-                print("未设置默认插件")
+            # 显示可用类别和提示
+            print("可用插件类别:")
+            for category_name in categories.keys():
+                plugins = categories[category_name].get('plugins', [])
+                print(f"  [{category_name}] ({len(plugins)}个插件)")
+            print("\n提示: 请通过 Web 界面设置默认插件")
             return 0
 
-        # 验证类别是否存在
+        # 显示指定类别的可用插件
         if args.category not in categories:
             print(f"错误: 类别 '{args.category}' 不存在")
             print(f"可用类别: {', '.join(categories.keys())}")
@@ -425,42 +418,15 @@ def cmd_plugin(args):
             print(f"错误: 类别 '{args.category}' 下没有插件")
             return 1
 
-        # 获取该类别下所有插件ID
-        category_plugin_ids = [p['id'] for p in category_plugins]
-
-        if args.plugins:
-            # 用户指定了具体插件，验证是否属于该类别
-            requested_ids = [p.strip() for p in args.plugins.split(',')]
-            invalid_ids = [pid for pid in requested_ids if pid not in category_plugin_ids]
-            if invalid_ids:
-                print(f"错误: 插件 '{', '.join(invalid_ids)}' 不属于类别 '{args.category}'")
-                print(f"该类别可用插件: {', '.join(category_plugin_ids)}")
-                return 1
-            selected_ids = requested_ids
-        else:
-            # 未指定具体插件，选择该类别全部插件
-            selected_ids = category_plugin_ids
-
-        plugin_selection_manager.set('selected_plugins', selected_ids)
-        plugin_selection_manager.save()
-        print(f"已选择: [{args.category}] {', '.join(selected_ids)}")
+        print(f"类别 '{args.category}' 可用插件:")
+        for p in category_plugins:
+            print(f"  - {p['id']}: {p['description']}")
+        print("\n提示: 请通过 Web 界面设置默认插件，或在 analyze 命令中使用 --plugins 参数指定插件")
         return 0
 
     if args.plugin_action == 'selected':
-        plugin_selection_manager = PluginSelectionManager()
-        selected_ids = plugin_selection_manager.get('selected_plugins', [])
-
-        if not selected_ids:
-            print("未选择任何插件")
-            return 0
-
-        # 获取所有插件信息
-        all_plugins = plugin_manager.get_all_plugins()
-        print("已选择的插件:")
-        for plugin in all_plugins:
-            if plugin.id in selected_ids:
-                plugin_type = plugin.get_plugin_type()
-                print(f"  [{plugin_type}] {plugin.name}")
+        print("提示: CLI 不存储用户配置，请通过 Web 界面查看已选择的插件")
+        print("如需在 CLI 中指定插件，请使用 analyze 命令的 --plugins 参数")
         return 0
 
     return 1
@@ -471,8 +437,8 @@ def cmd_analyze_batch(args):
     from datetime import datetime
 
     logger.debug(f"开始批量分析: {args.path}")
-    config_manager = ConfigManager()
-    kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
+    settings_manager = SettingsManager()
+    kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     # 检查目录是否存在
     if not os.path.exists(args.path):
@@ -494,8 +460,8 @@ def cmd_analyze_batch(args):
     if args.plugins:
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        plugin_selection_manager = PluginSelectionManager()
-        plugin_ids = plugin_selection_manager.get('selected_plugins', ['log_parser'])
+        # CLI 默认使用 log_parser 插件
+        plugin_ids = ['log_parser']
 
     if not plugin_ids:
         logger.error("没有可用的插件")
@@ -559,7 +525,7 @@ def cmd_analyze_batch(args):
     # 获取知识库ID
     kb_id = args.kb
     if not kb_id:
-        kb_id = config_manager.get('knowledge_base.default_id')
+        kb_id = settings_manager.get('knowledge_base.default_id')
 
     log_rules_id = getattr(args, 'log_rules', None)
 
@@ -621,7 +587,7 @@ def cmd_analyze_batch(args):
             if args.ai:
                 print(f"  AI分析中...")
                 # 检查AI配置
-                api_config = config_manager.get('api', {})
+                api_config = settings_manager.get('api', {})
                 if not api_config.get('base_url') or not api_config.get('api_key'):
                     print(f"  警告: AI配置不完整，跳过AI分析")
                 else:
@@ -633,7 +599,7 @@ def cmd_analyze_batch(args):
                                 log_metadata_manager.set_active_rules(log_rules_id)
 
                         result = analyze_with_agent(
-                            config_manager=config_manager,
+                            settings_manager=settings_manager,
                             kb_manager=kb_manager,
                             log_metadata_manager=log_metadata_manager,
                             plugin_result=plugin_result,

@@ -1,17 +1,114 @@
 """
 通用设置管理模块
-负责用户偏好设置的读取、修改和保存
+负责系统配置的读取、修改和保存
+支持环境变量占位符解析：${VAR_NAME}
 """
 
 import json
 import os
+import re
 import sys
+from src.utils import get_logger
+
+logger = get_logger('settings_manager')
+
+# 环境变量占位符模式：${VAR_NAME}
+ENV_VAR_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
+
+def resolve_env_vars(value):
+    """
+    解析环境变量占位符
+
+    Args:
+        value: 配置值，可以是字符串或任意类型
+
+    Returns:
+        解析后的值，字符串中的 ${VAR_NAME} 会替换为对应的环境变量值
+        如果环境变量不存在，保持原值不变
+    """
+    if isinstance(value, str):
+        def replace_env_var(match):
+            var_name = match.group(1)
+            env_value = os.environ.get(var_name)
+            if env_value is not None:
+                logger.debug(f"解析环境变量: {var_name}")
+                return env_value
+            else:
+                logger.warning(f"环境变量不存在: {var_name}")
+                return match.group(0)
+        return ENV_VAR_PATTERN.sub(replace_env_var, value)
+    elif isinstance(value, dict):
+        return {k: resolve_env_vars(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [resolve_env_vars(item) for item in value]
+    else:
+        return value
 
 
 class SettingsManager:
-    """通用设置管理器"""
+    """系统配置管理器"""
 
     DEFAULT_SETTINGS = {
+        "web": {
+            "host": "127.0.0.1",
+            "port": 18888,
+            "debug": True
+        },
+        "api": {
+            "base_url": "",
+            "api_key": "",
+            "model": "",
+            "temperature": 0.7,
+            "max_tokens": 4096
+        },
+        "orchestrator": {
+            "max_rounds": 20,
+            "tool_call_limit": 50,
+            "enable_mcp_tools": True,
+            "compression_retain_rounds": 5,
+            "context_limit": 120000,
+            "compression_threshold": 0.8
+        },
+        "subagent_api": {},
+        "agent": {
+            "max_tokens": 60000,
+            "max_rounds": 10,
+            "tool_call_limit": 20
+        },
+        "mcp_servers": {},
+        "knowledge_base": {
+            "default_id": "",
+            "version": "1.0"
+        },
+        "bm25": {
+            "k1": 1.5,
+            "b": 0.75
+        },
+        "embedding": {
+            "enabled": False,
+            "provider": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "",
+            "model": "text-embedding-3-small",
+            "dimension": 1536,
+            "batch_size": 100,
+            "timeout": 60
+        },
+        "retrieval": {
+            "mode": "bm25",
+            "bm25_weight": 0.4,
+            "vector_weight": 0.6,
+            "top_n_multiplier": 2,
+            "rrf_k": 60
+        },
+        "faiss": {
+            "enabled": True,
+            "index_type": "auto",
+            "nlist": 100,
+            "nprobe": 10,
+            "use_gpu": False
+        },
         "log_viewer": {
             "enabled": False,
             "exe_path": ""
@@ -30,10 +127,11 @@ class SettingsManager:
         self.settings = self.load_settings()
 
     def load_settings(self):
-        """加载设置文件"""
+        """加载设置文件并解析环境变量"""
         if os.path.exists(self.settings_path):
             with open(self.settings_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                raw_settings = json.load(f)
+            return resolve_env_vars(raw_settings)
         return self.create_default_settings()
 
     def create_default_settings(self):
@@ -49,7 +147,7 @@ class SettingsManager:
         """
         获取设置项
 
-        支持点分隔的多层设置获取，如: get("log_viewer.enabled")
+        支持点分隔的多层设置获取，如: get("api.base_url")
         """
         keys = key.split('.')
         value = self.settings
@@ -64,7 +162,7 @@ class SettingsManager:
         """
         设置设置项
 
-        支持点分隔的多层设置设置，如: set("log_viewer.enabled", True)
+        支持点分隔的多层设置设置，如: set("api.base_url", "https://api.example.com")
         """
         keys = key.split('.')
         settings = self.settings

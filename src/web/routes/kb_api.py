@@ -8,23 +8,23 @@ from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 
 from src.knowledge_base.manager import KnowledgeBaseManager
-from src.config_manager.manager import ConfigManager
+from src.settings_manager.manager import SettingsManager
 from src.auth.decorators import admin_required
 
 kb_bp = Blueprint('kb_api', __name__)
 
 # 全局实例
-config_manager = None
+settings_manager = None
 kb_manager = None
 
 
 def get_kb_manager():
     """获取或创建 KnowledgeBaseManager 实例。"""
-    global config_manager, kb_manager
-    if config_manager is None:
-        config_manager = ConfigManager()
+    global settings_manager, kb_manager
+    if settings_manager is None:
+        settings_manager = SettingsManager()
     if kb_manager is None:
-        kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
+        kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
     return kb_manager
 
 

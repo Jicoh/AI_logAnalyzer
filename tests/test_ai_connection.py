@@ -11,14 +11,14 @@ sys.path.insert(0, os.path.join(project_root, 'src'))
 sys.path.insert(0, project_root)
 
 import pytest
-from config_manager import ConfigManager
+from settings_manager import SettingsManager
 from ai_analyzer.client import AIClient
 
 
 def test_ai_connection():
     """测试AI接口连通性，打印SSE数据块"""
-    config_manager = ConfigManager()
-    api_config = config_manager.get('api', {})
+    settings_manager = SettingsManager()
+    api_config = settings_manager.get('api', {})
 
     base_url = api_config.get('base_url')
     api_key = api_config.get('api_key')

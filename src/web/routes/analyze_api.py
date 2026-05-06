@@ -13,7 +13,6 @@ from src.ai_analyzer.analyzer import analyze_with_agent
 from src.ai_analyzer.subagents import LogAnalyzerSubagent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
-from src.config_manager.manager import ConfigManager
 from src.settings_manager.manager import SettingsManager
 from src.utils.file_utils import (
     is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
@@ -49,6 +48,7 @@ def log_callback(message: str, level: str = "info"):
 # 全局实例
 kb_manager = None
 log_metadata_manager = None
+settings_manager = None
 
 
 def get_plugin_manager_with_custom():
@@ -56,14 +56,6 @@ def get_plugin_manager_with_custom():
     root_dir = get_project_root()
     custom_dir = os.path.join(root_dir, 'custom_plugins')
     return get_plugin_manager(custom_dirs=[custom_dir])
-
-
-def get_config_manager():
-    """获取或创建 ConfigManager 实例。"""
-    global config_manager
-    if config_manager is None:
-        config_manager = ConfigManager()
-    return config_manager
 
 
 def get_settings_manager():
@@ -77,10 +69,10 @@ def get_settings_manager():
 def get_kb_manager():
     """获取或创建 KnowledgeBaseManager 实例。"""
     global kb_manager
-    if config_manager is None:
-        get_config_manager()
+    if settings_manager is None:
+        get_settings_manager()
     if kb_manager is None:
-        kb_manager = KnowledgeBaseManager(config=config_manager.get_all())
+        kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
     return kb_manager
 
 
@@ -252,7 +244,7 @@ def run_ai_analysis(
     log_source = {'type': 'local_file', 'paths': log_file_paths}
 
     result = analyze_with_agent(
-        config_manager=get_config_manager(),
+        settings_manager=settings_manager,
         kb_manager=get_kb_manager(),
         log_metadata_manager=get_log_metadata_manager(),
         plugin_result=plugin_result,
@@ -291,7 +283,7 @@ def handle_ai_selection(
         get_log_metadata_manager().set_active_rules(log_rules_id)
 
     selection_subagent = LogAnalyzerSubagent(
-        config_manager=get_config_manager(),
+        settings_manager=settings_manager,
         log_metadata_manager=get_log_metadata_manager(),
         plugin_manager=plugin_manager
     )
@@ -413,7 +405,7 @@ def analyze_stream():
                         get_log_metadata_manager().set_active_rules(log_rules_id)
 
                     selection_subagent = LogAnalyzerSubagent(
-                        config_manager=get_config_manager(),
+                        settings_manager=settings_manager,
                         log_metadata_manager=get_log_metadata_manager(),
                         plugin_manager=plugin_manager
                     )
@@ -722,7 +714,7 @@ def analyze_local_stream():
                         if log_rules_id:
                             get_log_metadata_manager().set_active_rules(log_rules_id)
                         selection_subagent = LogAnalyzerSubagent(
-                            config_manager=get_config_manager(),
+                            settings_manager=settings_manager,
                             log_metadata_manager=get_log_metadata_manager(),
                             plugin_manager=plugin_manager
                         )

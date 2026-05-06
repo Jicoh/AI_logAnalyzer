@@ -13,7 +13,7 @@ from .client import AIClient, AIResponse
 from .subagents import SubagentRegistry, get_registry
 from .mcp_client import MCPClient
 from src.session_manager.manager import SessionManager
-from src.config_manager.manager import ConfigManager
+from src.settings_manager.manager import SettingsManager
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.utils import get_logger
 
@@ -138,7 +138,7 @@ class OrchestratorAgent:
         self,
         user_id: str,
         session_id: str,
-        config_manager: ConfigManager = None,
+        settings_manager: SettingsManager = None,
         kb_manager: KnowledgeBaseManager = None,
         mcp_client: MCPClient = None
     ):
@@ -148,7 +148,7 @@ class OrchestratorAgent:
         Args:
             user_id: 用户ID
             session_id: 会话ID
-            config_manager: 配置管理器
+            settings_manager: 配置管理器
             kb_manager: 知识库管理器
             mcp_client: MCP客户端
         """
@@ -156,9 +156,9 @@ class OrchestratorAgent:
         self.session_id = session_id
 
         # 配置管理器
-        if config_manager is None:
-            config_manager = ConfigManager()
-        self.config_manager = config_manager
+        if settings_manager is None:
+            settings_manager = SettingsManager()
+        self.settings_manager = settings_manager
 
         # 加载Orchestrator配置
         self.load_config()
@@ -215,7 +215,7 @@ class OrchestratorAgent:
 
     def load_config(self):
         """加载Orchestrator配置"""
-        orchestrator_config = self.config_manager.get('orchestrator', {})
+        orchestrator_config = self.settings_manager.get('orchestrator', {})
         self.max_rounds = orchestrator_config.get('max_rounds', 20)
         self.tool_call_limit = orchestrator_config.get('tool_call_limit', 50)
         self.enable_mcp_tools = orchestrator_config.get('enable_mcp_tools', True)
@@ -227,7 +227,7 @@ class OrchestratorAgent:
 
     def get_orchestrator_api_config(self) -> Dict:
         """获取Orchestrator API配置 - 直接使用api配置"""
-        return self.config_manager.get('api', {})
+        return self.settings_manager.get('api', {})
 
     def get_subagent_api_config(self, subagent_name: str = None) -> Dict:
         """
@@ -240,7 +240,7 @@ class OrchestratorAgent:
             Dict: API配置，按名称查找，没配置则回退到api
         """
         if subagent_name:
-            subagent_apis = self.config_manager.get('subagent_api', {})
+            subagent_apis = self.settings_manager.get('subagent_api', {})
             specific_config = subagent_apis.get(subagent_name, {})
 
             # 检查是否有有效配置（至少有base_url和api_key）
@@ -254,7 +254,7 @@ class OrchestratorAgent:
                 }
 
         # 回退到默认api配置
-        return self.config_manager.get('api', {})
+        return self.settings_manager.get('api', {})
 
     def get_prompt_path(self) -> str:
         """获取prompt文件路径"""

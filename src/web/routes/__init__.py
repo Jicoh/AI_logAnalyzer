@@ -18,10 +18,8 @@ def register_routes(app):
     from src.web.routes.feedback_api import feedback_bp
     from src.web.routes.skill_api import skill_bp
     from src.web.routes.assistant_api import assistant_bp
-    from src.web.routes.config_api import config_bp
-    from src.web.routes.settings_api import settings_bp
+    from src.web.routes.user_config_api import user_config_bp
     from src.web.routes.plugin_api import plugin_bp
-    from src.web.routes.plugin_selection_api import plugin_selection_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(kb_bp)
@@ -35,7 +33,5 @@ def register_routes(app):
     app.register_blueprint(feedback_bp)
     app.register_blueprint(skill_bp)
     app.register_blueprint(assistant_bp)
-    app.register_blueprint(config_bp)
-    app.register_blueprint(settings_bp)
+    app.register_blueprint(user_config_bp)
     app.register_blueprint(plugin_bp)
-    app.register_blueprint(plugin_selection_bp)

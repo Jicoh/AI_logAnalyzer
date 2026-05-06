@@ -11,7 +11,6 @@ from flask_login import current_user
 from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
 from src.auth.decorators import admin_required
-from src.config_manager.manager import ConfigManager
 from src.settings_manager.manager import SettingsManager
 from src.storage.quota import StorageQuota, format_size, get_dir_size, check_disk_space
 from src.utils.file_utils import get_user_data_dir, get_data_dir
@@ -275,8 +274,8 @@ def get_stats():
 def get_config():
     """获取系统配置。"""
     try:
-        config_manager = ConfigManager()
-        config = config_manager.get_all()
+        settings_manager = SettingsManager()
+        config = settings_manager.get_all()
         # 添加 log_viewer 配置（从 settings.json 获取）
         settings_manager = SettingsManager()
         config['log_viewer'] = settings_manager.get('log_viewer', {'enabled': False, 'exe_path': ''})
@@ -291,75 +290,75 @@ def update_config():
     """更新系统配置。"""
     try:
         data = request.get_json()
-        config_manager = ConfigManager()
+        settings_manager = SettingsManager()
 
         # 更新 API 设置
         if 'api' in data:
             api_config = data['api']
             if 'base_url' in api_config:
-                config_manager.set('api.base_url', api_config['base_url'])
+                settings_manager.set('api.base_url', api_config['base_url'])
             if 'api_key' in api_config and api_config['api_key']:
-                config_manager.set('api.api_key', api_config['api_key'])
+                settings_manager.set('api.api_key', api_config['api_key'])
             if 'model' in api_config:
-                config_manager.set('api.model', api_config['model'])
+                settings_manager.set('api.model', api_config['model'])
             if 'temperature' in api_config:
-                config_manager.set('api.temperature', float(api_config['temperature']))
+                settings_manager.set('api.temperature', float(api_config['temperature']))
             if 'max_tokens' in api_config:
-                config_manager.set('api.max_tokens', int(api_config['max_tokens']))
+                settings_manager.set('api.max_tokens', int(api_config['max_tokens']))
 
         # 更新 Orchestrator 设置（包含context_limit和compression_threshold）
         if 'orchestrator' in data:
             orch_config = data['orchestrator']
             if 'max_rounds' in orch_config:
-                config_manager.set('orchestrator.max_rounds', int(orch_config['max_rounds']))
+                settings_manager.set('orchestrator.max_rounds', int(orch_config['max_rounds']))
             if 'tool_call_limit' in orch_config:
-                config_manager.set('orchestrator.tool_call_limit', int(orch_config['tool_call_limit']))
+                settings_manager.set('orchestrator.tool_call_limit', int(orch_config['tool_call_limit']))
             if 'enable_mcp_tools' in orch_config:
-                config_manager.set('orchestrator.enable_mcp_tools', bool(orch_config['enable_mcp_tools']))
+                settings_manager.set('orchestrator.enable_mcp_tools', bool(orch_config['enable_mcp_tools']))
             if 'compression_retain_rounds' in orch_config:
-                config_manager.set('orchestrator.compression_retain_rounds', int(orch_config['compression_retain_rounds']))
+                settings_manager.set('orchestrator.compression_retain_rounds', int(orch_config['compression_retain_rounds']))
             if 'context_limit' in orch_config:
-                config_manager.set('orchestrator.context_limit', int(orch_config['context_limit']))
+                settings_manager.set('orchestrator.context_limit', int(orch_config['context_limit']))
             if 'compression_threshold' in orch_config:
-                config_manager.set('orchestrator.compression_threshold', float(orch_config['compression_threshold']))
+                settings_manager.set('orchestrator.compression_threshold', float(orch_config['compression_threshold']))
 
         # 更新 Subagent API 设置（按subagent名称的结构）
         if 'subagent_api' in data:
             subagent_api_config = data['subagent_api']
             # 整体替换subagent_api配置
-            config_manager.set('subagent_api', subagent_api_config)
+            settings_manager.set('subagent_api', subagent_api_config)
 
         # 更新 Embedding 设置
         if 'embedding' in data:
             emb_config = data['embedding']
             if 'enabled' in emb_config:
-                config_manager.set('embedding.enabled', emb_config['enabled'])
+                settings_manager.set('embedding.enabled', emb_config['enabled'])
             if 'provider' in emb_config:
-                config_manager.set('embedding.provider', emb_config['provider'])
+                settings_manager.set('embedding.provider', emb_config['provider'])
             if 'base_url' in emb_config:
-                config_manager.set('embedding.base_url', emb_config['base_url'])
+                settings_manager.set('embedding.base_url', emb_config['base_url'])
             if 'api_key' in emb_config:
-                config_manager.set('embedding.api_key', emb_config['api_key'])
+                settings_manager.set('embedding.api_key', emb_config['api_key'])
             if 'model' in emb_config:
-                config_manager.set('embedding.model', emb_config['model'])
+                settings_manager.set('embedding.model', emb_config['model'])
             if 'dimension' in emb_config:
-                config_manager.set('embedding.dimension', int(emb_config['dimension']))
+                settings_manager.set('embedding.dimension', int(emb_config['dimension']))
             if 'batch_size' in emb_config:
-                config_manager.set('embedding.batch_size', int(emb_config['batch_size']))
+                settings_manager.set('embedding.batch_size', int(emb_config['batch_size']))
 
         # 更新检索设置
         if 'retrieval' in data:
             ret_config = data['retrieval']
             if 'mode' in ret_config:
-                config_manager.set('retrieval.mode', ret_config['mode'])
+                settings_manager.set('retrieval.mode', ret_config['mode'])
             if 'bm25_weight' in ret_config:
-                config_manager.set('retrieval.bm25_weight', float(ret_config['bm25_weight']))
+                settings_manager.set('retrieval.bm25_weight', float(ret_config['bm25_weight']))
             if 'vector_weight' in ret_config:
-                config_manager.set('retrieval.vector_weight', float(ret_config['vector_weight']))
+                settings_manager.set('retrieval.vector_weight', float(ret_config['vector_weight']))
             if 'rrf_k' in ret_config:
-                config_manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
+                settings_manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
 
-        config_manager.save()
+        settings_manager.save()
 
         # 更新 log_viewer 设置（保存到 settings.json）
         if 'log_viewer' in data:
@@ -411,8 +410,8 @@ def get_configurable_subagents():
 def get_mcp_servers():
     """获取MCP Server配置列表"""
     try:
-        config_manager = ConfigManager()
-        mcp_servers = config_manager.get('mcp_servers', {})
+        settings_manager = SettingsManager()
+        mcp_servers = settings_manager.get('mcp_servers', {})
 
         # 构建返回数据，添加状态信息
         server_list = []
@@ -445,8 +444,8 @@ def add_mcp_server():
         if not name:
             return jsonify({'success': False, 'error': '名称不能为空'}), 400
 
-        config_manager = ConfigManager()
-        mcp_servers = config_manager.get('mcp_servers', {})
+        settings_manager = SettingsManager()
+        mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name in mcp_servers:
             return jsonify({'success': False, 'error': '名称已存在'}), 400
@@ -473,8 +472,8 @@ def add_mcp_server():
             new_config['url'] = data.get('url', '')
 
         mcp_servers[name] = new_config
-        config_manager.set('mcp_servers', mcp_servers)
-        config_manager.save()
+        settings_manager.set('mcp_servers', mcp_servers)
+        settings_manager.save()
 
         logger.info(f"管理员 {current_user.employee_id} 新增MCP Server: {name}")
 
@@ -489,8 +488,8 @@ def add_mcp_server():
 def update_mcp_server(name):
     """更新MCP Server配置"""
     try:
-        config_manager = ConfigManager()
-        mcp_servers = config_manager.get('mcp_servers', {})
+        settings_manager = SettingsManager()
+        mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
             return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
@@ -517,8 +516,8 @@ def update_mcp_server(name):
                 existing['url'] = data['url']
 
         mcp_servers[name] = existing
-        config_manager.set('mcp_servers', mcp_servers)
-        config_manager.save()
+        settings_manager.set('mcp_servers', mcp_servers)
+        settings_manager.save()
 
         logger.info(f"管理员 {current_user.employee_id} 更新MCP Server: {name}")
 
@@ -533,15 +532,15 @@ def update_mcp_server(name):
 def delete_mcp_server(name):
     """删除MCP Server配置"""
     try:
-        config_manager = ConfigManager()
-        mcp_servers = config_manager.get('mcp_servers', {})
+        settings_manager = SettingsManager()
+        mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
             return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
 
         del mcp_servers[name]
-        config_manager.set('mcp_servers', mcp_servers)
-        config_manager.save()
+        settings_manager.set('mcp_servers', mcp_servers)
+        settings_manager.save()
 
         logger.info(f"管理员 {current_user.employee_id} 删除MCP Server: {name}")
 
@@ -556,8 +555,8 @@ def delete_mcp_server(name):
 def test_mcp_server(name):
     """测试MCP Server连接"""
     try:
-        config_manager = ConfigManager()
-        mcp_servers = config_manager.get('mcp_servers', {})
+        settings_manager = SettingsManager()
+        mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
             return jsonify({'success': False, 'error': 'MCP Server不存在'}), 404
@@ -568,7 +567,7 @@ def test_mcp_server(name):
         from src.ai_analyzer.mcp_client import MCPClient
 
         # 禁用自动连接，手动测试单个Server
-        mcp_client = MCPClient(config_manager, auto_connect=False)
+        mcp_client = MCPClient(settings_manager, auto_connect=False)
         success = mcp_client.connect_server(name, server_config)
 
         if success:
@@ -617,8 +616,8 @@ def get_mcp_tools():
     try:
         from src.ai_analyzer.mcp_client import MCPClient
 
-        config_manager = ConfigManager()
-        mcp_client = MCPClient(config_manager)
+        settings_manager = SettingsManager()
+        mcp_client = MCPClient(settings_manager)
 
         tools = []
         for tool in mcp_client.all_tools:
