@@ -14,7 +14,7 @@ logger = get_logger('auth_api')
 
 auth_bp = Blueprint('auth', __name__)
 
-# Flask-Login 配置（在 web_app.py 中初始化）
+# Flask-Login 配置（在 src/web/app.py 中初始化）
 login_manager = None
 
 

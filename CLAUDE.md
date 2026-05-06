@@ -9,9 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 
 # Run web interface
-python web_app.py                    # Default: http://127.0.0.1:18888
-python web_app.py --port 9000 --host 0.0.0.0  # Custom port/host
-python web_app.py --no-debug         # Disable debug mode
+python main.py web                    # Default: http://127.0.0.1:18888
+python main.py web --port 9000 --host 0.0.0.0  # Custom port/host
+python main.py web --no-debug         # Disable debug mode
 
 # Run tests
 pytest tests/                          # Run all tests

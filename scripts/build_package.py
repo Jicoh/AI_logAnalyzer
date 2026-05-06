@@ -223,7 +223,7 @@ def create_usage_file(dist_dir):
 
 1. Web界面启动:
    - 双击 ai_log_analyzer.exe 启动Web界面（自动打开浏览器）
-   - 命令行启动指定端口: ai_log_analyzer.exe web --port 9000
+   - 命令行启动指定端口: ai_log_analyzer.exe web --port 18888
    - 命令行启动指定主机: ai_log_analyzer.exe web --host 0.0.0.0 --port 80
    - 不自动打开浏览器: ai_log_analyzer.exe web --no-browser
 

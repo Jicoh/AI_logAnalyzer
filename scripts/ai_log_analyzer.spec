@@ -12,7 +12,7 @@ block_cipher = None
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(SPEC)))
 
 a = Analysis(
-    [os.path.join(project_root, 'entry_point.py')],
+    [os.path.join(project_root, 'main.py')],
     pathex=[project_root],
     binaries=[],
     datas=[
@@ -97,7 +97,9 @@ a = Analysis(
         'pandas',
         'flask_login',
         'flask_sqlalchemy',
-        'sqlalchemy'],
+        'sqlalchemy',
+        'src.cli.parser',
+        'src.cli.handler'],
     hookspath=[os.path.join(project_root, 'hooks')],
     hooksconfig={},
     runtime_hooks=[os.path.join(project_root, 'hooks/runtime_hook.py')],

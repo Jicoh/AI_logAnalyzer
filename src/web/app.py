@@ -1,30 +1,18 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-AI 日志分析器 - Web 应用入口
+Flask 应用工厂
 
-用法：
-    python web_app.py                           # 使用配置文件设置
-    python web_app.py --port 9000               # 覆盖端口
-    python web_app.py --host 0.0.0.0 --port 80  # 覆盖主机和端口
-    python web_app.py --no-debug                # 禁用调试模式
-
-访问 Web 界面: http://0.0.0.0:18888（默认）
+通过 main.py web 启动。
 """
 
-import argparse
 import os
 import sys
-
-# 将项目根目录添加到路径，用于确保项目的导入路径正确
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask
 from src.web.routes import register_routes
 from src.config_manager.manager import ConfigManager
 from src.utils import get_logger
 
-logger = get_logger('web_app')
+logger = get_logger('web')
 
 
 def get_web_config():
@@ -41,12 +29,11 @@ def create_app():
     """创建并配置 Flask 应用。"""
     # 获取项目根目录（支持打包）
     if getattr(sys, 'frozen', False):
-        # exe运行时，资源文件在 sys._MEIPASS 目录下
         resource_dir = sys._MEIPASS
-        # exe所在目录用于外部文件（配置、日志等）
         root_dir = os.path.dirname(sys.executable)
     else:
-        resource_dir = os.path.dirname(os.path.abspath(__file__))
+        # 当前文件在 src/web/app.py，项目根目录是上两级
+        resource_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         root_dir = resource_dir
 
     # 创建 Flask 应用，设置模板和静态文件夹
@@ -116,34 +103,3 @@ def init_default_admin():
 
 # 创建应用实例
 app = create_app()
-
-
-def parse_args():
-    """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description='AI Log Analyzer Web Application')
-    parser.add_argument('--host', type=str, help='Host to bind to (default: 0.0.0.0)')
-    parser.add_argument('--port', type=int, help='Port to bind to (default: 18888)')
-    parser.add_argument('--debug', action='store_true', dest='debug', help='Enable debug mode')
-    parser.add_argument('--no-debug', action='store_false', dest='debug', help='Disable debug mode')
-    return parser.parse_args()
-
-
-if __name__ == '__main__':
-    args = parse_args()
-    config = get_web_config()
-
-    host = args.host if args.host else config['host']
-    port = args.port if args.port else config['port']
-    debug = args.debug if args.debug is not None else config['debug']
-
-    logger.info("=" * 50)
-    logger.info("AI Log Analyzer - Web Interface")
-    logger.info("=" * 50)
-    logger.info(f"Access at: http://{host}:{port}")
-    logger.info("=" * 50)
-
-    app.run(
-        host=host,
-        port=port,
-        debug=debug
-    )
