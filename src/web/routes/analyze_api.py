@@ -10,17 +10,16 @@ from flask import Blueprint, request, Response, stream_with_context, jsonify
 from flask_login import current_user
 
 from src.ai_analyzer.analyzer import analyze_with_agent
-from src.ai_analyzer.subagents import LogAnalyzerSubagent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.settings_manager.manager import SettingsManager
 from src.utils.file_utils import (
-    is_archive_file, is_log_file, is_valid_log_file, extract_archive_recursive,
+    is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
-    get_project_root, get_data_dir, get_user_data_dir, is_safe_path, clean_filename
+    get_project_root, get_data_dir, get_user_data_dir, clean_filename
 )
-from src.storage.quota import StorageQuota, format_size
+from src.storage.quota import StorageQuota
 from src.utils import get_logger
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -267,33 +266,150 @@ def run_ai_analysis(
     }
 
 
-def handle_ai_selection(
-    log_file_paths: list,
+def _process_batch_units(
+    analysis_units: list,
+    selected_plugins: list,
+    batch_output_dir: str,
+    folder_name: str,
+    enable_ai: bool,
+    kb_id: str,
     user_prompt: str,
-    log_rules_id: str,
-    plugin_manager
-) -> tuple:
+    log_rules_id: str
+):
     """
-    处理 AI 智能选择插件和文件。
-
-    Returns:
-        tuple: (selected_plugins, selected_log_files, selection_result)
+    批量分析处理核心逻辑（生成器）。
+    处理每个分析单元，生成汇总结果，yield SSE 事件。
     """
-    if log_rules_id:
-        get_log_metadata_manager().set_active_rules(log_rules_id)
+    plugin_manager = get_plugin_manager_with_custom()
+    total_units = len(analysis_units)
 
-    selection_subagent = LogAnalyzerSubagent(
-        settings_manager=settings_manager,
-        log_metadata_manager=get_log_metadata_manager(),
-        plugin_manager=plugin_manager
-    )
-    selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
+    yield generate_sse_event({
+        'stage': 'batch',
+        'status': 'files_found',
+        'total': total_units,
+        'message': f'发现 {total_units} 个分析单元'
+    })
 
-    return (
-        selection_result['selected_plugins'],
-        selection_result['selected_files'],
-        selection_result
-    )
+    batch_results = {}
+    for idx, unit in enumerate(analysis_units):
+        unit_name = unit['name']
+        unit_path = unit['path']
+
+        yield generate_sse_event({
+            'stage': 'batch',
+            'status': 'start_file',
+            'current': idx + 1,
+            'total': total_units,
+            'file': unit_name,
+            'message': f'开始分析: {unit_name} ({idx + 1}/{total_units})'
+        })
+
+        single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
+
+        try:
+            plugin_result = plugin_manager.run_analysis(
+                selected_plugins, unit_path,
+                log_callback=log_callback
+            )
+        except Exception as e:
+            yield generate_sse_event({
+                'stage': 'batch',
+                'status': 'file_error',
+                'file': unit_name,
+                'message': f'插件分析失败: {str(e)}'
+            })
+            continue
+
+        plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
+        html_relative_path = save_and_render_plugin_result(plugin_result, plugin_output_file)
+
+        log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
+
+        ai_result = None
+        if enable_ai:
+            yield generate_sse_event({
+                'stage': 'batch',
+                'status': 'ai_start',
+                'file': unit_name,
+                'message': f'AI分析: {unit_name}'
+            })
+            try:
+                ai_result = run_ai_analysis(
+                    plugin_result, log_files_in_unit, single_output_dir,
+                    kb_id, user_prompt, log_rules_id
+                )
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'ai_complete',
+                    'file': unit_name
+                })
+            except Exception as e:
+                yield generate_sse_event({
+                    'stage': 'batch',
+                    'status': 'ai_error',
+                    'file': unit_name,
+                    'message': f'AI分析失败: {str(e)}'
+                })
+
+        batch_results[unit_name] = {
+            'output_dir': os.path.basename(single_output_dir),
+            'plugin_result': plugin_result,
+            'html_path': html_relative_path,
+            'ai_result': ai_result
+        }
+
+        yield generate_sse_event({
+            'stage': 'batch',
+            'status': 'file_complete',
+            'current': idx + 1,
+            'total': total_units,
+            'file': unit_name,
+            'html_path': html_relative_path,
+            'message': f'完成: {unit_name}'
+        })
+
+    # 汇总
+    batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
+    summary_data = {
+        'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'folder_name': folder_name,
+        'total_files': total_units,
+        'files': batch_results
+    }
+    with open(batch_summary_file, 'w', encoding='utf-8') as f:
+        json.dump(summary_data, f, indent=4, ensure_ascii=False)
+
+    from plugins.renderer.html_renderer import render_batch_html
+    batch_html_path = render_batch_html(batch_summary_file)
+    batch_html_relative = os.path.relpath(batch_html_path, get_project_root())
+
+    # 构建前端文件列表
+    frontend_files = []
+    for filename, file_data in batch_results.items():
+        total_errors = 0
+        total_warnings = 0
+        plugin_result = file_data.get('plugin_result', {})
+        for plugin_id, plugin_data in plugin_result.items():
+            if isinstance(plugin_data, dict):
+                sections = plugin_data.get('sections', [])
+                counts = count_severity(sections)
+                total_errors += counts['errors']
+                total_warnings += counts['warnings']
+        frontend_files.append({
+            'filename': filename,
+            'html_path': file_data.get('html_path', ''),
+            'errors': total_errors,
+            'warnings': total_warnings,
+            'has_ai': file_data.get('ai_result') is not None
+        })
+
+    yield generate_sse_event({
+        'stage': 'batch',
+        'status': 'complete',
+        'html_path': batch_html_relative,
+        'files': frontend_files,
+        'message': f'批量分析完成，共 {total_units} 个分析单元'
+    })
 
 
 @analyze_bp.route('/api/analyze/stream', methods=['POST'])
@@ -339,7 +455,6 @@ def analyze_stream():
             # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
-            ai_selection_mode = request.form.get('ai_selection_mode', 'false').lower() == 'true'
             kb_id = request.form.get('kb_id', '').strip() or None
             user_prompt = request.form.get('user_prompt', '').strip() or None
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
@@ -386,53 +501,8 @@ def analyze_stream():
             # Get plugin manager
             plugin_manager = get_plugin_manager_with_custom()
 
-            # Initialize selection variables
-            selected_plugins = []
-            selected_log_files = log_file_paths
-            selection_result = None
-
-            # Stage 0: AI Selection (if enabled)
-            if ai_selection_mode and enable_ai:
-                yield generate_sse_event({
-                    'stage': 'selection',
-                    'status': 'start',
-                    'message': 'AI 正在智能选择插件...'
-                })
-
-                try:
-                    # 使用指定的日志规则
-                    if log_rules_id:
-                        get_log_metadata_manager().set_active_rules(log_rules_id)
-
-                    selection_subagent = LogAnalyzerSubagent(
-                        settings_manager=settings_manager,
-                        log_metadata_manager=get_log_metadata_manager(),
-                        plugin_manager=plugin_manager
-                    )
-                    selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
-
-                    selected_plugins = selection_result['selected_plugins']
-                    selected_log_files = selection_result['selected_files']
-
-                    yield generate_sse_event({
-                        'stage': 'selection',
-                        'status': 'complete',
-                        'result': selection_result
-                    })
-
-                except Exception as e:
-                    yield generate_sse_event({
-                        'stage': 'selection',
-                        'status': 'error',
-                        'message': f'AI 选择失败: {str(e)}，将执行全量分析'
-                    })
-                    # 回退到所有插件和文件
-                    selected_plugins = [p.id for p in plugin_manager.get_all_plugins()]
-                    selected_log_files = log_file_paths
-            else:
-                # 使用用户选择的插件或所有插件
-                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-                selected_log_files = log_file_paths
+            # 使用用户选择的插件或所有插件
+            selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
 
             # 第1阶段：插件分析
             yield generate_sse_event({
@@ -644,7 +714,6 @@ def analyze_local_stream():
             path = data.get('path', '')
             plugins = data.get('plugins', [])
             enable_ai = data.get('enable_ai', False)
-            ai_selection_mode = data.get('ai_selection_mode', False)
             kb_id = data.get('kb_id', '').strip() or None
             user_prompt = data.get('user_prompt', '').strip() or None
             log_rules_id = data.get('log_rules_id', '').strip() or None
@@ -699,44 +768,8 @@ def analyze_local_stream():
                     yield generate_sse_event({'stage': 'error', 'message': '未找到日志文件'})
                     return
 
-                # 选择插件
-                selected_plugins = []
-                selected_log_files = log_file_paths
-                selection_result = None
-
-                if ai_selection_mode and enable_ai:
-                    yield generate_sse_event({
-                        'stage': 'selection',
-                        'status': 'start',
-                        'message': 'AI 正在智能选择插件...'
-                    })
-                    try:
-                        if log_rules_id:
-                            get_log_metadata_manager().set_active_rules(log_rules_id)
-                        selection_subagent = LogAnalyzerSubagent(
-                            settings_manager=settings_manager,
-                            log_metadata_manager=get_log_metadata_manager(),
-                            plugin_manager=plugin_manager
-                        )
-                        selection_result = selection_subagent.smart_select(log_file_paths, user_prompt, log_rules_id)
-                        selected_plugins = selection_result['selected_plugins']
-                        selected_log_files = selection_result['selected_files']
-                        yield generate_sse_event({
-                            'stage': 'selection',
-                            'status': 'complete',
-                            'result': selection_result
-                        })
-                    except Exception as e:
-                        yield generate_sse_event({
-                            'stage': 'selection',
-                            'status': 'error',
-                            'message': f'AI 选择失败: {str(e)}'
-                        })
-                        selected_plugins = [p.id for p in plugin_manager.get_all_plugins()]
-                        selected_log_files = log_file_paths
-                else:
-                    selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-                    selected_log_files = log_file_paths
+                # 使用用户选择的插件或所有插件
+                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
 
                 # 插件分析
                 yield generate_sse_event({
@@ -852,135 +885,14 @@ def analyze_local_stream():
                     yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
                     return
 
-                total_units = len(analysis_units)
-                yield generate_sse_event({
-                    'stage': 'batch',
-                    'status': 'files_found',
-                    'total': total_units,
-                    'message': f'发现 {total_units} 个分析单元'
-                })
-
+                # 选择插件
                 selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-                batch_results = {}
 
-                for idx, unit in enumerate(analysis_units):
-                    unit_name = unit['name']
-                    unit_path = unit['path']
-
-                    yield generate_sse_event({
-                        'stage': 'batch',
-                        'status': 'start_file',
-                        'current': idx + 1,
-                        'total': total_units,
-                        'file': unit_name,
-                        'message': f'分析: {unit_name} ({idx + 1}/{total_units})'
-                    })
-
-                    single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
-
-                    try:
-                        plugin_result = plugin_manager.run_analysis(
-                            selected_plugins, unit_path,
-                            log_callback=log_callback
-                        )
-                    except Exception as e:
-                        yield generate_sse_event({
-                            'stage': 'batch',
-                            'status': 'file_error',
-                            'file': unit_name,
-                            'message': f'插件分析失败: {str(e)}'
-                        })
-                        continue
-
-                    plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
-                    html_relative_path = save_and_render_plugin_result(plugin_result, plugin_output_file)
-
-                    log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
-
-                    ai_result = None
-                    if enable_ai:
-                        yield generate_sse_event({
-                            'stage': 'batch',
-                            'status': 'ai_start',
-                            'file': unit_name,
-                            'message': f'AI分析: {unit_name}'
-                        })
-                        try:
-                            ai_result = run_ai_analysis(
-                                plugin_result, log_files_in_unit, single_output_dir,
-                                kb_id, user_prompt, log_rules_id
-                            )
-                            yield generate_sse_event({
-                                'stage': 'batch',
-                                'status': 'ai_complete',
-                                'file': unit_name
-                            })
-                        except Exception as e:
-                            yield generate_sse_event({
-                                'stage': 'batch',
-                                'status': 'ai_error',
-                                'file': unit_name,
-                                'message': f'AI分析失败: {str(e)}'
-                            })
-
-                    batch_results[unit_name] = {
-                        'output_dir': os.path.basename(single_output_dir),
-                        'plugin_result': plugin_result,
-                        'html_path': html_relative_path,
-                        'ai_result': ai_result
-                    }
-
-                    yield generate_sse_event({
-                        'stage': 'batch',
-                        'status': 'file_complete',
-                        'current': idx + 1,
-                        'total': total_units,
-                        'file': unit_name,
-                        'html_path': html_relative_path,
-                        'message': f'完成: {unit_name}'
-                    })
-
-                # 汇总
-                batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
-                summary_data = {
-                    'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'folder_name': folder_name,
-                    'total_files': total_units,
-                    'files': batch_results
-                }
-                with open(batch_summary_file, 'w', encoding='utf-8') as f:
-                    json.dump(summary_data, f, indent=4, ensure_ascii=False)
-
-                from plugins.renderer.html_renderer import render_batch_html
-                batch_html_path = render_batch_html(batch_summary_file)
-                batch_html_relative = os.path.relpath(batch_html_path, get_project_root())
-
-                frontend_files = []
-                for filename, file_data in batch_results.items():
-                    total_errors = 0
-                    total_warnings = 0
-                    plugin_result = file_data.get('plugin_result', {})
-                    for plugin_id, plugin_data in plugin_result.items():
-                        if isinstance(plugin_data, dict):
-                            sections = plugin_data.get('sections', [])
-                            counts = count_severity(sections)
-                            total_errors += counts['errors']
-                            total_warnings += counts['warnings']
-                    frontend_files.append({
-                        'filename': filename,
-                        'html_path': file_data.get('html_path', ''),
-                        'errors': total_errors,
-                        'warnings': total_warnings,
-                        'has_ai': file_data.get('ai_result') is not None
-                    })
-
-                yield generate_sse_event({
-                    'stage': 'batch',
-                    'status': 'complete',
-                    'html_path': batch_html_relative,
-                    'files': frontend_files,
-                    'message': f'批量分析完成，共 {total_units} 个分析单元'
-                })
+                # 执行批量分析
+                yield from _process_batch_units(
+                    analysis_units, selected_plugins, batch_output_dir, folder_name,
+                    enable_ai, kb_id, user_prompt, log_rules_id
+                )
 
         except Exception as e:
             logger.error(f"本地路径分析失败: {str(e)}")
@@ -1101,15 +1013,7 @@ def analyze_batch_stream():
                 yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
                 return
 
-            total_units = len(analysis_units)
-            yield generate_sse_event({
-                'stage': 'batch',
-                'status': 'files_found',
-                'total': total_units,
-                'message': f'发现 {total_units} 个分析单元'
-            })
-
-            # 获取插件管理器
+            # 选择插件
             plugin_manager = get_plugin_manager_with_custom()
             selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
 
@@ -1117,141 +1021,11 @@ def analyze_batch_stream():
                 yield generate_sse_event({'stage': 'error', 'message': '没有可用的插件'})
                 return
 
-            # 分析每个单元
-            batch_results = {}
-            for idx, unit in enumerate(analysis_units):
-                unit_name = unit['name']
-                unit_path = unit['path']
-
-                yield generate_sse_event({
-                    'stage': 'batch',
-                    'status': 'start_file',
-                    'current': idx + 1,
-                    'total': total_units,
-                    'file': unit_name,
-                    'message': f'开始分析: {unit_name} ({idx + 1}/{total_units})'
-                })
-
-                # 创建单个单元的输出目录
-                single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
-
-                # 插件分析
-                try:
-                    # 使用日志回调函数，支持不同日志级别
-                    plugin_result = plugin_manager.run_analysis(
-                        selected_plugins, unit_path,
-                        log_callback=log_callback
-                    )
-                except Exception as e:
-                    yield generate_sse_event({
-                        'stage': 'batch',
-                        'status': 'file_error',
-                        'file': unit_name,
-                        'message': f'插件分析失败: {str(e)}'
-                    })
-                    continue
-
-                # 保存插件结果
-                plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
-                html_relative_path = save_and_render_plugin_result(plugin_result, plugin_output_file)
-
-                # 获取该单元内的日志文件列表（用于AI分析）
-                log_files_in_unit = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
-
-                # AI分析（如果启用）
-                ai_result = None
-                if enable_ai:
-                    yield generate_sse_event({
-                        'stage': 'batch',
-                        'status': 'ai_start',
-                        'file': unit_name,
-                        'message': f'AI分析: {unit_name}'
-                    })
-
-                    try:
-                        ai_result = run_ai_analysis(
-                            plugin_result, log_files_in_unit, single_output_dir,
-                            kb_id, user_prompt, log_rules_id
-                        )
-
-                        yield generate_sse_event({
-                            'stage': 'batch',
-                            'status': 'ai_complete',
-                            'file': unit_name
-                        })
-
-                    except Exception as e:
-                        yield generate_sse_event({
-                            'stage': 'batch',
-                            'status': 'ai_error',
-                            'file': unit_name,
-                            'message': f'AI分析失败: {str(e)}'
-                        })
-
-                # 记录结果
-                batch_results[unit_name] = {
-                    'output_dir': os.path.basename(single_output_dir),
-                    'plugin_result': plugin_result,
-                    'html_path': html_relative_path,
-                    'ai_result': ai_result
-                }
-
-                yield generate_sse_event({
-                    'stage': 'batch',
-                    'status': 'file_complete',
-                    'current': idx + 1,
-                    'total': total_units,
-                    'file': unit_name,
-                    'html_path': html_relative_path,
-                    'message': f'完成: {unit_name}'
-                })
-
-            # 生成汇总JSON
-            batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
-            summary_data = {
-                'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'folder_name': folder_name,
-                'total_files': total_units,
-                'files': batch_results
-            }
-            with open(batch_summary_file, 'w', encoding='utf-8') as f:
-                json.dump(summary_data, f, indent=4, ensure_ascii=False)
-
-            # 生成汇总HTML
-            from plugins.renderer.html_renderer import render_batch_html
-            batch_html_path = render_batch_html(batch_summary_file)
-
-            batch_html_relative = os.path.relpath(batch_html_path, get_project_root())
-
-            # 构建前端需要的文件列表
-            frontend_files = []
-            for filename, file_data in batch_results.items():
-                # 计算错误和警告数
-                total_errors = 0
-                total_warnings = 0
-                plugin_result = file_data.get('plugin_result', {})
-                for plugin_id, plugin_data in plugin_result.items():
-                    if isinstance(plugin_data, dict):
-                        sections = plugin_data.get('sections', [])
-                        counts = count_severity(sections)
-                        total_errors += counts['errors']
-                        total_warnings += counts['warnings']
-
-                frontend_files.append({
-                    'filename': filename,
-                    'html_path': file_data.get('html_path', ''),
-                    'errors': total_errors,
-                    'warnings': total_warnings,
-                    'has_ai': file_data.get('ai_result') is not None
-                })
-
-            yield generate_sse_event({
-                'stage': 'batch',
-                'status': 'complete',
-                'html_path': batch_html_relative,
-                'files': frontend_files,
-                'message': f'批量分析完成，共 {total_units} 个分析单元'
-            })
+            # 执行批量分析
+            yield from _process_batch_units(
+                analysis_units, selected_plugins, batch_output_dir, clean_folder_name,
+                enable_ai, kb_id, user_prompt, log_rules_id
+            )
 
         except Exception as e:
             yield generate_sse_event({'stage': 'error', 'message': str(e)})

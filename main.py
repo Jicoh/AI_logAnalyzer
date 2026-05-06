@@ -190,7 +190,9 @@ def run_web(args):
 
     # 自动打开浏览器
     if not no_browser:
-        url = f"http://{host}:{port}"
+        # 0.0.0.0 无法在浏览器直接访问，替换为 localhost
+        display_host = "localhost" if host == "0.0.0.0" else host
+        url = f"http://{display_host}:{port}"
         if analyze_path:
             encoded_path = urllib.parse.quote(analyze_path)
             url += f"/?auto_analyze={encoded_path}"
