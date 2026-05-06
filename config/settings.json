@@ -74,9 +74,5 @@
         "nlist": 100,
         "nprobe": 10,
         "use_gpu": false
-    },
-    "log_viewer": {
-        "enabled": false,
-        "exe_path": ""
     }
 }

@@ -205,7 +205,7 @@ def create_user():
         if not space_ok:
             return jsonify({
                 'success': False,
-                'error': f'{space_msg}，无法创建新用户，请联系管理员 w30038012'
+                'error': f'{space_msg}，无法创建新用户，请联系管理员'
             })
 
         user = User(
@@ -276,9 +276,6 @@ def get_config():
     try:
         settings_manager = SettingsManager()
         config = settings_manager.get_all()
-        # 添加 log_viewer 配置（从 settings.json 获取）
-        settings_manager = SettingsManager()
-        config['log_viewer'] = settings_manager.get('log_viewer', {'enabled': False, 'exe_path': ''})
         return jsonify({'success': True, 'data': config})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -359,16 +356,6 @@ def update_config():
                 settings_manager.set('retrieval.rrf_k', int(ret_config['rrf_k']))
 
         settings_manager.save()
-
-        # 更新 log_viewer 设置（保存到 settings.json）
-        if 'log_viewer' in data:
-            lv_config = data['log_viewer']
-            settings_manager = SettingsManager()
-            if 'enabled' in lv_config:
-                settings_manager.set('log_viewer.enabled', lv_config['enabled'])
-            if 'exe_path' in lv_config:
-                settings_manager.set('log_viewer.exe_path', lv_config['exe_path'])
-            settings_manager.save()
 
         logger.info(f"管理员 {current_user.employee_id} 更新系统配置")
 

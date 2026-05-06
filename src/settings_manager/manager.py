@@ -108,10 +108,6 @@ class SettingsManager:
             "nlist": 100,
             "nprobe": 10,
             "use_gpu": False
-        },
-        "log_viewer": {
-            "enabled": False,
-            "exe_path": ""
         }
     }
 

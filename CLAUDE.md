@@ -51,7 +51,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Settings Manager | `src/settings_manager/` | System config (API, BM25, embedding, log_viewer) |
+| Settings Manager | `src/settings_manager/` | System config (API, BM25, embedding) |
 | User Config | `src/user_config/` | User-level preferences (plugin selection, KB selection) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
@@ -270,7 +270,6 @@ File: `config/settings.json`
 - `bm25.*` - BM25 parameters (k1, b)
 - `embedding.*` - Vector embedding settings (enabled, provider, model, dimension)
 - `retrieval.*` - Search mode (bm25/vector/hybrid), weights, RRF parameters
-- `log_viewer.*` - Log viewer settings (enabled, exe_path)
 
 支持环境变量占位符：`${VAR_NAME}`
 

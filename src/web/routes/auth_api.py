@@ -113,7 +113,7 @@ def do_register():
         if not space_ok:
             return jsonify({
                 'success': False,
-                'error': f'{space_msg}，无法创建新用户，请联系管理员 w30038012'
+                'error': f'{space_msg}，无法创建新用户，请联系管理员'
             })
 
         # 创建用户

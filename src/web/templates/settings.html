@@ -234,25 +234,7 @@
                         </div>
                     </div>
 
-                    <hr>
-
-                    <!-- 日志查看器设置 -->
-                    <h6 class="text-muted mb-3"><i class="bi bi-file-text"></i> 日志查看器设置</h6>
-                    <div class="row mb-4">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">启用自动打开</label>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" x-model="config.log_viewer.enabled">
-                                <small class="text-muted d-block">分析完成后自动打开日志目录</small>
-                            </div>
-                        </div>
-                        <div class="col-md-8 mb-3">
-                            <label class="form-label">查看工具路径</label>
-                            <input type="text" class="form-control" x-model="config.log_viewer.exe_path" placeholder="C:\path\to\viewer.exe 或快捷方式 .lnk">
-                            <small class="text-muted">支持exe程序或.lnk快捷方式路径</small>
-                        </div>
                     </div>
-                </div>
             </div>
 
             <!-- 知识库管理 -->
@@ -934,8 +916,7 @@ function settingsApp() {
             orchestrator: { max_rounds: 20, tool_call_limit: 50, enable_mcp_tools: true, compression_retain_rounds: 5, context_limit: 120000, compression_threshold: 0.8 },
             subagent_api: {},
             embedding: { enabled: false, provider: '', base_url: '', api_key: '', model: '', dimension: 4096, batch_size: 100 },
-            retrieval: { mode: 'bm25', bm25_weight: 0.4, vector_weight: 0.6, rrf_k: 60 },
-            log_viewer: { enabled: false, exe_path: '' }
+            retrieval: { mode: 'bm25', bm25_weight: 0.4, vector_weight: 0.6, rrf_k: 60 }
         },
         configurableSubagents: [],
         showApiKey: false,
@@ -1066,8 +1047,7 @@ function settingsApp() {
                         orchestrator: { ...this.config.orchestrator, ...data.data.orchestrator },
                         subagent_api: data.data.subagent_api || {},
                         embedding: { ...this.config.embedding, ...data.data.embedding },
-                        retrieval: { ...this.config.retrieval, ...data.data.retrieval },
-                        log_viewer: { ...this.config.log_viewer, ...data.data.log_viewer }
+                        retrieval: { ...this.config.retrieval, ...data.data.retrieval }
                     };
                     this.initSubagentApiConfig();
                 }
