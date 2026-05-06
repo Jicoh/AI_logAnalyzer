@@ -1,6 +1,6 @@
 """
-Log Analyzer Agent 单元测试
-测试 ToolExecutor、LogAnalyzerAgent、验证机制、降级HTML生成
+Log Analyzer Subagent 单元测试
+测试 ToolExecutor、LogAnalyzerSubagent、验证机制、降级HTML生成
 """
 
 import os
@@ -16,8 +16,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(project_root, 'src'))
 sys.path.insert(0, project_root)
 
-from ai_analyzer.log_analyzer_agent import (
-    ToolExecutor, LogAnalyzerAgent, BUILTIN_TOOLS, BUILTIN_TOOL_NAMES
+from ai_analyzer.subagents.log_analyzer import (
+    ToolExecutor, LogAnalyzerSubagent, BUILTIN_TOOLS, BUILTIN_TOOL_NAMES
 )
 from ai_analyzer.client import AIResponse
 
@@ -195,10 +195,10 @@ class TestAIResponse:
         assert msg["tool_calls"] == [{"id": "call1", "function": {"name": "read_log"}}]
 
 
-# ==================== LogAnalyzerAgent 验证机制测试 ====================
+# ==================== LogAnalyzerSubagent 验证机制测试 ====================
 
-class TestLogAnalyzerAgentValidation:
-    """LogAnalyzerAgent验证机制测试"""
+class TestLogAnalyzerSubagentValidation:
+    """LogAnalyzerSubagent验证机制测试"""
 
     def setup_method(self):
         """创建mock配置管理器"""
@@ -209,9 +209,9 @@ class TestLogAnalyzerAgentValidation:
         }.get(key, default)
 
         # 使用patch避免加载实际模板
-        with patch.object(LogAnalyzerAgent, '_load_template', return_value=Mock()):
-            with patch.object(LogAnalyzerAgent, '_load_prompt', return_value="test prompt"):
-                self.agent = LogAnalyzerAgent(self.mock_config_manager)
+        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=Mock()):
+            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test prompt"):
+                self.agent = LogAnalyzerSubagent(self.mock_config_manager)
 
     def test_extract_json_from_code_block(self):
         """测试从代码块提取JSON"""
@@ -311,9 +311,9 @@ class TestLogAnalyzerAgentValidation:
         assert "AI返回空内容" in errors[0]
 
 
-# ==================== LogAnalyzerAgent HTML生成测试 ====================
+# ==================== LogAnalyzerSubagent HTML生成测试 ====================
 
-class TestLogAnalyzerAgentHTMLGeneration:
+class TestLogAnalyzerSubagentHTMLGeneration:
     """HTML生成测试"""
 
     def setup_method(self):
@@ -325,9 +325,9 @@ class TestLogAnalyzerAgentHTMLGeneration:
         }.get(key, default)
 
         # 创建agent，不加载模板（使用备用HTML）
-        with patch.object(LogAnalyzerAgent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerAgent, '_load_prompt', return_value="test"):
-                self.agent = LogAnalyzerAgent(self.mock_config_manager)
+        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test"):
+                self.agent = LogAnalyzerSubagent(self.mock_config_manager)
 
     def test_generate_fallback_html(self):
         """测试备用HTML生成"""
@@ -383,9 +383,9 @@ class TestLogAnalyzerAgentHTMLGeneration:
         assert "原始内容" in html
 
 
-# ==================== LogAnalyzerAgent 多轮交互测试 ====================
+# ==================== LogAnalyzerSubagent 多轮交互测试 ====================
 
-class TestLogAnalyzerAgentInteraction:
+class TestLogAnalyzerSubagentInteraction:
     """多轮交互测试（需要mock AIClient）"""
 
     def setup_method(self):
@@ -405,7 +405,10 @@ class TestLogAnalyzerAgentInteraction:
             f.write("test log content")
 
         try:
-            agent = LogAnalyzerAgent(self.mock_config_manager)
+            agent = LogAnalyzerSubagent(self.mock_config_manager)
+
+            # 初始化client
+            agent._init_client()
 
             # mock prompt加载方法返回简单模板
             agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
@@ -421,9 +424,9 @@ class TestLogAnalyzerAgentInteraction:
             })
             agent.client.chat_with_tools = Mock(return_value=AIResponse(content=valid_json))
 
-            result = agent.run_analysis(
-                plugin_result={},
+            result = agent.analyze(
                 log_files=[log_file],
+                plugin_result={},
                 machine_info={"serial_number": "SN001"},
                 knowledge_content="",
                 log_rules="",
@@ -447,7 +450,10 @@ class TestLogAnalyzerAgentInteraction:
             f.write("test log")
 
         try:
-            agent = LogAnalyzerAgent(self.mock_config_manager)
+            agent = LogAnalyzerSubagent(self.mock_config_manager)
+
+            # 初始化client
+            agent._init_client()
 
             # mock prompt加载方法
             agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
@@ -473,9 +479,9 @@ class TestLogAnalyzerAgentInteraction:
 
             agent.client.chat_with_tools = Mock(side_effect=[tool_call_response, final_response])
 
-            result = agent.run_analysis(
-                plugin_result={},
+            result = agent.analyze(
                 log_files=[log_file],
+                plugin_result={},
                 machine_info={},
                 knowledge_content="",
                 log_rules="",
@@ -501,7 +507,10 @@ class TestLogAnalyzerAgentInteraction:
             f.write("test")
 
         try:
-            agent = LogAnalyzerAgent(self.mock_config_manager)
+            agent = LogAnalyzerSubagent(self.mock_config_manager)
+
+            # 初始化client
+            agent._init_client()
 
             # mock prompt加载方法
             agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
@@ -520,9 +529,9 @@ class TestLogAnalyzerAgentInteraction:
 
             agent.client.chat_with_tools = Mock(side_effect=[invalid_response, valid_response])
 
-            result = agent.run_analysis(
-                plugin_result={},
+            result = agent.analyze(
                 log_files=[log_file],
+                plugin_result={},
                 machine_info={},
                 knowledge_content="",
                 log_rules="",
@@ -545,7 +554,10 @@ class TestLogAnalyzerAgentInteraction:
             f.write("test")
 
         try:
-            agent = LogAnalyzerAgent(self.mock_config_manager)
+            agent = LogAnalyzerSubagent(self.mock_config_manager)
+
+            # 初始化client
+            agent._init_client()
 
             # mock prompt加载方法
             agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
@@ -559,9 +571,9 @@ class TestLogAnalyzerAgentInteraction:
                 invalid_response, invalid_response, fallback_html_response
             ])
 
-            result = agent.run_analysis(
-                plugin_result={},
+            result = agent.analyze(
                 log_files=[log_file],
+                plugin_result={},
                 machine_info={},
                 knowledge_content="",
                 log_rules="",
@@ -590,9 +602,9 @@ class TestInteractionRecord:
             'agent': {'max_tokens': 60000, 'max_rounds': 10}
         }.get(key, default)
 
-        with patch.object(LogAnalyzerAgent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerAgent, '_load_prompt', return_value="test"):
-                agent = LogAnalyzerAgent(mock_config_manager)
+        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test"):
+                agent = LogAnalyzerSubagent(mock_config_manager)
 
         record = agent._build_interaction_record(
             system_prompt="system prompt content",
@@ -626,9 +638,9 @@ class TestFormattingHelpers:
             'agent': {}
         }.get(key, default)
 
-        with patch.object(LogAnalyzerAgent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerAgent, '_load_prompt', return_value=""):
-                self.agent = LogAnalyzerAgent(mock_config_manager)
+        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value=""):
+                self.agent = LogAnalyzerSubagent(mock_config_manager)
 
     def test_format_plugin_result(self):
         """测试插件结果格式化"""

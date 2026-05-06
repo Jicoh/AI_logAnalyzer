@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Generator, Dict, Any, List
 
 from .client import AIClient
-from .log_analyzer_agent import LogAnalyzerAgent
+from .subagents.log_analyzer import LogAnalyzerSubagent
 from .mcp_client import MCPClient
 from src.utils import get_logger
 
@@ -141,7 +141,7 @@ def analyze_with_agent(
     mcp_client: MCPClient = None
 ) -> Dict[str, Any]:
     """
-    使用LogAnalyzerAgent进行分析
+    使用LogAnalyzerSubagent进行分析
 
     Args:
         config_manager: 配置管理器
@@ -318,18 +318,23 @@ def analyze_with_agent(
     # 4. 加载分析模板
     analysis_templates = load_analysis_templates()
 
-    # 5. 创建Agent并执行分析
-    agent = LogAnalyzerAgent(config_manager, kb_manager, mcp_client)
+    # 5. 创建Subagent并执行分析
+    subagent = LogAnalyzerSubagent(
+        config_manager=config_manager,
+        kb_manager=kb_manager,
+        mcp_client=mcp_client,
+        log_metadata_manager=log_metadata_manager
+    )
 
-    result = agent.run_analysis(
-        plugin_result=plugin_result or {},
+    result = subagent.analyze(
         log_files=final_log_files,
+        plugin_result=plugin_result or {},
         machine_info=machine_info,
         knowledge_content=knowledge_content,
         log_rules=log_rules,
         analysis_templates=analysis_templates,
-        user_prompt=user_prompt or "",
-        kb_id=kb_id
+        kb_id=kb_id,
+        user_prompt=user_prompt or ""
     )
 
     # 6. 保存ai_temp记录

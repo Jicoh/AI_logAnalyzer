@@ -145,9 +145,11 @@ AI_logAnalyzer/
 └── src/                    # 源代码
     ├── ai_analyzer/        # AI分析模块
     │   ├── orchestrator_agent.py  # 主Agent编排器
-    │   ├── subagent_base.py       # Subagent基类
     │   ├── skill_loader.py        # Skill加载器
-    │   └── log_analyzer_agent.py  # 日志分析Agent
+    │   └── subagents/             # Subagent模块
+    │       ├── base.py            # Subagent基类
+    │       ├── registry.py        # Subagent注册表
+    │       └── log_analyzer.py    # 日志分析Subagent
     ├── session_manager/    # 会话管理模块
     ├── knowledge_base/     # 知识库模块
     ├── log_metadata/       # 日志元数据模块

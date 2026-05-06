@@ -45,7 +45,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 系统采用分层Agent架构：
 - **Orchestrator Agent** (`orchestrator_agent.py`): 主编排Agent，理解用户意图、选择Skill、调用Subagent/MCP工具、整合结果
 - **Subagent Registry**: Subagent注册表，管理可用的Subagent
-- **Log Analyzer Subagent**: 日志分析Subagent（改造自原有log_analyzer_agent.py），执行具体的日志分析任务
+- **Log Analyzer Subagent**: 日志分析Subagent，执行具体的日志分析任务（含智能选择功能）
 
 ### Key Modules
 
@@ -55,13 +55,10 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Settings Manager | `src/settings_manager/` | User preferences (log viewer settings) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
-| Selection Agent | `src/ai_analyzer/selection_agent.py` | AI-powered plugin/file selection（内部使用，Subagent自动调用） |
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
-| Subagent Base | `src/ai_analyzer/subagent_base.py` | Subagent基类 |
-| Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
+| Log Analyzer Subagent | `src/ai_analyzer/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎，含智能选择） |
+| Subagent Registry | `src/ai_analyzer/subagents/registry.py` | Subagent注册表 |
 | Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
-| Log Analyzer Agent | `src/ai_analyzer/log_analyzer_agent.py` | 日志分析Agent |
-| Log Analyzer Subagent | `src/ai_analyzer/log_analyzer_subagent.py` | 日志分析Subagent |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
 | Plugin Selection | `src/plugin_selection/` | Web UI state: selected plugins, KB, AI settings |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
@@ -299,14 +296,6 @@ Three retrieval modes supported via `retrieval.mode` config:
 
 RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+rank_vector)`
 
-## 已隐藏功能
-
-### AI智能选择模式 (SelectionAgent)
-- 功能代码保留在 `src/ai_analyzer/selection_agent.py`，供 Log Analyzer Subagent 内部使用
-- Web UI 和 CLI 的用户界面已完全移除（不再暴露给用户）
-- 后端API参数处理保留在 `analyze_api.py`，Subagent 自动调用
-- 配置项保留：`config/plugin_selection.json` 中的 `ai_selection_mode`
-
 ## 智能助手功能
 
 聊天式交互界面，主Agent智能编排Skill/MCP/Tool，日志分析Agent作为Subagent执行具体分析任务。
@@ -318,7 +307,7 @@ RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+ra
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent，理解用户意图、调度Subagent/MCP工具 |
 | Session Manager | `src/session_manager/` | 会话管理，最多3个活跃会话 |
 | Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
-| Log Analyzer Subagent | `src/ai_analyzer/log_analyzer_subagent.py` | 日志分析Subagent |
+| Log Analyzer Subagent | `src/ai_analyzer/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎） |
 | Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
 
 ### Skill系统

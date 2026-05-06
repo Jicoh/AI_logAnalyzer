@@ -5,7 +5,13 @@ Subagent模块
 
 from .base import SubagentBase, SubagentResult
 from .registry import SubagentRegistry, get_registry
-from .log_analyzer import LogAnalyzerSubagent, register_log_analyzer_subagent
+from .log_analyzer import (
+    LogAnalyzerSubagent,
+    register_log_analyzer_subagent,
+    ToolExecutor,
+    BUILTIN_TOOLS,
+    BUILTIN_TOOL_NAMES
+)
 
 __all__ = [
     'SubagentBase',
@@ -13,5 +19,8 @@ __all__ = [
     'SubagentRegistry',
     'get_registry',
     'LogAnalyzerSubagent',
-    'register_log_analyzer_subagent'
+    'register_log_analyzer_subagent',
+    'ToolExecutor',
+    'BUILTIN_TOOLS',
+    'BUILTIN_TOOL_NAMES'
 ]
