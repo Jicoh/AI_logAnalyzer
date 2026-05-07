@@ -209,25 +209,63 @@ class AIClient:
 
         return AIResponse(content=content, tool_calls=tool_calls)
 
-    def count_tokens(self, messages: list) -> int:
+    def count_tokens(self, messages: list, tools: list = None) -> int:
         """
-        粗略估算消息的token数量
+        估算消息的token数量（包含固定开销）
 
         Args:
             messages: 消息列表
+            tools: 工具定义列表（可选）
 
         Returns:
             int: 估算的token数量
         """
+        # 每条消息的角色开销约4 tokens
+        ROLE_OVERHEAD = 4
+
+        # 工具调用JSON开销约100 tokens/个
+        TOOL_CALL_OVERHEAD = 100
+
+        # 工具定义开销约50 tokens/个（包括schema描述）
+        TOOL_DEF_OVERHEAD = 50
+
         total = 0
+
+        # 工具定义开销
+        if tools:
+            for tool in tools:
+                total += TOOL_DEF_OVERHEAD
+                # 工具参数schema也有开销
+                params = tool.get('function', {}).get('parameters', {})
+                if params:
+                    props = params.get('properties', {})
+                    total += len(props) * 5
+
         for msg in messages:
+            # 角色开销
+            total += ROLE_OVERHEAD
+
             content = msg.get('content', '')
             if isinstance(content, str):
                 # 中文约1.5字符/token，英文约4字符/token
                 # 简化估算：平均2.5字符/token
                 total += len(content) // 2.5
+
             elif isinstance(content, list):
                 for item in content:
                     if isinstance(item, dict) and item.get('type') == 'text':
                         total += len(item.get('text', '')) // 2.5
+
+            # 工具调用开销
+            tool_calls = msg.get('tool_calls', [])
+            for tc in tool_calls:
+                total += TOOL_CALL_OVERHEAD
+                args = tc.get('function', {}).get('arguments', '')
+                # JSON字符串开销更大
+                total += len(args) // 4
+
+            # tool消息的结果也有开销
+            if msg.get('role') == 'tool':
+                total += ROLE_OVERHEAD
+
         return int(total)

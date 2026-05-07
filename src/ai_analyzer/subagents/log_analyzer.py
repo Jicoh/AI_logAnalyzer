@@ -157,10 +157,12 @@ class ToolExecutor:
         return None
 
     def read_by_keyword(self, args: dict) -> dict:
-        """按关键词读取日志"""
+        """按关键词读取日志，返回多个匹配"""
         file_name = args.get('file', '')
         keyword = args.get('keyword', '')
         context_lines = args.get('context_lines', 20)
+        max_matches = args.get('max_matches', 3)
+        offset = args.get('offset', 0)  # 跳过前offset个匹配，用于分批查看
 
         file_path = self.find_file(file_name)
         if not file_path:
@@ -188,22 +190,36 @@ class ToolExecutor:
                 "message": f"未找到关键词: {keyword}"
             }
 
-        target_idx = matches[0]
-        start = max(0, target_idx - context_lines)
-        end = min(len(lines), target_idx + context_lines + 1)
+        # 根据offset和max_matches选择要返回的匹配
+        start_idx = offset
+        end_idx = min(offset + max_matches, len(matches))
+        selected_matches = matches[start_idx:end_idx]
 
-        content_lines = []
-        for i in range(start, end):
-            marker = ">>>" if i == target_idx else "   "
-            content_lines.append(f"{marker} [{i+1}] {lines[i].rstrip()}")
+        match_contents = []
+        for match_num, target_idx in enumerate(selected_matches, start=start_idx + 1):
+            start = max(0, target_idx - context_lines)
+            end = min(len(lines), target_idx + context_lines + 1)
+
+            content_lines = []
+            for i in range(start, end):
+                marker = ">>>" if i == target_idx else "   "
+                content_lines.append(f"{marker} [{i+1}] {lines[i].rstrip()}")
+
+            match_contents.append({
+                "match_index": match_num,
+                "matched_line": target_idx + 1,
+                "content": '\n'.join(content_lines)
+            })
 
         return {
             "found": True,
             "keyword": keyword,
             "file": file_name,
-            "matched_line": target_idx + 1,
             "total_matches": len(matches),
-            "content": '\n'.join(content_lines)
+            "returned_matches": len(match_contents),
+            "offset": offset,
+            "has_more": end_idx < len(matches),
+            "matches": match_contents
         }
 
     def read_by_range(self, args: dict) -> dict:

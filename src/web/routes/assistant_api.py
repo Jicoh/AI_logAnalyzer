@@ -4,6 +4,7 @@
 """
 
 import os
+import json
 import zipfile
 from io import BytesIO
 from flask import Blueprint, jsonify, request, send_file, Response, stream_with_context
@@ -176,6 +177,69 @@ def chat(session_id):
     except Exception as e:
         logger.error(f"对话失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def generate_sse_event(data):
+    """生成SSE事件字符串"""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@assistant_bp.route('/api/assistant/sessions/<session_id>/chat-stream', methods=['POST'])
+@login_required
+def chat_stream(session_id):
+    """发送消息并获取AI流式回复（SSE）。"""
+    def generate():
+        try:
+            user_id = get_current_user_id()
+            if not user_id:
+                yield generate_sse_event({'error': '请先登录'})
+                return
+
+            data = request.get_json()
+            user_input = data.get('message', '')
+
+            if not user_input:
+                yield generate_sse_event({'error': '消息不能为空'})
+                return
+
+            # 检查会话是否存在
+            session_manager = SessionManager(user_id)
+            session = session_manager.get_session(session_id)
+            if not session:
+                yield generate_sse_event({'error': '会话不存在'})
+                return
+
+            # 初始化OrchestratorAgent
+            settings_manager = SystemConfigManager()
+            kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
+
+            agent = OrchestratorAgent(
+                user_id=user_id,
+                session_id=session_id,
+                settings_manager=settings_manager,
+                kb_manager=kb_manager
+            )
+
+            # 流式调用
+            for chunk in agent.chat_stream(user_input):
+                yield generate_sse_event({'content': chunk})
+
+            # 发送完成信号
+            yield generate_sse_event({'done': True})
+
+        except Exception as e:
+            logger.error(f"流式对话失败: {str(e)}")
+            yield generate_sse_event({'error': str(e)})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
 
 
 @assistant_bp.route('/api/assistant/sessions/<session_id>/state', methods=['GET'])

@@ -359,7 +359,7 @@ class OrchestratorAgent:
 
     def calculate_context_usage(self, messages: List[Dict]) -> int:
         """计算上下文使用量"""
-        return self.client.count_tokens(messages)
+        return self.client.count_tokens(messages, self.tools)
 
     def compress_context(self, messages: List[Dict]) -> List[Dict]:
         """压缩上下文"""
@@ -554,6 +554,54 @@ class OrchestratorAgent:
 
         logger.debug(f"对话完成: {round_count}轮, {tool_call_count}次工具调用")
         return final_response, metadata
+
+    def chat_stream(self, user_input: str):
+        """
+        流式对话接口（无工具调用）
+        用于AI助手聊天，实时显示AI响应
+
+        Args:
+            user_input: 用户输入
+
+        Yields:
+            str: AI响应的文本片段
+        """
+        logger.debug(f"流式对话开始: {user_input[:100]}...")
+
+        # 构建消息
+        messages = []
+        system_prompt = self.build_system_prompt()
+        messages.append({"role": "system", "content": system_prompt})
+        messages.extend(self.conversation_history)
+        if user_input:
+            messages.append({"role": "user", "content": user_input})
+
+        # 收集完整响应
+        full_response = ""
+
+        # 流式调用AI
+        try:
+            for chunk in self.client.chat(messages):
+                full_response += chunk
+                yield chunk
+        except Exception as e:
+            logger.error(f"流式对话失败: {str(e)}")
+            yield f"[错误: {str(e)}]"
+            return
+
+        # 更新对话历史
+        if user_input:
+            self.conversation_history.append({"role": "user", "content": user_input})
+        if full_response:
+            self.conversation_history.append({"role": "assistant", "content": full_response})
+
+        # 保存消息到会话
+        if user_input:
+            self.session_manager.save_message(self.session_id, "user", user_input)
+        if full_response:
+            self.session_manager.save_message(self.session_id, "assistant", full_response)
+
+        logger.debug(f"流式对话完成: 响应长度={len(full_response)}")
 
     def execute_tool_call(self, tool_name: str, args: Dict) -> Dict:
         """执行工具调用"""
