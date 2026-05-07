@@ -172,7 +172,7 @@
     <div class="chat-main flex-grow-1 d-flex flex-column">
         <!-- 消息列表 -->
         <div class="message-list flex-grow-1 p-3" id="messageList">
-            <template x-for="msg in messages" :key="msg.timestamp">
+            <template x-for="msg in messages" :key="msg.id || msg.timestamp">
                 <div class="message mb-3" :class="msg.role === 'user' ? 'user-message' : 'assistant-message'">
                     <div class="message-header">
                         <span class="badge" :class="msg.role === 'user' ? 'bg-primary' : 'bg-success'"
@@ -305,6 +305,11 @@ function assistantApp() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
+                if (response.status === 401) {
+                    Utils.showToast('请先登录', 'error');
+                    window.location.href = '/login';
+                    return;
+                }
                 const data = await response.json();
                 if (data.success) {
                     const newSessionId = data.data.session_id;
@@ -361,11 +366,18 @@ function assistantApp() {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/messages`);
                 const data = await response.json();
                 if (data.success) {
-                    this.messages = data.data;
+                    // 为每条消息添加唯一 ID（如果没有）
+                    this.messages = data.data.map(msg => ({
+                        id: msg.id || msg.timestamp + '_' + Math.random().toString(36).substr(2, 9),
+                        role: msg.role,
+                        content: msg.content,
+                        timestamp: msg.timestamp
+                    }));
                     this.scrollToBottom();
                 }
             } catch (e) {
                 Utils.showToast('加载消息失败: ' + e.message, 'error');
+                this.messages = [];
             }
         },
 
@@ -406,13 +418,20 @@ function assistantApp() {
         async sendMessage() {
             if (!this.currentSessionId || !this.inputMessage || this.loading) return;
 
+            // 确保 messages 数组存在
+            if (!this.messages) {
+                this.messages = [];
+            }
+
             const message = this.inputMessage;
             this.inputMessage = '';
             this.loading = true;
 
-            // 添加用户消息到列表（乐观更新）
+            // 添加用户消息到列表（乐观更新），使用唯一 ID
+            const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             const now = new Date().toLocaleString('zh-CN');
             this.messages.push({
+                id: messageId,
                 role: 'user',
                 content: message,
                 timestamp: now
@@ -428,8 +447,9 @@ function assistantApp() {
                 const data = await response.json();
 
                 if (data.success) {
-                    // 添加AI回复
+                    // 添加AI回复，使用唯一 ID
                     this.messages.push({
+                        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                         role: 'assistant',
                         content: data.data.response,
                         timestamp: new Date().toLocaleString('zh-CN')
@@ -444,12 +464,17 @@ function assistantApp() {
                 } else {
                     Utils.showToast(data.error || '对话失败', 'error');
                     // 移除乐观添加的用户消息
-                    this.messages.pop();
+                    if (this.messages && this.messages.length > 0) {
+                        this.messages.pop();
+                    }
                     this.inputMessage = message;
                 }
             } catch (e) {
                 Utils.showToast('发送消息失败: ' + e.message, 'error');
-                this.messages.pop();
+                // 确保 messages 存在且不为空才移除
+                if (this.messages && this.messages.length > 0) {
+                    this.messages.pop();
+                }
                 this.inputMessage = message;
             }
 

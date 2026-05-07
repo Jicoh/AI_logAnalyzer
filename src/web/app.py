@@ -130,11 +130,17 @@ def create_app():
     csrf.exempt(app.view_functions['analyze_api.analyze_local_stream'])
     csrf.exempt(app.view_functions['analyze_api.analyze_batch_stream'])
 
-    # CSRF豁免：JSON API端点使用其他保护机制（限流+认证）
+    # CSRF豁免：认证端点（使用限流保护）
     csrf.exempt(app.view_functions['auth.do_login'])
     csrf.exempt(app.view_functions['auth.do_register'])
     csrf.exempt(app.view_functions['auth.do_logout'])
     csrf.exempt(app.view_functions['auth.change_password'])
+
+    # CSRF豁免：智能助手API（使用限流+认证保护）
+    csrf.exempt(app.view_functions['assistant_api.create_session'])
+    csrf.exempt(app.view_functions['assistant_api.delete_session'])
+    csrf.exempt(app.view_functions['assistant_api.chat'])
+    csrf.exempt(app.view_functions['assistant_api.chat_stream'])
 
     return app
 
