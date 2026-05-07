@@ -172,7 +172,7 @@ def run_ai_analysis(
     plugin_result: dict,
     log_file_paths: list,
     analysis_output_dir: str,
-    kb_id: str = None,
+    kb_ids: list = None,
     user_prompt: str = None,
     log_rules_id: str = None
 ) -> dict:
@@ -195,7 +195,7 @@ def run_ai_analysis(
     result = subagent.analyze(
         log_files=log_file_paths,
         plugin_result=plugin_result,
-        kb_id=kb_id,
+        kb_ids=kb_ids or [],
         user_prompt=user_prompt,
         log_rules_id=log_rules_id
     )
@@ -208,7 +208,7 @@ def run_ai_analysis(
     ai_html_relative = os.path.relpath(ai_html_file, get_project_root())
     return {
         'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'kb_id': kb_id,
+        'kb_ids': kb_ids,
         'html_path': ai_html_relative
     }
 
@@ -402,7 +402,7 @@ def analyze_stream():
             # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
-            kb_id = request.form.get('kb_id', '').strip() or None
+            kb_ids = request.form.getlist('kb_ids')
             user_prompt = request.form.get('user_prompt', '').strip() or None
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
@@ -491,7 +491,7 @@ def analyze_stream():
                 try:
                     ai_result_data = run_ai_analysis(
                         combined_result, log_file_paths, analysis_output_dir,
-                        kb_id, user_prompt, log_rules_id
+                        kb_ids, user_prompt, log_rules_id
                     )
 
                     yield generate_sse_event({
@@ -853,7 +853,7 @@ def analyze_batch_stream():
             # 获取表单数据
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
-            kb_id = request.form.get('kb_id', '').strip() or None
+            kb_ids = request.form.getlist('kb_ids')
             user_prompt = request.form.get('user_prompt', '').strip() or None
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 

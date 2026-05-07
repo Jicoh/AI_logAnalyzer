@@ -52,6 +52,23 @@ def list_kb():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@kb_bp.route('/api/kb/reload', methods=['POST'])
+def reload_kb():
+    """重新加载知识库列表"""
+    global kb_manager
+    try:
+        kb_manager = None
+        manager = get_kb_manager()
+        kb_list = manager.list()
+        # 为前端兼容性添加 'id' 字段作为 'kb_id' 的别名
+        for kb in kb_list:
+            if 'kb_id' in kb and 'id' not in kb:
+                kb['id'] = kb['kb_id']
+        return jsonify({'success': True, 'message': '知识库列表已刷新', 'data': kb_list})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @kb_bp.route('/api/kb', methods=['POST'])
 @admin_required
 def create_kb():

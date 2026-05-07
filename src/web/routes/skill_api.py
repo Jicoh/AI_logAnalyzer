@@ -37,9 +37,9 @@ def list_skills():
 
 
 @skill_bp.route('/api/skills/reload', methods=['POST'])
-@admin_required
+@login_required
 def reload_skills():
-    """刷新Skill列表（管理员）。"""
+    """刷新Skill列表。"""
     try:
         loader = get_skill_loader()
         loader.reload()

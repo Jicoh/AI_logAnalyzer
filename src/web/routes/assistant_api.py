@@ -1,6 +1,6 @@
 """
-智能助手API路由。
-提供会话管理、对话、文件管理等接口。
+智能助手API路由
+提供会话管理、对话、文件管理、知识库检索等接口
 """
 
 import os
@@ -15,7 +15,8 @@ from src.session_manager.manager import SessionManager
 from src.ai_analyzer.orchestrator_agent import OrchestratorAgent
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
-from src.utils.file_utils import get_user_data_dir
+from src.user_config_manager.manager import UserConfigManager
+from src.utils.file_utils import get_user_data_dir, is_safe_path
 from src.utils import get_logger
 
 logger = get_logger('assistant_api')
@@ -24,16 +25,18 @@ assistant_bp = Blueprint('assistant_api', __name__)
 
 
 def get_current_user_id():
-    """获取当前登录用户的ID（工号）。"""
+    """获取当前登录用户的ID"""
     if current_user.is_authenticated:
         return current_user.employee_id
     return None
 
 
+# ==================== 会话管理 ====================
+
 @assistant_bp.route('/api/assistant/sessions', methods=['GET'])
 @login_required
 def list_sessions():
-    """获取用户的会话列表。"""
+    """获取用户的会话列表"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -46,10 +49,10 @@ def list_sessions():
         for session in sessions:
             result.append({
                 'session_id': session.session_id,
+                'title': session.title,
                 'created_at': session.created_at,
                 'updated_at': session.updated_at,
                 'message_count': session.message_count,
-                'title': session.title,
                 'status': session.status
             })
 
@@ -62,7 +65,7 @@ def list_sessions():
 @assistant_bp.route('/api/assistant/sessions', methods=['POST'])
 @login_required
 def create_session():
-    """创建新会话。"""
+    """创建新会话"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -74,7 +77,7 @@ def create_session():
         if error:
             return jsonify({'success': False, 'error': error}), 400
 
-        logger.info(f"创建会话成功: user={user_id}, session={session_id}")
+        logger.info(f"创建会话: user={user_id}, session={session_id}")
         return jsonify({'success': True, 'data': {'session_id': session_id}})
     except Exception as e:
         logger.error(f"创建会话失败: {str(e)}")
@@ -84,7 +87,7 @@ def create_session():
 @assistant_bp.route('/api/assistant/sessions/<session_id>', methods=['DELETE'])
 @login_required
 def delete_session(session_id):
-    """删除会话。"""
+    """删除会话"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -96,7 +99,7 @@ def delete_session(session_id):
         if not success:
             return jsonify({'success': False, 'error': error}), 400
 
-        logger.info(f"删除会话成功: user={user_id}, session={session_id}")
+        logger.info(f"删除会话: user={user_id}, session={session_id}")
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"删除会话失败: {str(e)}")
@@ -106,7 +109,7 @@ def delete_session(session_id):
 @assistant_bp.route('/api/assistant/sessions/<session_id>/messages', methods=['GET'])
 @login_required
 def get_messages(session_id):
-    """获取会话的对话历史。"""
+    """获取会话的对话历史"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -125,127 +128,14 @@ def get_messages(session_id):
 
         return jsonify({'success': True, 'data': result})
     except Exception as e:
-        logger.error(f"获取对话历史失败: {str(e)}")
+        logger.error(f"获取消息失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@assistant_bp.route('/api/assistant/sessions/<session_id>/chat', methods=['POST'])
-@login_required
-def chat(session_id):
-    """发送消息并获取AI回复（非流式）。"""
-    try:
-        user_id = get_current_user_id()
-        if not user_id:
-            return jsonify({'success': False, 'error': '请先登录'}), 401
-
-        data = request.get_json()
-        user_input = data.get('message', '')
-
-        if not user_input:
-            return jsonify({'success': False, 'error': '消息不能为空'}), 400
-
-        # 检查会话是否存在
-        session_manager = SessionManager(user_id)
-        session = session_manager.get_session(session_id)
-        if not session:
-            return jsonify({'success': False, 'error': '会话不存在'}), 404
-
-        # 初始化OrchestratorAgent
-        settings_manager = SystemConfigManager()
-        kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
-
-        agent = OrchestratorAgent(
-            user_id=user_id,
-            session_id=session_id,
-            settings_manager=settings_manager,
-            kb_manager=kb_manager
-        )
-
-        # 调用chat方法
-        response, metadata = agent.chat(user_input)
-
-        logger.debug(f"对话完成: session={session_id}, context_usage={metadata.get('context_usage', 0)}")
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'response': response,
-                'context_usage': metadata.get('context_usage', 0),
-                'tool_calls': metadata.get('tool_call_count', 0)
-            }
-        })
-    except Exception as e:
-        logger.error(f"对话失败: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-def generate_sse_event(data):
-    """生成SSE事件字符串"""
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-@assistant_bp.route('/api/assistant/sessions/<session_id>/chat-stream', methods=['POST'])
-@login_required
-def chat_stream(session_id):
-    """发送消息并获取AI流式回复（SSE）。"""
-    def generate():
-        try:
-            user_id = get_current_user_id()
-            if not user_id:
-                yield generate_sse_event({'error': '请先登录'})
-                return
-
-            data = request.get_json()
-            user_input = data.get('message', '')
-
-            if not user_input:
-                yield generate_sse_event({'error': '消息不能为空'})
-                return
-
-            # 检查会话是否存在
-            session_manager = SessionManager(user_id)
-            session = session_manager.get_session(session_id)
-            if not session:
-                yield generate_sse_event({'error': '会话不存在'})
-                return
-
-            # 初始化OrchestratorAgent
-            settings_manager = SystemConfigManager()
-            kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
-
-            agent = OrchestratorAgent(
-                user_id=user_id,
-                session_id=session_id,
-                settings_manager=settings_manager,
-                kb_manager=kb_manager
-            )
-
-            # 流式调用
-            for chunk in agent.chat_stream(user_input):
-                yield generate_sse_event({'content': chunk})
-
-            # 发送完成信号
-            yield generate_sse_event({'done': True})
-
-        except Exception as e:
-            logger.error(f"流式对话失败: {str(e)}")
-            yield generate_sse_event({'error': str(e)})
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
-        }
-    )
 
 
 @assistant_bp.route('/api/assistant/sessions/<session_id>/state', methods=['GET'])
 @login_required
 def get_state(session_id):
-    """获取会话状态。"""
+    """获取会话状态"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -270,14 +160,14 @@ def get_state(session_id):
             }
         })
     except Exception as e:
-        logger.error(f"获取会话状态失败: {str(e)}")
+        logger.error(f"获取状态失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @assistant_bp.route('/api/assistant/sessions/<session_id>/files', methods=['GET'])
 @login_required
 def list_files(session_id):
-    """获取会话工作目录的文件列表。"""
+    """获取会话工作目录的文件列表"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -301,8 +191,7 @@ def list_files(session_id):
                     files.append({
                         'name': filename,
                         'path': rel_path,
-                        'size': os.path.getsize(file_path),
-                        'type': 'work_dir'
+                        'size': os.path.getsize(file_path)
                     })
 
         # 遍历输出目录
@@ -313,9 +202,8 @@ def list_files(session_id):
                     rel_path = os.path.relpath(file_path, outputs_dir)
                     files.append({
                         'name': filename,
-                        'path': rel_path,
-                        'size': os.path.getsize(file_path),
-                        'type': 'outputs'
+                        'path': 'outputs/' + rel_path,
+                        'size': os.path.getsize(file_path)
                     })
 
         return jsonify({'success': True, 'data': files})
@@ -327,7 +215,7 @@ def list_files(session_id):
 @assistant_bp.route('/api/assistant/sessions/<session_id>/files/<path:file_path>', methods=['GET'])
 @login_required
 def download_file(session_id, file_path):
-    """下载单个文件。"""
+    """下载单个文件"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -340,15 +228,17 @@ def download_file(session_id, file_path):
         if not work_dir:
             return jsonify({'success': False, 'error': '会话不存在'}), 404
 
-        # 在工作目录和输出目录中查找文件
+        # 处理outputs路径
         full_path = None
-        work_file = os.path.join(work_dir, file_path)
-        if os.path.exists(work_file):
-            full_path = work_file
-        elif outputs_dir:
-            output_file = os.path.join(outputs_dir, file_path)
-            if os.path.exists(output_file):
+        if file_path.startswith('outputs/'):
+            actual_path = file_path.replace('outputs/', '')
+            output_file = os.path.join(outputs_dir, actual_path)
+            if os.path.exists(output_file) and is_safe_path(output_file, outputs_dir):
                 full_path = output_file
+        else:
+            work_file = os.path.join(work_dir, file_path)
+            if os.path.exists(work_file) and is_safe_path(work_file, work_dir):
+                full_path = work_file
 
         if not full_path:
             return jsonify({'success': False, 'error': '文件不存在'}), 404
@@ -360,10 +250,10 @@ def download_file(session_id, file_path):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@assistant_bp.route('/api/assistant/sessions/<session_id>/files/download-all', methods=['POST'])
+@assistant_bp.route('/api/assistant/sessions/<session_id>/files/download-all', methods=['GET'])
 @login_required
 def download_all_files(session_id):
-    """打包下载所有文件。"""
+    """打包下载所有文件"""
     try:
         user_id = get_current_user_id()
         if not user_id:
@@ -379,7 +269,6 @@ def download_all_files(session_id):
         zip_buffer = BytesIO()
 
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # 添加工作目录文件
             if os.path.exists(work_dir):
                 for root, dirs, filenames in os.walk(work_dir):
                     for filename in filenames:
@@ -387,7 +276,6 @@ def download_all_files(session_id):
                         rel_path = os.path.relpath(file_path, work_dir)
                         zf.write(file_path, os.path.join('work_dir', rel_path))
 
-            # 添加输出目录文件
             if outputs_dir and os.path.exists(outputs_dir):
                 for root, dirs, filenames in os.walk(outputs_dir):
                     for filename in filenames:
@@ -396,7 +284,6 @@ def download_all_files(session_id):
                         zf.write(file_path, os.path.join('outputs', rel_path))
 
         zip_buffer.seek(0)
-
         return send_file(
             zip_buffer,
             download_name=f'session_{session_id}_files.zip',
@@ -405,3 +292,186 @@ def download_all_files(session_id):
     except Exception as e:
         logger.error(f"打包下载失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== 对话接口 ====================
+
+@assistant_bp.route('/api/assistant/sessions/<session_id>/chat', methods=['POST'])
+@login_required
+def chat(session_id):
+    """
+    发送消息并获取AI回复
+    支持知识库检索增强
+    """
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        user_input = data.get('message', '')
+        kb_ids = data.get('kb_ids', [])
+
+        if not user_input:
+            return jsonify({'success': False, 'error': '消息不能为空'}), 400
+
+        # 检查会话是否存在
+        session_manager = SessionManager(user_id)
+        session = session_manager.get_session(session_id)
+        if not session:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+
+        # 初始化组件
+        settings_manager = SystemConfigManager()
+        kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
+
+        # 知识库检索（如果有选择的知识库）
+        kb_context = ""
+        if kb_ids:
+            kb_context = retrieve_knowledge_context(kb_manager, kb_ids, user_input)
+            logger.debug(f"知识库检索结果: {len(kb_context)}字符")
+
+        # 初始化OrchestratorAgent
+        agent = OrchestratorAgent(
+            user_id=user_id,
+            session_id=session_id,
+            settings_manager=settings_manager,
+            kb_manager=kb_manager
+        )
+
+        # 设置知识库上下文
+        if kb_context:
+            agent.set_kb_context(kb_context)
+
+        # 调用chat方法
+        response, metadata = agent.chat(user_input)
+
+        logger.debug(f"对话完成: session={session_id}, context_usage={metadata.get('context_usage', 0)}")
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'response': response,
+                'context_usage': metadata.get('context_usage', 0),
+                'tool_calls': metadata.get('tool_call_count', 0)
+            }
+        })
+    except Exception as e:
+        logger.error(f"对话失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def retrieve_knowledge_context(kb_manager, kb_ids, query):
+    """
+    从多个知识库检索相关内容
+
+    Args:
+        kb_manager: 知识库管理器
+        kb_ids: 知识库ID列表
+        query: 用户查询
+
+    Returns:
+        str: 检索结果文本
+    """
+    contexts = []
+
+    for kb_id in kb_ids:
+        try:
+            kb_info = kb_manager.get(kb_id)
+            if not kb_info:
+                continue
+
+            # 执行检索
+            results = kb_manager.search(kb_id, query, top_k=3)
+
+            if results:
+                kb_name = kb_info.get('name', kb_id)
+                context_parts = []
+                for result in results:
+                    content = result.get('content', '')
+                    if content:
+                        context_parts.append(content)
+
+                if context_parts:
+                    contexts.append(f"【{kb_name}】\n" + "\n".join(context_parts))
+
+        except Exception as e:
+            logger.warning(f"知识库检索失败: kb_id={kb_id}, error={str(e)}")
+
+    if contexts:
+        return "\n\n".join(contexts)
+    return ""
+
+
+# ==================== 流式对话 ====================
+
+def generate_sse_event(data):
+    """生成SSE事件字符串"""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@assistant_bp.route('/api/assistant/sessions/<session_id>/chat-stream', methods=['POST'])
+@login_required
+def chat_stream(session_id):
+    """发送消息并获取AI流式回复"""
+    def generate():
+        try:
+            user_id = get_current_user_id()
+            if not user_id:
+                yield generate_sse_event({'error': '请先登录'})
+                return
+
+            data = request.get_json()
+            user_input = data.get('message', '')
+            kb_ids = data.get('kb_ids', [])
+
+            if not user_input:
+                yield generate_sse_event({'error': '消息不能为空'})
+                return
+
+            # 检查会话
+            session_manager = SessionManager(user_id)
+            session = session_manager.get_session(session_id)
+            if not session:
+                yield generate_sse_event({'error': '会话不存在'})
+                return
+
+            # 初始化组件
+            settings_manager = SystemConfigManager()
+            kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
+
+            # 知识库检索
+            kb_context = ""
+            if kb_ids:
+                kb_context = retrieve_knowledge_context(kb_manager, kb_ids, user_input)
+
+            # 初始化Agent
+            agent = OrchestratorAgent(
+                user_id=user_id,
+                session_id=session_id,
+                settings_manager=settings_manager,
+                kb_manager=kb_manager
+            )
+
+            if kb_context:
+                agent.set_kb_context(kb_context)
+
+            # 流式调用
+            for chunk in agent.chat_stream(user_input):
+                yield generate_sse_event({'content': chunk})
+
+            yield generate_sse_event({'done': True})
+
+        except Exception as e:
+            logger.error(f"流式对话失败: {str(e)}")
+            yield generate_sse_event({'error': str(e)})
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )

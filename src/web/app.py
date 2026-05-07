@@ -142,6 +142,17 @@ def create_app():
     csrf.exempt(app.view_functions['assistant_api.chat'])
     csrf.exempt(app.view_functions['assistant_api.chat_stream'])
 
+    # CSRF豁免：用户配置API（已使用登录保护）
+    csrf.exempt(app.view_functions['user_config_api.reload_mcp_servers'])
+    csrf.exempt(app.view_functions['user_config_api.toggle_mcp_server'])
+    csrf.exempt(app.view_functions['user_config_api.toggle_skill'])
+
+    # CSRF豁免：知识库API
+    csrf.exempt(app.view_functions['kb_api.reload_kb'])
+
+    # CSRF豁免：Skill API
+    csrf.exempt(app.view_functions['skill_api.reload_skills'])
+
     return app
 
 

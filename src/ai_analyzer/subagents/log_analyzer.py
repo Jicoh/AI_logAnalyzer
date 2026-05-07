@@ -471,7 +471,7 @@ class LogAnalyzerSubagent(SubagentBase):
         self,
         log_files: List[str],
         plugin_result: Dict = None,
-        kb_id: str = None,
+        kb_ids: List[str] = None,
         user_prompt: str = None,
         log_rules_id: str = None,
         user_intent: str = None,
@@ -483,7 +483,7 @@ class LogAnalyzerSubagent(SubagentBase):
         Args:
             log_files: 日志文件路径列表
             plugin_result: 插件分析结果（可选，为None时触发智能选择）
-            kb_id: 知识库ID
+            kb_ids: 知识库ID列表（多选）
             user_prompt: 用户提示词
             log_rules_id: 日志规则ID
             user_intent: 用户意图
@@ -513,7 +513,7 @@ class LogAnalyzerSubagent(SubagentBase):
         # 预处理（内部完成）
         machine_info = self.extract_machine_info(plugin_result or {})
         log_rules = self.get_log_rules(log_files, log_rules_id)
-        knowledge_content = self.retrieve_knowledge(kb_id, plugin_result)
+        knowledge_content = self.retrieve_knowledge(kb_ids, plugin_result)
         analysis_templates = self.load_analysis_templates()
 
         # 执行AI分析
@@ -525,7 +525,7 @@ class LogAnalyzerSubagent(SubagentBase):
             log_rules=log_rules,
             analysis_templates=analysis_templates,
             user_prompt=user_prompt or "",
-            kb_id=kb_id,
+            kb_ids=kb_ids,
             user_intent=user_intent
         )
 
@@ -756,9 +756,9 @@ class LogAnalyzerSubagent(SubagentBase):
             logger.warning(f"获取日志规则失败: {str(e)}")
             return "无文件描述规则"
 
-    def retrieve_knowledge(self, kb_id: str, plugin_result: Dict) -> str:
-        """检索知识库内容"""
-        if not self.kb_manager or not kb_id:
+    def retrieve_knowledge(self, kb_ids: List[str], plugin_result: Dict) -> str:
+        """检索知识库内容（支持多选）"""
+        if not self.kb_manager or not kb_ids:
             return ""
 
         queries = []
@@ -778,9 +778,11 @@ class LogAnalyzerSubagent(SubagentBase):
 
         try:
             results = []
-            for query in queries[:5]:
-                search_results = self.kb_manager.search(kb_id, query, 2)
-                results.extend(search_results)
+            # 从多个知识库检索
+            for kb_id in kb_ids:
+                for query in queries[:5]:
+                    search_results = self.kb_manager.search(kb_id, query, 2)
+                    results.extend(search_results)
 
             seen = set()
             content_parts = []
@@ -840,13 +842,15 @@ class LogAnalyzerSubagent(SubagentBase):
         log_rules: str,
         analysis_templates: str,
         user_prompt: str,
-        kb_id: str = None,
+        kb_ids: List[str] = None,
         user_intent: str = None
     ) -> Dict[str, Any]:
         """执行AI分析"""
         logger.info(f"开始分析，日志文件数: {len(log_files)}")
 
-        tool_executor = ToolExecutor(log_files, self.kb_manager, kb_id)
+        # 使用第一个知识库ID用于ToolExecutor的单kb_id参数
+        kb_id_for_executor = kb_ids[0] if kb_ids else None
+        tool_executor = ToolExecutor(log_files, self.kb_manager, kb_id_for_executor)
         tools = self.build_tools()
 
         prompt_data = {

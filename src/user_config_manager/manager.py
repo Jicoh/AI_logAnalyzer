@@ -17,13 +17,18 @@ class UserConfigManager:
 
     DEFAULT_CONFIG = {
         "selected_plugins": [],
-        "selected_kb_id": "",
+        "selected_kb_ids": [],
         "selected_log_rules_id": "",
         "default_kb_id": "",
         "default_log_rules_id": "",
         "enable_ai": True,
         "ai_selection_mode": False,
-        "last_selected_category": "CloudBMC"
+        "last_selected_category": "CloudBMC",
+        "assistant_settings": {
+            "enabled_mcp_servers": [],
+            "enabled_skills": [],
+            "selected_kb_ids": []
+        }
     }
 
     def __init__(self, user_id: str):

@@ -229,6 +229,9 @@ class OrchestratorAgent:
         # 工具列表（内置 + MCP）
         self.tools = self.build_tools()
 
+        # 知识库上下文（用于增强对话）
+        self.kb_context = ""
+
         # Prompt路径
         self.prompt_path = self.get_prompt_path()
 
@@ -340,13 +343,19 @@ class OrchestratorAgent:
                 skill_desc += f" (能力: {', '.join(info['capabilities'])})"
             available_skills.append(skill_desc)
 
+        # 知识库上下文部分
+        kb_context_section = ""
+        if self.kb_context:
+            kb_context_section = f"\n# 相关知识库内容\n\n{self.kb_context}\n"
+
         # 填充模板
         prompt_data = {
             'available_skills': '\n'.join(available_skills) if available_skills else '暂无可用技能',
             'work_dir': self.work_dir,
             'context_usage': f"{self.context_state.usage_ratio * 100:.1f}",
             'uploaded_files': ', '.join(self.session_state.get('uploaded_files', [])) or '无',
-            'notes': json.dumps(self.session_state.get('notes', {}), ensure_ascii=False) or '{}'
+            'notes': json.dumps(self.session_state.get('notes', {}), ensure_ascii=False) or '{}',
+            'kb_context': kb_context_section
         }
 
         # 转义花括号
@@ -790,6 +799,16 @@ class OrchestratorAgent:
         self.session_state["kb_id"] = kb_id
         self.session_manager.update_state(self.session_id, {"kb_id": kb_id})
         logger.info(f"设置知识库: {kb_id}")
+
+    def set_kb_context(self, kb_context: str):
+        """
+        设置知识库检索上下文
+
+        Args:
+            kb_context: 从知识库检索的相关内容
+        """
+        self.kb_context = kb_context
+        logger.debug(f"设置知识库上下文: {len(kb_context)}字符")
 
     def get_context_state(self) -> ContextState:
         """获取当前上下文状态"""

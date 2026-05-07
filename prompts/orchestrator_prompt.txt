@@ -38,6 +38,7 @@
 - 已上传文件: {uploaded_files}
 - 上下文使用率: {context_usage}%
 - 会话记录: {notes}
+- 相关知识库内容: {kb_context}
 
 # 工作原则
 

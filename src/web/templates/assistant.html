@@ -4,132 +4,358 @@
 
 {% block extra_head %}
 <style>
-/* 会话侧边栏 */
-.session-sidebar {
-    width: 220px;
-    min-width: 220px;
+/* 整体布局 */
+.assistant-container {
+    height: calc(100vh - 60px);
+    display: flex;
+}
+
+/* 左侧边栏 */
+.sidebar-left {
+    width: 280px;
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #dee2e6;
+    background: #f8f9fa;
+}
+
+/* 会话列表区域 */
+.session-section {
+    flex: 1;
     overflow-y: auto;
+    min-height: 100px;
+}
+
+.session-header {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #e9ecef;
 }
 
 .session-card {
+    padding: 10px 16px;
+    border-bottom: 1px solid #eee;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background 0.2s;
 }
 
 .session-card:hover {
-    background-color: #e9ecef;
+    background: #e9ecef;
 }
 
 .session-card.active {
-    background-color: #cfe2ff;
+    background: #cfe2ff;
 }
 
 .session-title {
     font-weight: 500;
-    max-width: 150px;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.session-list {
-    max-height: calc(100vh - 120px);
+/* Agent设置区域 */
+.agent-settings-section {
+    flex: 0 0 auto;
+    border-top: 2px solid #dee2e6;
+    max-height: 350px;
     overflow-y: auto;
 }
 
-/* 聊天主区域 */
+.section-header {
+    padding: 10px 16px;
+    background: #e9ecef;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.agent-settings-content {
+    padding: 8px;
+}
+
+.resource-dropdown {
+    margin-bottom: 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.resource-header {
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.resource-header:hover {
+    background: #e9ecef;
+}
+
+.resource-header.expanded {
+    border-radius: 8px 8px 0 0;
+}
+
+.resource-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.resource-count {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.resource-content {
+    padding: 8px;
+    display: none;
+}
+
+.resource-content.show {
+    display: block;
+}
+
+/* 资源卡片 */
+.resource-card {
+    padding: 10px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: #fff;
+}
+
+.resource-card:last-child {
+    margin-bottom: 0;
+}
+
+.resource-card-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+}
+
+.resource-card-desc {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.resource-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.resource-card-actions .btn {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.resource-card.selected {
+    border-color: #0d6efd;
+    background: #f0f6ff;
+}
+
+/* 中间聊天区域 */
 .chat-main {
-    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #fff;
 }
 
+/* 消息列表 */
 .message-list {
+    flex: 1;
     overflow-y: auto;
-    max-height: calc(100vh - 180px);
+    padding: 12px;
+    min-height: 0;
+}
+
+.message {
+    margin-bottom: 16px;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
 }
 
 .message-content {
+    padding: 10px 14px;
+    border-radius: 12px;
     white-space: pre-wrap;
     word-break: break-word;
+    line-height: 1.6;
+}
+
+.message-content.user {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.message-content.assistant {
+    background: #f8f9fa;
 }
 
 .message-content pre {
-    background: #f8f9fa;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
+    background: #e9ecef;
+    padding: 8px;
+    border-radius: 6px;
     overflow-x: auto;
 }
 
 .message-content code {
-    background: #f8f9fa;
-    padding: 0.1rem 0.3rem;
-    border-radius: 0.2rem;
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 
-/* 文件侧边栏 */
-.file-sidebar {
+/* 输入区域 */
+.chat-input-area {
+    padding: 6px 16px;
+    border-top: 1px solid #dee2e6;
+    background: #f8f9fa;
+}
+
+.chat-input-wrapper {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.chat-input-wrapper textarea {
+    flex: 1;
+    resize: none;
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    min-height: 40px;
+    max-height: 100px;
+}
+
+.chat-input-wrapper .btn-send {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 上下文使用情况 */
+.context-usage-section {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+    border-top: 1px solid #dee2e6;
+    background: #fff;
+}
+
+.context-progress-bar {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #0d6efd;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.progress-fill.warning {
+    background: #ffc107;
+}
+
+.progress-fill.danger {
+    background: #dc3545;
+}
+
+.context-text {
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+/* 右侧文件列表 */
+.sidebar-right {
     width: 250px;
     min-width: 250px;
-    overflow-y: auto;
+    border-left: 1px solid #dee2e6;
+    display: flex;
+    flex-direction: column;
+    background: #f8f9fa;
+}
+
+.file-header {
+    padding: 12px 16px;
+    background: #e9ecef;
 }
 
 .file-list {
-    max-height: calc(100vh - 80px);
+    flex: 1;
     overflow-y: auto;
+    padding: 8px;
+}
+
+.file-item {
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    background: #fff;
+    border: 1px solid #e9ecef;
 }
 
 .file-item:hover {
-    background-color: #e9ecef;
+    background: #e9ecef;
 }
 
-.file-name {
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* 上下文圆环 */
-.context-ring {
-    position: absolute;
-    bottom: 80px;
-    right: 20px;
-    text-align: center;
-}
-
-.progress-ring {
-    width: 50px;
-    height: 50px;
-    position: relative;
-}
-
-.progress-ring-svg {
+/* 详情模态框 */
+.detail-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
 }
 
-.progress-ring-bg {
-    fill: none;
-    stroke: #e9ecef;
-    stroke-width: 3;
+.detail-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
-.progress-ring-fill {
-    fill: none;
-    stroke: #0d6efd;
-    stroke-width: 3;
-    stroke-linecap: round;
-    transform: rotate(-90deg);
-    transform-origin: 50% 50%;
-    transition: stroke-dasharray 0.3s;
+.detail-modal-header {
+    padding: 16px;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.progress-ring-fill.warning {
-    stroke: #dc3545;
-}
-
-.progress-ring-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.7rem;
-    font-weight: bold;
+.detail-modal-body {
+    padding: 16px;
 }
 
 [x-cloak] { display: none !important; }
@@ -137,59 +363,198 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="assistantApp()" class="d-flex h-100">
-    <!-- 左侧会话列表 -->
-    <div class="session-sidebar bg-light border-end">
-        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-            <h6 class="mb-0"><i class="bi bi-chat-left-text"></i> 会话列表</h6>
-            <button class="btn btn-sm btn-primary" @click="createSession()" :disabled="creatingSession">
-                <i class="bi bi-plus"></i>
-            </button>
-        </div>
-        <div class="session-list">
-            <template x-for="session in sessions" :key="session.session_id">
-                <div class="session-card p-2 border-bottom"
-                     :class="{ 'active': currentSessionId === session.session_id }"
-                     @click="selectSession(session.session_id)">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="session-title text-truncate" x-text="session.title || '新会话'"></div>
-                        <button class="btn btn-sm btn-outline-danger" @click.stop="deleteSession(session.session_id)">
-                            <i class="bi bi-trash"></i>
-                        </button>
+<div x-data="assistantApp()" class="assistant-container" x-init="init()">
+    <!-- 左侧边栏 -->
+    <div class="sidebar-left">
+        <!-- 会话列表 -->
+        <div class="session-section">
+            <div class="session-header">
+                <span><i class="bi bi-chat-left-text"></i> 会话列表</span>
+                <button class="btn btn-sm btn-primary" @click="createSession()" :disabled="creatingSession">
+                    <i class="bi bi-plus"></i>
+                </button>
+            </div>
+            <div class="session-list">
+                <template x-for="session in sessions" :key="session.session_id">
+                    <div class="session-card"
+                         :class="{ 'active': currentSessionId === session.session_id }"
+                         @click="selectSession(session.session_id)">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="session-title" x-text="session.title || '新会话'"></div>
+                            <button class="btn btn-sm btn-link text-danger p-0" @click.stop="deleteSession(session.session_id)">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <small class="text-muted" x-text="session.updated_at"></small>
+                            <span class="badge bg-light text-dark" x-text="session.message_count + '条'"></span>
+                        </div>
                     </div>
-                    <small class="text-muted" x-text="session.updated_at"></small>
-                    <span class="badge bg-secondary ms-2" x-text="session.message_count + '条'"></span>
+                </template>
+                <div x-show="sessions.length === 0" class="text-center text-muted p-4">
+                    <i class="bi bi-chat-left-text fs-3"></i>
+                    <p class="mt-2 small">暂无会话</p>
                 </div>
-            </template>
-            <div x-show="sessions.length === 0" class="text-center text-muted p-4">
-                <i class="bi bi-chat-left-text fs-1"></i>
-                <p class="mt-2">暂无会话，点击上方按钮创建</p>
+            </div>
+        </div>
+
+        <!-- Agent设置区域 -->
+        <div class="agent-settings-section">
+            <div class="section-header">
+                <i class="bi bi-gear"></i> Agent设置
+            </div>
+            <div class="agent-settings-content">
+                <!-- MCP Server -->
+                <div class="resource-dropdown">
+                <div class="resource-header" :class="{ 'expanded': expandedResources.mcp }" @click="toggleResource('mcp')">
+                    <div>
+                        <i class="bi bi-plug me-1"></i>
+                        <span class="resource-title">MCP Server</span>
+                        <span class="resource-count ms-1" x-text="'(' + mcpServers.length + ')'"></span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadMcpServers()" title="刷新">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <i class="bi" :class="expandedResources.mcp ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    </div>
+                </div>
+                <div class="resource-content" :class="{ 'show': expandedResources.mcp }">
+                    <template x-for="mcp in mcpServers" :key="mcp.name">
+                        <div class="resource-card">
+                            <div class="resource-card-name" x-text="mcp.name"></div>
+                            <div class="resource-card-desc" x-text="mcp.description || '暂无描述'"></div>
+                            <div class="resource-card-actions">
+                                <button class="btn"
+                                        :class="mcp.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
+                                        @click="toggleMcp(mcp.name, !mcp.user_enabled)"
+                                        x-text="mcp.user_enabled ? '已启用' : '启用'">
+                                </button>
+                                <button class="btn btn-outline-secondary" @click="showMcpDetail(mcp)">
+                                    <i class="bi bi-info-circle"></i> 详情
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="mcpServers.length === 0" class="text-center text-muted p-2 small">
+                        暂无MCP Server
+                    </div>
+                </div>
+            </div>
+
+            <!-- Skill -->
+            <div class="resource-dropdown">
+                <div class="resource-header" :class="{ 'expanded': expandedResources.skill }" @click="toggleResource('skill')">
+                    <div>
+                        <i class="bi bi-wrench-adjustable me-1"></i>
+                        <span class="resource-title">Skill</span>
+                        <span class="resource-count ms-1" x-text="'(' + skills.length + ')'"></span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadSkills()" title="刷新">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <i class="bi" :class="expandedResources.skill ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    </div>
+                </div>
+                <div class="resource-content" :class="{ 'show': expandedResources.skill }">
+                    <template x-for="skill in skills" :key="skill.name">
+                        <div class="resource-card">
+                            <div class="resource-card-name" x-text="skill.name"></div>
+                            <div class="resource-card-desc" x-text="skill.description || '暂无描述'"></div>
+                            <div class="resource-card-actions">
+                                <button class="btn"
+                                        :class="skill.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
+                                        @click="toggleSkill(skill.name, !skill.user_enabled)"
+                                        x-text="skill.user_enabled ? '已启用' : '启用'">
+                                </button>
+                                <button class="btn btn-outline-secondary" @click="showSkillDetail(skill)">
+                                    <i class="bi bi-info-circle"></i> 详情
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="skills.length === 0" class="text-center text-muted p-2 small">
+                        暂无Skill
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识库 -->
+            <div class="resource-dropdown">
+                <div class="resource-header" :class="{ 'expanded': expandedResources.kb }" @click="toggleResource('kb')">
+                    <div>
+                        <i class="bi bi-database me-1"></i>
+                        <span class="resource-title">知识库</span>
+                        <span class="resource-count ms-1" x-text="'(' + kbList.length + ')'"></span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadKbList()" title="刷新">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <i class="bi" :class="expandedResources.kb ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    </div>
+                </div>
+                <div class="resource-content" :class="{ 'show': expandedResources.kb }">
+                    <template x-for="kb in kbList" :key="kb.id">
+                        <div class="resource-card" :class="{ 'selected': selectedKbIds.includes(kb.id) }">
+                            <div class="resource-card-name" x-text="kb.name"></div>
+                            <div class="resource-card-desc" x-text="kb.description || '暂无描述'"></div>
+                            <div class="resource-card-actions">
+                                <button class="btn"
+                                        :class="selectedKbIds.includes(kb.id) ? 'btn-success' : 'btn-outline-success'"
+                                        @click="toggleKb(kb.id)">
+                                    <i class="bi" :class="selectedKbIds.includes(kb.id) ? 'bi-check-circle' : 'bi-circle'"></i>
+                                    <span x-text="selectedKbIds.includes(kb.id) ? '已选择' : '选择'"></span>
+                                </button>
+                                <button class="btn btn-outline-secondary" @click="showKbDetail(kb)">
+                                    <i class="bi bi-info-circle"></i> 详情
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="kbList.length === 0" class="text-center text-muted p-2 small">
+                        暂无知识库
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- 上下文使用情况 -->
+        <div class="context-usage-section">
+            <div class="context-progress-bar">
+                <div class="progress-fill"
+                     :class="{'warning': contextUsage >= 0.7, 'danger': contextUsage >= 0.9}"
+                     :style="{ width: (contextUsage * 100) + '%' }"></div>
+            </div>
+            <div class="context-text d-flex justify-content-between align-items-center mt-2">
+                <small class="text-muted">上下文使用情况</small>
+                <span x-text="formatContextTokens()"></span>
             </div>
         </div>
     </div>
 
     <!-- 中间聊天区域 -->
-    <div class="chat-main flex-grow-1 d-flex flex-column">
+    <div class="chat-main">
         <!-- 消息列表 -->
-        <div class="message-list flex-grow-1 p-3" id="messageList">
-            <template x-for="msg in messages" :key="msg.id || msg.timestamp">
-                <div class="message mb-3" :class="msg.role === 'user' ? 'user-message' : 'assistant-message'">
+        <div class="message-list" id="messageList">
+            <template x-for="msg in messages" :key="msg.id">
+                <div class="message">
                     <div class="message-header">
-                        <span class="badge" :class="msg.role === 'user' ? 'bg-primary' : 'bg-success'"
+                        <span class="badge" :class="msg.role === 'user' ? 'bg-primary' : 'bg-secondary'"
                               x-text="msg.role === 'user' ? '用户' : '助手'"></span>
-                        <small class="text-muted ms-2" x-text="msg.timestamp"></small>
+                        <small class="text-muted" x-text="msg.timestamp"></small>
                     </div>
-                    <div class="message-content p-2 rounded mt-1"
-                         :class="msg.role === 'user' ? 'bg-primary-subtle' : 'bg-success-subtle'"
-                         x-html="formatMessage(msg.content)"></div>
+                    <div class="message-content" :class="msg.role" x-html="formatMessage(msg.content)"></div>
                 </div>
             </template>
             <div x-show="messages.length === 0 && currentSessionId" class="text-center text-muted p-4">
-                <i class="bi bi-chat-dots fs-1"></i>
+                <i class="bi bi-chat-dots fs-3"></i>
                 <p class="mt-2">开始对话吧！</p>
             </div>
             <div x-show="!currentSessionId" class="text-center text-muted p-4">
-                <i class="bi bi-hand-index fs-1"></i>
+                <i class="bi bi-hand-index fs-3"></i>
                 <p class="mt-2">请选择或创建一个会话</p>
             </div>
             <div x-show="loading" class="text-center p-3">
@@ -199,56 +564,40 @@
         </div>
 
         <!-- 输入区域 -->
-        <div class="chat-input p-3 border-top">
-            <div class="d-flex gap-2">
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
                 <textarea class="form-control"
                           x-model="inputMessage"
                           @keydown.enter.prevent="sendMessage()"
-                          placeholder="输入消息，按 Enter 发送"
-                          rows="2"
-                          :disabled="!currentSessionId || loading"></textarea>
-                <button class="btn btn-primary" @click="sendMessage()" :disabled="!currentSessionId || loading || !inputMessage">
+                          placeholder="输入消息，按 Enter 发送..."
+                          rows="1"
+                          :disabled="!currentSessionId || loading"
+                          @input="autoResizeTextarea($event)"></textarea>
+                <button class="btn btn-primary btn-send" @click="sendMessage()"
+                        :disabled="!currentSessionId || loading || !inputMessage">
                     <i class="bi bi-send"></i>
                 </button>
             </div>
         </div>
-
-        <!-- 上下文圆环（右下角） -->
-        <div class="context-ring" x-show="currentSessionId" x-cloak>
-            <div class="progress-ring">
-                <svg viewBox="0 0 36 36" class="progress-ring-svg">
-                    <path class="progress-ring-bg"
-                          d="M18 2.0845
-                             a 15.9155 15.9155 0 0 1 0 31.831
-                             a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                    <path class="progress-ring-fill"
-                          :class="{'warning': contextUsage >= 0.8}"
-                          :stroke-dasharray="(contextUsage * 100) + ', 100'"
-                          d="M18 2.0845
-                             a 15.9155 15.9155 0 0 1 0 31.831
-                             a 15.9155 15.9155 0 0 1 0 -31.831"/>
-                </svg>
-                <div class="progress-ring-text" x-text="Math.round(contextUsage * 100) + '%'"></div>
-            </div>
-            <small class="text-muted">上下文</small>
-        </div>
     </div>
 
     <!-- 右侧文件列表 -->
-    <div class="file-sidebar bg-light border-start" x-show="currentSessionId" x-cloak>
-        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-            <h6 class="mb-0"><i class="bi bi-folder"></i> 工作目录</h6>
-            <button class="btn btn-sm btn-outline-primary" @click="downloadAllFiles()" :disabled="files.length === 0">
-                <i class="bi bi-download"></i> 打包下载
-            </button>
+    <div class="sidebar-right" x-show="currentSessionId" x-cloak>
+        <div class="file-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-folder"></i> 工作目录</span>
+                <button class="btn btn-sm btn-outline-primary" @click="downloadAllFiles()" :disabled="files.length === 0">
+                    <i class="bi bi-download"></i>
+                </button>
+            </div>
         </div>
-        <div class="file-list p-2">
+        <div class="file-list">
             <template x-for="file in files" :key="file.path">
-                <div class="file-item p-2 border-bottom rounded d-flex justify-content-between align-items-center">
-                    <div class="file-info">
-                        <i class="bi bi-file-earmark"></i>
-                        <span class="file-name ms-1" x-text="file.name"></span>
-                        <small class="text-muted ms-2" x-text="formatSize(file.size)"></small>
+                <div class="file-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="bi bi-file-earmark text-primary"></i>
+                        <span class="ms-1" x-text="file.name"></span>
+                        <small class="text-muted ms-1" x-text="formatSize(file.size)"></small>
                     </div>
                     <a :href="'/api/assistant/sessions/' + currentSessionId + '/files/' + file.path"
                        class="btn btn-sm btn-outline-secondary" target="_blank">
@@ -262,6 +611,79 @@
             </div>
         </div>
     </div>
+
+    <!-- MCP详情模态框 -->
+    <div class="detail-modal" x-show="showMcpDetailModal" x-cloak @click.self="showMcpDetailModal = false">
+        <div class="detail-modal-content">
+            <div class="detail-modal-header">
+                <h5 x-text="selectedMcp?.name || ''"></h5>
+                <button class="btn-close" @click="showMcpDetailModal = false"></button>
+            </div>
+            <div class="detail-modal-body" x-show="selectedMcp">
+                <div class="mb-3">
+                    <strong>描述：</strong>
+                    <span x-text="selectedMcp?.description || '暂无描述'"></span>
+                </div>
+                <div class="mb-3">
+                    <strong>传输类型：</strong>
+                    <span x-text="selectedMcp?.transport || 'stdio'"></span>
+                </div>
+                <div class="mb-3">
+                    <strong>状态：</strong>
+                    <span class="badge" :class="selectedMcp?.enabled ? 'bg-success' : 'bg-secondary'"
+                          x-text="selectedMcp?.enabled ? '已启用' : '已禁用'"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill详情模态框 -->
+    <div class="detail-modal" x-show="showSkillDetailModal" x-cloak @click.self="showSkillDetailModal = false">
+        <div class="detail-modal-content">
+            <div class="detail-modal-header">
+                <h5 x-text="selectedSkill?.name || ''"></h5>
+                <button class="btn-close" @click="showSkillDetailModal = false"></button>
+            </div>
+            <div class="detail-modal-body" x-show="selectedSkill">
+                <div class="mb-3">
+                    <strong>描述：</strong>
+                    <span x-text="selectedSkill?.description || '暂无描述'"></span>
+                </div>
+                <div class="mb-3" x-show="selectedSkill?.metadata?.version">
+                    <strong>版本：</strong>
+                    <span x-text="selectedSkill?.metadata?.version"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 知识库详情模态框 -->
+    <div class="detail-modal" x-show="showKbDetailModal" x-cloak @click.self="showKbDetailModal = false">
+        <div class="detail-modal-content">
+            <div class="detail-modal-header">
+                <h5 x-text="selectedKb?.name || ''"></h5>
+                <button class="btn-close" @click="showKbDetailModal = false"></button>
+            </div>
+            <div class="detail-modal-body" x-show="selectedKb">
+                <div class="mb-3">
+                    <strong>ID：</strong>
+                    <code x-text="selectedKb?.id"></code>
+                </div>
+                <div class="mb-3">
+                    <strong>描述：</strong>
+                    <span x-text="selectedKb?.description || '暂无描述'"></span>
+                </div>
+                <div class="mb-3">
+                    <strong>文档数：</strong>
+                    <span x-text="selectedKb?.document_count || 0"></span>
+                </div>
+                <div class="mb-3" x-show="selectedKb?.created_at">
+                    <strong>创建时间：</strong>
+                    <span x-text="formatDate(selectedKb?.created_at)"></span>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -269,6 +691,7 @@
 <script>
 function assistantApp() {
     return {
+        // 会话状态
         sessions: [],
         currentSessionId: null,
         messages: [],
@@ -278,8 +701,27 @@ function assistantApp() {
         creatingSession: false,
         contextUsage: 0,
 
+        // 资源数据
+        mcpServers: [],
+        skills: [],
+        kbList: [],
+        selectedKbIds: [],
+
+        // UI状态
+        expandedResources: { mcp: false, skill: false, kb: false },
+        showMcpDetailModal: false,
+        showSkillDetailModal: false,
+        showKbDetailModal: false,
+        selectedMcp: null,
+        selectedSkill: null,
+        selectedKb: null,
+
         init() {
             this.loadSessions();
+            this.loadMcpServers();
+            this.loadSkills();
+            this.loadKbList();
+            this.loadAssistantSettings();
         },
 
         async loadSessions() {
@@ -288,7 +730,6 @@ function assistantApp() {
                 const data = await response.json();
                 if (data.success) {
                     this.sessions = data.data;
-                    // 如果有会话，自动选择第一个
                     if (this.sessions.length > 0 && !this.currentSessionId) {
                         this.selectSession(this.sessions[0].session_id);
                     }
@@ -298,6 +739,189 @@ function assistantApp() {
             }
         },
 
+        async loadMcpServers() {
+            try {
+                const response = await fetch('/api/user/mcp-servers');
+                const data = await response.json();
+                if (data.success) {
+                    this.mcpServers = data.data;
+                }
+            } catch (e) {
+                console.error('加载MCP列表失败:', e);
+            }
+        },
+
+        async loadSkills() {
+            try {
+                const response = await fetch('/api/user/skills');
+                const data = await response.json();
+                if (data.success) {
+                    this.skills = data.data;
+                }
+            } catch (e) {
+                console.error('加载Skill列表失败:', e);
+            }
+        },
+
+        async loadKbList() {
+            try {
+                const response = await fetch('/api/kb');
+                const data = await response.json();
+                if (data.success) {
+                    this.kbList = data.data;
+                }
+            } catch (e) {
+                console.error('加载知识库列表失败:', e);
+            }
+        },
+
+        async loadAssistantSettings() {
+            try {
+                const response = await fetch('/api/user/config');
+                const data = await response.json();
+                if (data.success) {
+                    const settings = data.data.assistant_settings || {};
+                    this.selectedKbIds = settings.selected_kb_ids || [];
+                }
+            } catch (e) {
+                console.error('加载助手设置失败:', e);
+            }
+        },
+
+        async reloadMcpServers() {
+            try {
+                const response = await fetch('/api/user/mcp-servers/reload', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    await this.loadMcpServers();
+                    Utils.showToast(data.message, 'success');
+                } else {
+                    Utils.showToast(data.error, 'error');
+                }
+            } catch (e) {
+                Utils.showToast('刷新失败: ' + e.message, 'error');
+            }
+        },
+
+        async reloadSkills() {
+            try {
+                const response = await fetch('/api/skills/reload', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    await this.loadSkills();
+                    Utils.showToast(data.message, 'success');
+                } else {
+                    Utils.showToast(data.error, 'error');
+                }
+            } catch (e) {
+                Utils.showToast('刷新失败: ' + e.message, 'error');
+            }
+        },
+
+        async reloadKbList() {
+            try {
+                const response = await fetch('/api/kb/reload', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    this.kbList = data.data || [];
+                    Utils.showToast(data.message, 'success');
+                } else {
+                    Utils.showToast(data.error, 'error');
+                }
+            } catch (e) {
+                Utils.showToast('刷新失败: ' + e.message, 'error');
+            }
+        },
+
+        toggleResource(type) {
+            this.expandedResources[type] = !this.expandedResources[type];
+        },
+
+        async toggleMcp(name, enabled) {
+            try {
+                const response = await fetch('/api/user/mcp-servers/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, enabled })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await this.loadMcpServers();
+                    Utils.showToast(data.message, 'success');
+                } else {
+                    Utils.showToast(data.error, 'error');
+                }
+            } catch (e) {
+                Utils.showToast('操作失败: ' + e.message, 'error');
+            }
+        },
+
+        async toggleSkill(name, enabled) {
+            try {
+                const response = await fetch('/api/user/skills/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, enabled })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await this.loadSkills();
+                    Utils.showToast(data.message, 'success');
+                } else {
+                    Utils.showToast(data.error, 'error');
+                }
+            } catch (e) {
+                Utils.showToast('操作失败: ' + e.message, 'error');
+            }
+        },
+
+        toggleKb(kbId) {
+            if (this.selectedKbIds.includes(kbId)) {
+                this.selectedKbIds = this.selectedKbIds.filter(id => id !== kbId);
+            } else {
+                this.selectedKbIds.push(kbId);
+            }
+            this.saveAssistantSettings();
+        },
+
+        async saveAssistantSettings() {
+            try {
+                const response = await fetch('/api/user/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        assistant_settings: {
+                            enabled_mcp_servers: this.mcpServers.filter(m => m.user_enabled).map(m => m.name),
+                            enabled_skills: this.skills.filter(s => s.user_enabled).map(s => s.name),
+                            selected_kb_ids: this.selectedKbIds
+                        },
+                        selected_kb_ids: this.selectedKbIds
+                    })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('保存设置失败:', data.error);
+                }
+            } catch (e) {
+                console.error('保存设置失败:', e);
+            }
+        },
+
+        showMcpDetail(mcp) {
+            this.selectedMcp = mcp;
+            this.showMcpDetailModal = true;
+        },
+
+        showSkillDetail(skill) {
+            this.selectedSkill = skill;
+            this.showSkillDetailModal = true;
+        },
+
+        showKbDetail(kb) {
+            this.selectedKb = kb;
+            this.showKbDetailModal = true;
+        },
+
         async createSession() {
             this.creatingSession = true;
             try {
@@ -305,11 +929,6 @@ function assistantApp() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                if (response.status === 401) {
-                    Utils.showToast('请先登录', 'error');
-                    window.location.href = '/login';
-                    return;
-                }
                 const data = await response.json();
                 if (data.success) {
                     const newSessionId = data.data.session_id;
@@ -326,12 +945,9 @@ function assistantApp() {
         },
 
         async deleteSession(sessionId) {
-            if (!confirm('确定删除此会话？工作目录文件将被清理。')) return;
-
+            if (!confirm('确定删除此会话？')) return;
             try {
-                const response = await fetch(`/api/assistant/sessions/${sessionId}`, {
-                    method: 'DELETE'
-                });
+                const response = await fetch(`/api/assistant/sessions/${sessionId}`, { method: 'DELETE' });
                 const data = await response.json();
                 if (data.success) {
                     await this.loadSessions();
@@ -342,7 +958,7 @@ function assistantApp() {
                     }
                     Utils.showToast('会话已删除', 'success');
                 } else {
-                    Utils.showToast(data.error || '删除失败', 'error');
+                    Utils.showToast(data.error, 'error');
                 }
             } catch (e) {
                 Utils.showToast('删除会话失败: ' + e.message, 'error');
@@ -361,14 +977,12 @@ function assistantApp() {
                 this.messages = [];
                 return;
             }
-
             try {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/messages`);
                 const data = await response.json();
                 if (data.success) {
-                    // 为每条消息添加唯一 ID（如果没有）
                     this.messages = data.data.map(msg => ({
-                        id: msg.id || msg.timestamp + '_' + Math.random().toString(36).substr(2, 9),
+                        id: msg.timestamp + '_' + Math.random().toString(36).substr(2, 9),
                         role: msg.role,
                         content: msg.content,
                         timestamp: msg.timestamp
@@ -377,7 +991,6 @@ function assistantApp() {
                 }
             } catch (e) {
                 Utils.showToast('加载消息失败: ' + e.message, 'error');
-                this.messages = [];
             }
         },
 
@@ -386,7 +999,6 @@ function assistantApp() {
                 this.files = [];
                 return;
             }
-
             try {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/files`);
                 const data = await response.json();
@@ -394,7 +1006,7 @@ function assistantApp() {
                     this.files = data.data;
                 }
             } catch (e) {
-                Utils.showToast('加载文件列表失败: ' + e.message, 'error');
+                console.error('加载文件列表失败:', e);
             }
         },
 
@@ -403,7 +1015,6 @@ function assistantApp() {
                 this.contextUsage = 0;
                 return;
             }
-
             try {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/state`);
                 const data = await response.json();
@@ -418,23 +1029,17 @@ function assistantApp() {
         async sendMessage() {
             if (!this.currentSessionId || !this.inputMessage || this.loading) return;
 
-            // 确保 messages 数组存在
-            if (!this.messages) {
-                this.messages = [];
-            }
-
             const message = this.inputMessage;
             this.inputMessage = '';
             this.loading = true;
 
-            // 添加用户消息到列表（乐观更新），使用唯一 ID
+            // 添加用户消息
             const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            const now = new Date().toLocaleString('zh-CN');
             this.messages.push({
                 id: messageId,
                 role: 'user',
                 content: message,
-                timestamp: now
+                timestamp: new Date().toLocaleString('zh-CN')
             });
             this.scrollToBottom();
 
@@ -442,12 +1047,11 @@ function assistantApp() {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ message, kb_ids: this.selectedKbIds })
                 });
                 const data = await response.json();
 
                 if (data.success) {
-                    // 添加AI回复，使用唯一 ID
                     this.messages.push({
                         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                         role: 'assistant',
@@ -456,25 +1060,16 @@ function assistantApp() {
                     });
                     this.contextUsage = data.data.context_usage || 0;
                     this.scrollToBottom();
-
-                    // 刷新会话列表（更新标题和时间）
                     await this.loadSessions();
-                    // 刷新文件列表（可能有新文件）
                     await this.loadFiles();
                 } else {
                     Utils.showToast(data.error || '对话失败', 'error');
-                    // 移除乐观添加的用户消息
-                    if (this.messages && this.messages.length > 0) {
-                        this.messages.pop();
-                    }
+                    this.messages.pop();
                     this.inputMessage = message;
                 }
             } catch (e) {
                 Utils.showToast('发送消息失败: ' + e.message, 'error');
-                // 确保 messages 存在且不为空才移除
-                if (this.messages && this.messages.length > 0) {
-                    this.messages.pop();
-                }
+                this.messages.pop();
                 this.inputMessage = message;
             }
 
@@ -484,15 +1079,18 @@ function assistantApp() {
         scrollToBottom() {
             setTimeout(() => {
                 const list = document.getElementById('messageList');
-                if (list) {
-                    list.scrollTop = list.scrollHeight;
-                }
+                if (list) list.scrollTop = list.scrollHeight;
             }, 50);
+        },
+
+        autoResizeTextarea(event) {
+            const textarea = event.target;
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
         },
 
         formatMessage(content) {
             if (!content) return '';
-            // 简单的Markdown格式化
             return content
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -507,6 +1105,19 @@ function assistantApp() {
             if (size < 1024) return size + ' B';
             if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
             return (size / (1024 * 1024)).toFixed(1) + ' MB';
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString('zh-CN');
+        },
+
+        formatContextTokens() {
+            const maxContext = 120000;
+            const usedTokens = Math.round(this.contextUsage * maxContext);
+            const usedFormatted = usedTokens.toLocaleString('zh-CN');
+            const maxFormatted = maxContext.toLocaleString('zh-CN');
+            return `${usedFormatted}/${maxFormatted} token`;
         },
 
         downloadAllFiles() {

@@ -162,13 +162,24 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">关联知识库</label>
-                            <select class="form-select" x-model="selectedKbId">
-                                <option value="">不使用知识库</option>
+                            <label class="form-label">关联知识库（可多选）</label>
+                            <div class="kb-multi-select">
                                 <template x-for="kb in kbList" :key="kb.id">
-                                    <option :value="kb.id" x-text="kb.name"></option>
+                                    <div class="kb-card"
+                                         :class="{ 'selected': selectedKbIds.includes(kb.id) }"
+                                         @click="toggleKb(kb.id)">
+                                        <div class="kb-card-header">
+                                            <i class="bi" :class="selectedKbIds.includes(kb.id) ? 'bi-check-circle-fill text-success' : 'bi-circle text-muted'"></i>
+                                            <span class="kb-name" x-text="kb.name"></span>
+                                        </div>
+                                        <div class="kb-card-desc" x-text="kb.description || '暂无描述'"></div>
+                                    </div>
                                 </template>
-                            </select>
+                                <div x-show="kbList.length === 0" class="text-muted small">
+                                    暂无知识库
+                                </div>
+                            </div>
+                            <small class="text-muted">点击选择/取消选择知识库，AI分析时会从选中的知识库检索相关信息</small>
                         </div>
 
                         <div class="mb-3">
@@ -394,7 +405,7 @@ function analyzerApp() {
         lastSelectedCategory: '',
         selectedPlugins: [],
         kbList: [],
-        selectedKbId: '',
+        selectedKbIds: [],
         logRulesList: [],
         selectedLogRulesId: '',
         enableAi: true,
@@ -661,7 +672,7 @@ function analyzerApp() {
                 if (data.success) {
                     const config = data.data;
                     this.selectedPlugins = config.selected_plugins || [];
-                    this.selectedKbId = config.selected_kb_id || '';
+                    this.selectedKbIds = config.selected_kb_ids || [];
                     this.selectedLogRulesId = config.selected_log_rules_id || '';
                     this.enableAi = config.enable_ai !== undefined ? config.enable_ai : true;
                     this.aiSelectionMode = config.ai_selection_mode !== undefined ? config.ai_selection_mode : false;
@@ -672,6 +683,15 @@ function analyzerApp() {
             }
         },
 
+        toggleKb(kbId) {
+            if (this.selectedKbIds.includes(kbId)) {
+                this.selectedKbIds = this.selectedKbIds.filter(id => id !== kbId);
+            } else {
+                this.selectedKbIds.push(kbId);
+            }
+            this.savePluginSelection();
+        },
+
         async savePluginSelection() {
             try {
                 const response = await fetch('/api/user/config', {
@@ -679,7 +699,7 @@ function analyzerApp() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         selected_plugins: this.selectedPlugins,
-                        selected_kb_id: this.selectedKbId,
+                        selected_kb_ids: this.selectedKbIds,
                         selected_log_rules_id: this.selectedLogRulesId,
                         enable_ai: this.enableAi,
                         ai_selection_mode: this.aiSelectionMode,
@@ -1028,7 +1048,7 @@ function analyzerApp() {
             formData.append('file', this.logFile);
             this.selectedPlugins.forEach(p => formData.append('plugins', p));
             formData.append('enable_ai', this.enableAi ? 'true' : 'false');
-            if (this.selectedKbId) formData.append('kb_id', this.selectedKbId);
+            this.selectedKbIds.forEach(id => formData.append('kb_ids', id));
             if (this.selectedLogRulesId) formData.append('log_rules_id', this.selectedLogRulesId);
             if (this.userPrompt) formData.append('user_prompt', this.userPrompt);
 
@@ -1100,7 +1120,7 @@ function analyzerApp() {
             // 添加插件选择
             this.selectedPlugins.forEach(p => formData.append('plugins', p));
             formData.append('enable_ai', this.enableAi ? 'true' : 'false');
-            if (this.selectedKbId) formData.append('kb_id', this.selectedKbId);
+            this.selectedKbIds.forEach(id => formData.append('kb_ids', id));
             if (this.selectedLogRulesId) formData.append('log_rules_id', this.selectedLogRulesId);
             if (this.userPrompt) formData.append('user_prompt', this.userPrompt);
 
@@ -1335,6 +1355,55 @@ function analyzerApp() {
     border-radius: 0.25rem;
 }
 [x-cloak] { display: none !important; }
+
+/* 知识库多选卡片 */
+.kb-multi-select {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.kb-card {
+    padding: 8px 10px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.kb-card:last-child {
+    margin-bottom: 0;
+}
+
+.kb-card:hover {
+    background: #f8f9fa;
+}
+
+.kb-card.selected {
+    border-color: #0d6efd;
+    background: #e7f1ff;
+}
+
+.kb-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kb-name {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.kb-card-desc {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 4px;
+    line-height: 1.4;
+}
 
 /* 悬浮分析按钮 - 与静态按钮位置一致 */
 .floating-action-bar {

@@ -14,19 +14,20 @@
                         <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
                             <i class="bi bi-gear"></i> 系统配置
                         </div>
+                        <div class="nav-item" :class="{ active: activeSection === 'kb' }" @click="scrollTo('kb')">
+                            <i class="bi bi-database"></i> 知识库
+                        </div>
+                        <div class="nav-item" :class="{ active: activeSection === 'mcp' }" @click="scrollTo('mcp')">
+                            <i class="bi bi-plug"></i> MCP Server
+                        </div>
+                        <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
+                            <i class="bi bi-wrench-adjustable"></i> Skill列表
+                        </div>
                     </div>
                 </template>
-                <div class="nav-item" :class="{ active: activeSection === 'kb' }" @click="scrollTo('kb')">
-                    <i class="bi bi-database"></i> 知识库
-                </div>
+                <!-- 所有用户可见的菜单 -->
                 <div class="nav-item" :class="{ active: activeSection === 'analysis' }" @click="scrollTo('analysis')">
                     <i class="bi bi-journal-text"></i> 日志分析设置
-                </div>
-                <div class="nav-item" :class="{ active: activeSection === 'mcp' }" @click="scrollTo('mcp')">
-                    <i class="bi bi-plug"></i> MCP Server
-                </div>
-                <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
-                    <i class="bi bi-wrench-adjustable"></i> Skill列表
                 </div>
                 <div class="nav-item" :class="{ active: activeSection === 'cache' }" @click="scrollTo('cache')">
                     <i class="bi bi-trash"></i> 缓存清理
@@ -234,11 +235,11 @@
                     </div>
             </div>
 
-            <!-- 知识库管理 -->
-            <div id="section-kb" class="card mb-4">
+            <!-- 知识库管理（仅管理员） -->
+            <div id="section-kb" class="card mb-4" x-show="userInfo.is_admin">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-database"></i> 知识库</span>
-                    <button class="btn btn-primary btn-sm" @click="showCreateKbModal = true" x-show="userInfo.is_admin">
+                    <button class="btn btn-primary btn-sm" @click="showCreateKbModal = true">
                         <i class="bi bi-plus"></i> 新增
                     </button>
                 </div>
@@ -251,7 +252,7 @@
                                 <th>文档数</th>
                                 <th>向量索引</th>
                                 <th>创建时间</th>
-                                <th x-show="userInfo.is_admin">操作</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -265,7 +266,7 @@
                                         <span class="badge bg-secondary" x-show="!kb.vector_indexed">未构建</span>
                                     </td>
                                     <td x-text="formatDate(kb.created_at)"></td>
-                                    <td x-show="userInfo.is_admin">
+                                    <td>
                                         <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-primary" @click="showKbDetail(kb)" title="详情">
                                                 <i class="bi bi-eye"></i>
@@ -274,11 +275,6 @@
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
-                                    </td>
-                                    <td x-show="!userInfo.is_admin">
-                                        <button class="btn btn-outline-primary btn-sm" @click="showKbDetail(kb)" title="详情">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
                                     </td>
                                 </tr>
                             </template>
@@ -391,11 +387,11 @@
                 </div>
             </div>
 
-            <!-- MCP Server管理 -->
-            <div id="section-mcp" class="card mb-4">
+            <!-- MCP Server管理（仅管理员） -->
+            <div id="section-mcp" class="card mb-4" x-show="userInfo.is_admin">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-plug"></i> MCP Server</span>
-                    <button class="btn btn-primary btn-sm" @click="showAddMcpModal = true" x-show="userInfo.is_admin">
+                    <button class="btn btn-primary btn-sm" @click="showAddMcpModal = true">
                         <i class="bi bi-plus"></i> 新增
                     </button>
                 </div>
@@ -421,7 +417,7 @@
                                     </td>
                                     <td x-text="server.description || '-'"></td>
                                     <td>
-                                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-success" @click="testMcpServer(server.name)" title="测试">
                                                 <i class="bi bi-play"></i>
                                             </button>
@@ -432,9 +428,6 @@
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
-                                        <button class="btn btn-outline-success btn-sm" @click="testMcpServer(server.name)" title="测试" x-show="!userInfo.is_admin">
-                                            <i class="bi bi-play"></i>
-                                        </button>
                                     </td>
                                 </tr>
                             </template>
@@ -446,11 +439,11 @@
                 </div>
             </div>
 
-            <!-- Skill列表 -->
-            <div id="section-skills" class="card mb-4">
+            <!-- Skill列表（仅管理员） -->
+            <div id="section-skills" class="card mb-4" x-show="userInfo.is_admin">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-wrench-adjustable"></i> Skill列表</span>
-                    <button class="btn btn-outline-primary btn-sm" @click="reloadSkills()" x-show="userInfo.is_admin" :disabled="skillsReloading">
+                    <button class="btn btn-outline-primary btn-sm" @click="reloadSkills()" :disabled="skillsReloading">
                         <span x-show="skillsReloading" class="spinner-border spinner-border-sm"></span>
                         <i x-show="!skillsReloading" class="bi bi-refresh"></i>
                         <span x-text="skillsReloading ? '刷新中...' : '刷新'"></span>
@@ -989,7 +982,13 @@ function settingsApp() {
 
         loadUserInfo() {
             fetch('/api/auth/me').then(r => r.json()).then(d => {
-                if (d.success) this.userInfo = d.data;
+                if (d.success) {
+                    this.userInfo = d.data;
+                    // 非管理员默认选中"日志分析设置"
+                    if (!this.userInfo.is_admin) {
+                        this.activeSection = 'analysis';
+                    }
+                }
             });
         },
 
@@ -1008,7 +1007,7 @@ function settingsApp() {
                     if (entry.isIntersecting) {
                         const sectionId = entry.target.id.replace('section-', '');
                         // 只更新可见的section
-                        if (sectionId === 'config' && !this.userInfo.is_admin) return;
+                        if (!this.userInfo.is_admin && sectionId in ['config', 'kb', 'mcp', 'skills']) return;
                         this.activeSection = sectionId;
                     }
                 });
