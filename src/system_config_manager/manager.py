@@ -1,16 +1,17 @@
 """
-通用设置管理模块
+系统配置管理模块
 负责系统配置的读取、修改和保存
 支持环境变量占位符解析：${VAR_NAME}
 """
 
 import json
+import logging
 import os
 import re
 import sys
 from src.utils import get_logger
 
-logger = get_logger('settings_manager')
+logger = get_logger('system_config_manager')
 
 # 环境变量占位符模式：${VAR_NAME}
 ENV_VAR_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
@@ -46,7 +47,7 @@ def resolve_env_vars(value):
         return value
 
 
-class SettingsManager:
+class SystemConfigManager:
     """系统配置管理器"""
 
     DEFAULT_SETTINGS = {
@@ -118,7 +119,17 @@ class SettingsManager:
             else:
                 config_dir = os.path.dirname(os.path.abspath(__file__))
                 project_root = os.path.dirname(os.path.dirname(config_dir))
-            settings_path = os.path.join(project_root, "config", "settings.json")
+            new_path = os.path.join(project_root, "config", "system_config.json")
+            old_path = os.path.join(project_root, "config", "settings.json")
+            if os.path.exists(new_path):
+                settings_path = new_path
+            elif os.path.exists(old_path):
+                logging.getLogger(__name__).warning(
+                    "config/settings.json 已弃用，请重命名为 config/system_config.json"
+                )
+                settings_path = old_path
+            else:
+                settings_path = new_path
         self.settings_path = settings_path
         self.settings = self.load_settings()
 

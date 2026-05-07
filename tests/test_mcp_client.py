@@ -243,9 +243,9 @@ class TestMCPIntegration:
     )
     def test_real_stdio_connection(self):
         """测试真实的stdio连接"""
-        from src.settings_manager.manager import SettingsManager
+        from src.system_config_manager.manager import SystemConfigManager
 
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         client = MCPClient(settings_manager)
 
         if len(client.servers) == 0:

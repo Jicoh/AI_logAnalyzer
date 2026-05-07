@@ -11,7 +11,7 @@ from flask_login import current_user
 from src.ai_analyzer.analyzer import analyze_with_agent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
-from src.settings_manager.manager import SettingsManager
+from src.system_config_manager.manager import SystemConfigManager
 from src.utils.file_utils import (
     is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
@@ -57,10 +57,10 @@ def get_plugin_manager_with_custom():
 
 
 def get_settings_manager():
-    """获取或创建 SettingsManager 实例。"""
+    """获取或创建 SystemConfigManager 实例。"""
     global settings_manager
     if settings_manager is None:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
     return settings_manager
 
 

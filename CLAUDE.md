@@ -51,8 +51,8 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Settings Manager | `src/settings_manager/` | System config (API, BM25, embedding) |
-| User Config | `src/user_config/` | User-level preferences (plugin selection, KB selection) |
+| Settings Manager | `src/system_config_manager/` | System config (API, BM25, embedding) |
+| User Config | `src/user_config_manager/` | User-level preferences (plugin selection, KB selection) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
 | AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
@@ -263,7 +263,7 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 ## Configuration
 
 ### System Settings (管理员配置)
-File: `config/settings.json`
+File: `config/system_config.json`
 - `web.*` - Web server settings (host, port, debug)
 - `api.*` - LLM API settings (base_url, api_key, model, temperature, max_tokens)
 - `orchestrator.*` - Orchestrator Agent settings (max_rounds, context_limit, etc.)
@@ -288,8 +288,8 @@ File: `config/user_config_template.json`
 ### Prompt files
 - `config/default_prompt_template.txt` - Read-only template
 - `config/default_prompt.txt` - User-customizable prompt (overrides template)
-- `config/agent_prompt.txt` - Log Analyzer Agent prompt
-- `config/orchestrator_prompt.txt` - Orchestrator Agent prompt
+- `prompts/subagent_log_analyze_prompt.txt` - Log Analyzer Subagent prompt
+- `prompts/orchestrator_prompt.txt` - Orchestrator Agent prompt
 - `config/log_metadata_rules.json` - Log file description rulesets for AI selection
 
 ## Knowledge Base Retrieval

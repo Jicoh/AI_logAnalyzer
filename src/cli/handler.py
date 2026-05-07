@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 
 from src.cli.parser import get_parser
 
-from src.settings_manager import SettingsManager
+from src.system_config_manager import SystemConfigManager
 from src.knowledge_base import KnowledgeBaseManager
 from src.ai_analyzer.analyzer import analyze_with_agent
 from src.log_metadata import LogMetadataManager
@@ -82,7 +82,7 @@ def cmd_analyze(args):
     """分析日志命令"""
     logger.debug(f"开始分析日志: {args.path}")
 
-    settings_manager = SettingsManager()
+    settings_manager = SystemConfigManager()
     kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     # 检查日志文件
@@ -249,7 +249,7 @@ def cmd_analyze(args):
 
 def cmd_kb(args):
     """知识库管理命令"""
-    settings_manager = SettingsManager()
+    settings_manager = SystemConfigManager()
     kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     if args.kb_action == 'create':
@@ -336,7 +336,7 @@ def cmd_kb(args):
 
 def cmd_config(args):
     """配置管理命令"""
-    settings_manager = SettingsManager()
+    settings_manager = SystemConfigManager()
 
     if args.config_action == 'get':
         value = settings_manager.get(args.key)
@@ -437,7 +437,7 @@ def cmd_analyze_batch(args):
     from datetime import datetime
 
     logger.debug(f"开始批量分析: {args.path}")
-    settings_manager = SettingsManager()
+    settings_manager = SystemConfigManager()
     kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
     # 检查目录是否存在

@@ -377,7 +377,7 @@ class LogAnalyzerSubagent(SubagentBase):
         if self.prompt_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            self.prompt_path = os.path.join(project_root, 'config', 'agent_prompt.txt')
+            self.prompt_path = os.path.join(project_root, 'prompts', 'subagent_log_analyze_prompt.txt')
         return self.prompt_path
 
     def _get_template_path(self) -> str:

@@ -9,7 +9,7 @@ import sys
 
 from flask import Flask
 from src.web.routes import register_routes
-from src.settings_manager.manager import SettingsManager
+from src.system_config_manager.manager import SystemConfigManager
 from src.utils import get_logger
 
 logger = get_logger('web')
@@ -17,7 +17,7 @@ logger = get_logger('web')
 
 def get_web_config():
     """从配置文件读取 Web 配置。"""
-    settings_manager = SettingsManager()
+    settings_manager = SystemConfigManager()
     return {
         "host": settings_manager.get("web.host", "0.0.0.0"),
         "port": settings_manager.get("web.port", 18888),

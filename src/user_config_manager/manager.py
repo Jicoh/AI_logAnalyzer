@@ -9,7 +9,7 @@ import os
 from src.utils.file_utils import get_user_data_dir
 from src.utils import get_logger
 
-logger = get_logger('user_config')
+logger = get_logger('user_config_manager')
 
 
 class UserConfigManager:

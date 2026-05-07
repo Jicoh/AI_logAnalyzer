@@ -12,7 +12,7 @@ from flask_login import current_user
 from src.auth.decorators import login_required
 from src.session_manager.manager import SessionManager
 from src.ai_analyzer.orchestrator_agent import OrchestratorAgent
-from src.settings_manager.manager import SettingsManager
+from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.utils.file_utils import get_user_data_dir
 from src.utils import get_logger
@@ -150,7 +150,7 @@ def chat(session_id):
             return jsonify({'success': False, 'error': '会话不存在'}), 404
 
         # 初始化OrchestratorAgent
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
 
         agent = OrchestratorAgent(

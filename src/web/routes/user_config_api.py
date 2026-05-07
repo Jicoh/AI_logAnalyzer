@@ -6,7 +6,7 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 
-from src.user_config.manager import UserConfigManager
+from src.user_config_manager.manager import UserConfigManager
 from src.utils import get_logger
 
 logger = get_logger('user_config_api')

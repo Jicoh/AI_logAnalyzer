@@ -11,7 +11,7 @@ from flask_login import current_user
 from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
 from src.auth.decorators import admin_required, login_required
-from src.settings_manager.manager import SettingsManager
+from src.system_config_manager.manager import SystemConfigManager
 from src.storage.quota import StorageQuota, format_size, get_dir_size, check_disk_space
 from src.utils.file_utils import get_user_data_dir, get_data_dir
 from src.utils import get_logger
@@ -274,7 +274,7 @@ def get_stats():
 def get_config():
     """获取系统配置。"""
     try:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         config = settings_manager.get_all()
         return jsonify({'success': True, 'data': config})
     except Exception as e:
@@ -287,7 +287,7 @@ def update_config():
     """更新系统配置。"""
     try:
         data = request.get_json()
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
 
         # 更新 API 设置
         if 'api' in data:
@@ -397,7 +397,7 @@ def get_configurable_subagents():
 def get_mcp_servers():
     """获取MCP Server配置列表"""
     try:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_servers = settings_manager.get('mcp_servers', {})
 
         # 构建返回数据，添加状态信息
@@ -431,7 +431,7 @@ def add_mcp_server():
         if not name:
             return jsonify({'success': False, 'error': '名称不能为空'}), 400
 
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name in mcp_servers:
@@ -475,7 +475,7 @@ def add_mcp_server():
 def update_mcp_server(name):
     """更新MCP Server配置"""
     try:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
@@ -519,7 +519,7 @@ def update_mcp_server(name):
 def delete_mcp_server(name):
     """删除MCP Server配置"""
     try:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
@@ -542,7 +542,7 @@ def delete_mcp_server(name):
 def test_mcp_server(name):
     """测试MCP Server连接"""
     try:
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_servers = settings_manager.get('mcp_servers', {})
 
         if name not in mcp_servers:
@@ -603,7 +603,7 @@ def get_mcp_tools():
     try:
         from src.ai_analyzer.mcp_client import MCPClient
 
-        settings_manager = SettingsManager()
+        settings_manager = SystemConfigManager()
         mcp_client = MCPClient(settings_manager)
 
         tools = []

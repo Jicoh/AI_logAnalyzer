@@ -13,7 +13,7 @@ from .client import AIClient, AIResponse
 from .subagents import SubagentRegistry, get_registry
 from .mcp_client import MCPClient
 from src.session_manager.manager import SessionManager
-from src.settings_manager.manager import SettingsManager
+from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.utils import get_logger
 
@@ -138,7 +138,7 @@ class OrchestratorAgent:
         self,
         user_id: str,
         session_id: str,
-        settings_manager: SettingsManager = None,
+        settings_manager: SystemConfigManager = None,
         kb_manager: KnowledgeBaseManager = None,
         mcp_client: MCPClient = None
     ):
@@ -157,7 +157,7 @@ class OrchestratorAgent:
 
         # 配置管理器
         if settings_manager is None:
-            settings_manager = SettingsManager()
+            settings_manager = SystemConfigManager()
         self.settings_manager = settings_manager
 
         # 加载Orchestrator配置
@@ -260,7 +260,7 @@ class OrchestratorAgent:
         """获取prompt文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        return os.path.join(project_root, 'config', 'orchestrator_prompt.txt')
+        return os.path.join(project_root, 'prompts', 'orchestrator_prompt.txt')
 
     def build_tools(self) -> List[Dict]:
         """构建工具列表（内置 + MCP）"""
