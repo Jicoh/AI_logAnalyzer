@@ -82,7 +82,7 @@ def main():
         subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyinstaller'], check=True)
 
     # 清理PyInstaller缓存
-    print("\n[0/9] 清理PyInstaller缓存...")
+    print("\n[0/8] 清理PyInstaller缓存...")
     cache_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'pyinstaller')
     if cache_dir and os.path.exists(cache_dir):
         shutil.rmtree(cache_dir)
@@ -91,7 +91,7 @@ def main():
     spec_file = os.path.join(project_root, 'scripts', 'ai_log_analyzer.spec')
 
     # 读取插件依赖并更新 .spec 文件
-    print("\n[1/9] 读取插件依赖配置...")
+    print("\n[1/8] 读取插件依赖配置...")
     plugin_deps = load_plugin_dependencies(project_root)
     if plugin_deps:
         print(f"  发现依赖: {plugin_deps}")
@@ -102,7 +102,7 @@ def main():
         print("  无额外插件依赖")
 
     # 2. 运行PyInstaller
-    print("\n[2/9] 运行PyInstaller...")
+    print("\n[2/8] 运行PyInstaller...")
     if not os.path.exists(spec_file):
         print(f"错误: 找不到spec文件 {spec_file}")
         sys.exit(1)
@@ -121,7 +121,7 @@ def main():
     print("PyInstaller 打包完成")
 
     # 移动exe到最终目录
-    print("\n[3/9] 移动exe到最终目录...")
+    print("\n[3/8] 移动exe到最终目录...")
     os.makedirs(dist_dir, exist_ok=True)
     final_exe_path = os.path.join(dist_dir, 'ai_log_analyzer.exe')
     if os.path.exists(exe_path):
@@ -132,7 +132,7 @@ def main():
         sys.exit(1)
 
     # 3. 复制用户可修改的配置文件到dist目录
-    print("\n[4/9] 复制配置文件...")
+    print("\n[4/8] 复制配置文件...")
     config_src = os.path.join(project_root, 'config')
     config_dst = os.path.join(dist_dir, 'config')
     os.makedirs(config_dst, exist_ok=True)
@@ -144,7 +144,7 @@ def main():
             print(f"  复制: {f}")
 
     # 4. 创建空的数据目录
-    print("\n[5/9] 创建数据目录...")
+    print("\n[5/8] 创建数据目录...")
     data_dirs = ['uploads', 'temp', 'analysis_output', 'users']
     for d in data_dirs:
         data_path = os.path.join(dist_dir, 'data', d)
@@ -152,7 +152,7 @@ def main():
         print(f"  创建: data/{d}")
 
     # 5. 创建空的document和custom_plugins目录
-    print("\n[6/9] 创建其他目录...")
+    print("\n[6/8] 创建其他目录...")
     os.makedirs(os.path.join(dist_dir, 'document'), exist_ok=True)
     print("  创建: document/")
 
@@ -165,31 +165,13 @@ def main():
             f.write('')
     print("  创建: custom_plugins/")
 
-    # 6. 复制bat脚本（使用中文文件名）
-    print("\n[7/9] 复制右键菜单脚本...")
-    scripts_dir = os.path.join(project_root, 'scripts')
-
-    register_bat = os.path.join(scripts_dir, '注册右键菜单.bat')
-    if os.path.exists(register_bat):
-        shutil.copy2(register_bat, dist_dir)
-        print("  复制: 注册右键菜单.bat")
-    else:
-        print("  警告: 找不到 注册右键菜单.bat")
-
-    unregister_bat = os.path.join(scripts_dir, '取消右键菜单.bat')
-    if os.path.exists(unregister_bat):
-        shutil.copy2(unregister_bat, dist_dir)
-        print("  复制: 取消右键菜单.bat")
-    else:
-        print("  警告: 找不到 取消右键菜单.bat")
-
     # 7. 创建使用说明
-    print("\n[8/9] 创建使用说明...")
+    print("\n[7/8] 创建使用说明...")
     create_usage_file(dist_dir)
     print("  创建: 使用说明.txt")
 
     # 8. 清理打包临时文件
-    print("\n[9/9] 清理临时文件...")
+    print("\n[8/8] 清理临时文件...")
     build_dir = os.path.join(project_root, 'build')
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
@@ -209,8 +191,7 @@ def main():
     print(f"输出目录: {dist_dir}")
     print("\n使用方法:")
     print("  1. 双击 ai_log_analyzer.exe 启动Web界面")
-    print("  2. 运行 注册右键菜单.bat 注册右键菜单")
-    print("  3. 配置API后即可使用AI分析功能")
+    print("  2. 配置API后即可使用AI分析功能")
     print("=" * 50)
 
 
@@ -265,21 +246,7 @@ def create_usage_file(dist_dir):
    打开 config/ai_config.json 文件，修改 api 部分的配置
 
 ================================================================================
-四、右键菜单集成
-================================================================================
-
-1. 注册右键菜单:
-   运行 "注册右键菜单.bat"（需要管理员权限）
-   注册后可右键点击以下文件类型快速分析:
-   - 压缩包: .zip, .tar.gz, .tgz, .tar
-   - 日志文件: .log, .txt
-   - 文件夹
-
-2. 取消右键菜单:
-   运行 "取消右键菜单.bat"
-
-================================================================================
-五、自定义插件
+四、自定义插件
 ================================================================================
 
 将自定义插件放入 custom_plugins/ 目录
@@ -304,14 +271,14 @@ def create_usage_file(dist_dir):
 3. 运行打包脚本，依赖模块会被自动包含在 exe 中
 
 ================================================================================
-六、知识库
+五、知识库
 ================================================================================
 
 将参考文档放入 document/ 目录
 通过Web界面创建和管理知识库
 
 ================================================================================
-七、支持的日志格式
+六、支持的日志格式
 ================================================================================
 
 - 压缩包: .zip, .tar.gz, .tgz, .tar

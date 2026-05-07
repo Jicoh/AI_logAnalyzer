@@ -430,8 +430,6 @@ function analyzerApp() {
             this.loadLogRulesList();
             this.loadPluginSelection();
             this.restoreState();
-            this.checkAutoAnalyze();
-            this.startPollingPendingAnalysis();
             // 延迟初始化 IntersectionObserver，确保 DOM 已渲染
             setTimeout(() => this.initIntersectionObserver(), 100);
             // 监听窗口resize更新悬浮按钮位置
@@ -474,46 +472,6 @@ function analyzerApp() {
             });
 
             this.intersectionObserver.observe(staticBar);
-        },
-
-        startPollingPendingAnalysis() {
-            // 每2秒检查是否有新的待分析路径
-            this.pollingTimer = setInterval(async () => {
-                // 分析中时不轮询
-                if (this.analyzing) return;
-
-                try {
-                    const response = await fetch('/api/pending-analysis');
-                    const data = await response.json();
-                    if (data.success && data.data.path) {
-                        // 有新的分析请求，停止轮询并开始分析
-                        this.clearState();
-                        await this.validateAndStartLocalAnalysis(data.data.path);
-                    }
-                } catch (e) {
-                    // 忽略轮询错误
-                }
-            }, 2000);
-        },
-
-        async checkAutoAnalyze() {
-            // 检查 URL 参数 auto_analyze
-            const urlParams = new URLSearchParams(window.location.search);
-            const autoAnalyzePath = urlParams.get('auto_analyze');
-            const pendingPath = urlParams.get('pending_path');
-
-            // 清除 URL 参数，避免刷新后重复分析
-            if (autoAnalyzePath || pendingPath) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-
-            let path = autoAnalyzePath || pendingPath;
-            if (path) {
-                // 清除上次结果状态
-                this.clearState();
-                // 验证路径并触发分析
-                await this.validateAndStartLocalAnalysis(path);
-            }
         },
 
         async validateAndStartLocalAnalysis(path) {

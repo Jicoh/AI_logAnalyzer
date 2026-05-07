@@ -130,7 +130,5 @@ def get_parser(include_web=False):
                                 help='禁用调试模式')
         web_parser.add_argument('--no-browser', action='store_true',
                                 help='不自动打开浏览器')
-        web_parser.add_argument('--analyze-path', type=str,
-                                help='启动后自动分析指定路径')
 
     return parser

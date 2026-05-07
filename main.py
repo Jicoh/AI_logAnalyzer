@@ -8,7 +8,6 @@ AI日志分析器统一入口点
     python main.py                    # 启动Web界面（自动打开浏览器）
     python main.py web --port 9000    # 指定端口启动Web
     python main.py web --no-browser   # 启动Web但不打开浏览器
-    python main.py web --analyze-path <path>  # 启动并自动分析指定路径
     python main.py analyze <path>     # CLI分析
     python main.py config set api.api_key <key>  # 配置
 """
@@ -19,8 +18,6 @@ import webbrowser
 import threading
 import time
 import json
-import urllib.request
-import urllib.parse
 
 # 添加路径
 if getattr(sys, 'frozen', False):
@@ -86,18 +83,6 @@ def remove_lock_file():
             pass
 
 
-def send_analyze_request(port, path):
-    """向已运行的服务发送分析请求。"""
-    try:
-        url = f"http://127.0.0.1:{port}/api/trigger-analysis"
-        data = json.dumps({'path': path}).encode('utf-8')
-        req = urllib.request.Request(url, data=data,
-                                     headers={'Content-Type': 'application/json'})
-        urllib.request.urlopen(req, timeout=5)
-    except Exception:
-        pass
-
-
 def check_port_in_use(port):
     """检查端口是否被占用。"""
     import socket
@@ -110,17 +95,11 @@ def check_port_in_use(port):
         return False
 
 
-def check_existing_server(port=None, analyze_path=None):
-    """检查是否已有服务运行，复用则返回True。
-
-    Args:
-        port: 用户指定的端口，如果指定则只检查该端口
-        analyze_path: 分析路径，用于发送分析请求
-    """
+def check_existing_server(port=None):
+    """检查是否已有服务运行，复用则返回True。"""
     lock_data = read_lock_file()
     lock_port = lock_data.get('port', 18888) if lock_data else 18888
 
-    # 如果用户指定了端口，只检查该端口
     check_port = port if port is not None else lock_port
 
     if not check_port_in_use(check_port):
@@ -129,13 +108,8 @@ def check_existing_server(port=None, analyze_path=None):
         return False
 
     # 端口被占用，复用现有服务
-    if analyze_path:
-        send_analyze_request(check_port, analyze_path)
-        print(f"已发送分析请求到现有服务 (端口 {check_port})")
-        print("请在已打开的浏览器页面查看分析结果")
-    else:
-        webbrowser.open(f"http://127.0.0.1:{check_port}/")
-        print(f"已有服务运行，已打开浏览器 (端口 {check_port})")
+    webbrowser.open(f"http://127.0.0.1:{check_port}/")
+    print(f"已有服务运行，已打开浏览器 (端口 {check_port})")
     return True
 
 
@@ -157,7 +131,6 @@ def run_web(args):
     host = getattr(args, 'host', None) or '127.0.0.1'
     port = getattr(args, 'port', None) or 18888
     no_browser = getattr(args, 'no_browser', False)
-    analyze_path = getattr(args, 'analyze_path', None)
     # --debug/--no-debug 参数，打包后默认禁用
     if getattr(sys, 'frozen', False):
         debug = False
@@ -167,7 +140,7 @@ def run_web(args):
             debug = False  # 默认禁用
 
     # 检查是否已有服务运行（在import src.web之前）
-    if check_existing_server(port, analyze_path):
+    if check_existing_server(port):
         return
 
     # 现在才import src.web（避免提前加载插件）
@@ -193,9 +166,6 @@ def run_web(args):
         # 0.0.0.0 无法在浏览器直接访问，替换为 localhost
         display_host = "localhost" if host == "0.0.0.0" else host
         url = f"http://{display_host}:{port}"
-        if analyze_path:
-            encoded_path = urllib.parse.quote(analyze_path)
-            url += f"/?auto_analyze={encoded_path}"
 
         def open_browser():
             time.sleep(1.5)
@@ -210,8 +180,6 @@ def run_web(args):
     print("AI Log Analyzer - Web Interface")
     print("=" * 50)
     print(f"访问地址: http://{host}:{port}")
-    if analyze_path:
-        print(f"自动分析路径: {analyze_path}")
     print("=" * 50)
     print("按 Ctrl+C 退出")
 

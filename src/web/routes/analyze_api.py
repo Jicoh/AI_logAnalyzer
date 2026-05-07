@@ -572,38 +572,6 @@ def validate_local_path():
         return jsonify({'success': False, 'error': str(e)})
 
 
-# 待分析路径（用于 IPC）
-_pending_analyze_path = None
-
-
-@analyze_bp.route('/api/trigger-analysis', methods=['POST'])
-def trigger_analysis():
-    """设置待分析路径，用于已运行服务接收分析请求。"""
-    global _pending_analyze_path
-    try:
-        data = request.get_json()
-        path = data.get('path', '')
-        if not path:
-            return jsonify({'success': False, 'error': '路径不能为空'})
-
-        _pending_analyze_path = path
-        logger.info(f"设置待分析路径: {path}")
-        return jsonify({'success': True, 'message': '分析请求已设置'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-
-@analyze_bp.route('/api/pending-analysis', methods=['GET'])
-def get_pending_analysis():
-    """获取待分析路径。"""
-    global _pending_analyze_path
-    path = _pending_analyze_path
-    _pending_analyze_path = None  # 获取后清除
-    if path:
-        return jsonify({'success': True, 'data': {'path': path}})
-    return jsonify({'success': True, 'data': {'path': None}})
-
-
 @analyze_bp.route('/api/analyze/local-stream', methods=['POST'])
 def analyze_local_stream():
     """对本地路径执行流式分析（支持文件和目录）。"""
