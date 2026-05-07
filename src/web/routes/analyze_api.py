@@ -16,7 +16,7 @@ from src.utils.file_utils import (
     is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
-    get_project_root, get_data_dir, get_user_data_dir, clean_filename
+    get_project_root, get_data_dir, get_user_data_dir, clean_filename, is_safe_path
 )
 from src.storage.quota import StorageQuota
 from src.utils import get_logger
@@ -27,6 +27,36 @@ from plugins.base import count_severity
 logger = get_logger('analyze_api')
 
 analyze_bp = Blueprint('analyze_api', __name__)
+
+
+def get_allowed_base_dirs():
+    """获取允许访问的基础目录列表"""
+    return [
+        get_project_root()  # 允许访问项目根目录下的所有路径（用于本地日志分析）
+    ]
+
+
+def validate_path_access(path: str) -> tuple:
+    """
+    验证路径是否在允许范围内（本地路径分析）
+    注意：本地分析允许更广泛的路径访问
+
+    Args:
+        path: 要验证的路径
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    try:
+        abs_path = os.path.abspath(path)
+        # 防止访问系统关键路径
+        dangerous_paths = ['/etc', '/sys', '/proc', '/root', '/home', 'C:\\Windows', 'C:\\System32']
+        for dangerous in dangerous_paths:
+            if abs_path.startswith(dangerous):
+                return False, '禁止访问系统关键目录'
+        return True, None
+    except Exception as e:
+        return False, f'路径验证失败: {str(e)}'
 
 
 def get_current_user_id():
@@ -514,6 +544,12 @@ def validate_local_path():
         import urllib.parse
         path = urllib.parse.unquote(path)
 
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
+
         # 验证路径是否存在
         if not os.path.exists(path):
             return jsonify({'success': False, 'error': f'路径不存在: {path}'})
@@ -597,6 +633,13 @@ def analyze_local_stream():
 
             if not path:
                 yield generate_sse_event({'stage': 'error', 'message': '路径不能为空'})
+                return
+
+            # 安全检查：路径必须在允许范围内
+            is_valid, error_msg = validate_path_access(path)
+            if not is_valid:
+                logger.warning(f"非法路径访问尝试: {path}")
+                yield generate_sse_event({'stage': 'error', 'message': error_msg})
                 return
 
             # 验证路径

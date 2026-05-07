@@ -6,9 +6,10 @@ Log Analyzer Subagent
 import os
 import json
 import re
+import html
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .base import SubagentBase, SubagentResult
 from src.ai_analyzer.client import AIClient
@@ -389,12 +390,16 @@ class LogAnalyzerSubagent(SubagentBase):
         return self.template_path
 
     def _load_template(self):
-        """加载HTML模板"""
+        """加载HTML模板（启用自动转义防止XSS）"""
         if self.html_template is None:
             template_path = self._get_template_path()
             if os.path.exists(template_path):
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    self.html_template = Template(f.read())
+                template_dir = os.path.dirname(template_path)
+                env = Environment(
+                    loader=FileSystemLoader(template_dir),
+                    autoescape=select_autoescape(['html', 'xml'])
+                )
+                self.html_template = env.get_template(os.path.basename(template_path))
 
     def _load_prompt(self) -> str:
         """加载prompt模板"""
@@ -1150,14 +1155,15 @@ class LogAnalyzerSubagent(SubagentBase):
         return self._generate_simple_html(text)
 
     def _generate_simple_html(self, content: str) -> str:
-        """生成简单HTML"""
+        """生成简单HTML（内容已转义防止XSS）"""
+        escaped_content = html.escape(content)
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>AI分析报告</title></head>
 <body style="font-family:sans-serif;padding:20px;">
 <div style="background:white;padding:20px;margin:20px;border-radius:8px;">
 <h2>AI分析结果</h2>
-<pre style="white-space:pre-wrap;">{content}</pre>
+<pre style="white-space:pre-wrap;">{escaped_content}</pre>
 </div>
 </body></html>"""
 
@@ -1185,7 +1191,7 @@ class LogAnalyzerSubagent(SubagentBase):
         return self._generate_fallback_html(data)
 
     def _generate_fallback_html(self, data: dict) -> str:
-        """生成备用HTML"""
+        """生成备用HTML（所有动态内容已转义防止XSS）"""
         html_parts = ['<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">']
         html_parts.append('<title>AI日志分析报告</title>')
         html_parts.append('<style>')
@@ -1199,11 +1205,12 @@ class LogAnalyzerSubagent(SubagentBase):
         machine_info = data.get('machine_info', {})
         html_parts.append('<div class="card"><h2>机器信息</h2>')
         for k, v in machine_info.items():
-            html_parts.append(f'<p><strong>{k}</strong>: {v}</p>')
+            html_parts.append(f'<p><strong>{html.escape(str(k))}</strong>: {html.escape(str(v))}</p>')
         html_parts.append('</div>')
 
         html_parts.append('<div class="card"><h2>分析摘要</h2>')
-        html_parts.append(f'<p>{data.get("analysis_summary", "无摘要")}</p>')
+        summary = data.get("analysis_summary", "无摘要")
+        html_parts.append(f'<p>{html.escape(str(summary))}</p>')
         html_parts.append('</div>')
 
         problems = data.get('problems', [])
@@ -1211,15 +1218,15 @@ class LogAnalyzerSubagent(SubagentBase):
             html_parts.append('<div class="card"><h2>发现的问题</h2>')
             for p in problems:
                 sev = p.get('severity', 'info')
-                html_parts.append(f'<div class="{sev}" style="padding:10px;margin:10px 0;">')
-                html_parts.append(f'<h3>{p.get("title", "")}</h3>')
-                html_parts.append(f'<p><strong>严重程度</strong>: {sev}</p>')
+                html_parts.append(f'<div class="{html.escape(sev)}" style="padding:10px;margin:10px 0;">')
+                html_parts.append(f'<h3>{html.escape(str(p.get("title", "")))}</h3>')
+                html_parts.append(f'<p><strong>严重程度</strong>: {html.escape(sev)}</p>')
                 if p.get('description'):
-                    html_parts.append(f'<p>{p["description"]}</p>')
+                    html_parts.append(f'<p>{html.escape(str(p["description"]))}</p>')
                 if p.get('analysis_logic'):
-                    html_parts.append(f'<p><strong>分析逻辑</strong>: {p["analysis_logic"]}</p>')
+                    html_parts.append(f'<p><strong>分析逻辑</strong>: {html.escape(str(p["analysis_logic"]))}</p>')
                 if p.get('log_reference'):
-                    html_parts.append(f'<pre style="background:#f5f5f5;padding:10px;">{p["log_reference"]}</pre>')
+                    html_parts.append(f'<pre style="background:#f5f5f5;padding:10px;">{html.escape(str(p["log_reference"]))}</pre>')
                 html_parts.append('</div>')
             html_parts.append('</div>')
 
@@ -1228,11 +1235,11 @@ class LogAnalyzerSubagent(SubagentBase):
             html_parts.append('<div class="card"><h2>潜在风险</h2>')
             for r in risks:
                 html_parts.append('<div style="border-left:4px solid #ffc107;padding:10px;margin:10px 0;">')
-                html_parts.append(f'<h3>{r.get("title", "")}</h3>')
+                html_parts.append(f'<h3>{html.escape(str(r.get("title", "")))}</h3>')
                 if r.get('reasoning'):
-                    html_parts.append(f'<p><strong>推理依据</strong>: {r["reasoning"]}</p>')
+                    html_parts.append(f'<p><strong>推理依据</strong>: {html.escape(str(r["reasoning"]))}</p>')
                 if r.get('recommendation'):
-                    html_parts.append(f'<p><strong>建议</strong>: {r["recommendation"]}</p>')
+                    html_parts.append(f'<p><strong>建议</strong>: {html.escape(str(r["recommendation"]))}</p>')
                 html_parts.append('</div>')
             html_parts.append('</div>')
 
@@ -1240,43 +1247,48 @@ class LogAnalyzerSubagent(SubagentBase):
         if solutions:
             html_parts.append('<div class="card"><h2>解决方案</h2>')
             for s in solutions:
-                html_parts.append(f'<h3>{s.get("title", "")}</h3>')
+                html_parts.append(f'<h3>{html.escape(str(s.get("title", "")))}</h3>')
                 if s.get('description'):
-                    html_parts.append(f'<p>{s["description"]}</p>')
+                    html_parts.append(f'<p>{html.escape(str(s["description"]))}</p>')
                 if s.get('steps'):
                     html_parts.append('<ul>')
                     for step in s['steps']:
-                        html_parts.append(f'<li>{step}</li>')
+                        html_parts.append(f'<li>{html.escape(str(step))}</li>')
                     html_parts.append('</ul>')
             html_parts.append('</div>')
 
         risk_assessment = data.get('risk_assessment', {})
         html_parts.append('<div class="card"><h2>风险评估</h2>')
-        html_parts.append(f'<p><strong>等级</strong>: {risk_assessment.get("level", "未知")}</p>')
+        level = risk_assessment.get("level", "未知")
+        html_parts.append(f'<p><strong>等级</strong>: {html.escape(str(level))}</p>')
         if risk_assessment.get('description'):
-            html_parts.append(f'<p>{risk_assessment["description"]}</p>')
+            html_parts.append(f'<p>{html.escape(str(risk_assessment["description"]))}</p>')
         html_parts.append('</div>')
 
         coverage = data.get('analysis_coverage', {})
         if coverage:
             html_parts.append('<div class="card"><h2>分析覆盖范围</h2>')
-            html_parts.append(f'<p><strong>深度</strong>: {coverage.get("analysis_depth", "未知")}</p>')
+            depth = coverage.get("analysis_depth", "未知")
+            html_parts.append(f'<p><strong>深度</strong>: {html.escape(str(depth))}</p>')
             if coverage.get('files_analyzed'):
-                html_parts.append('<p><strong>已分析文件</strong>: ' + ', '.join(coverage['files_analyzed']) + '</p>')
+                files_str = ', '.join(html.escape(str(f)) for f in coverage['files_analyzed'])
+                html_parts.append(f'<p><strong>已分析文件</strong>: {files_str}</p>')
             html_parts.append('</div>')
 
         html_parts.append('</body></html>')
         return ''.join(html_parts)
 
     def _generate_error_html(self, title: str, detail: str) -> str:
-        """生成错误HTML"""
+        """生成错误HTML（内容已转义防止XSS）"""
+        escaped_title = html.escape(title)
+        escaped_detail = html.escape(detail)
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>分析错误</title></head>
 <body style="font-family:sans-serif;padding:20px;">
 <div style="background:white;padding:20px;margin:20px;border-radius:8px;border:1px solid #dc3545;">
-<h2 style="color:#dc3545;">{title}</h2>
-<p>{detail}</p>
+<h2 style="color:#dc3545;">{escaped_title}</h2>
+<p>{escaped_detail}</p>
 </div>
 </body></html>"""
 

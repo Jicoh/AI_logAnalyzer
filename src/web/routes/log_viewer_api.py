@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify
 from src.utils.file_utils import (
     find_log_files_in_directory, get_files_in_directory, is_valid_log_file,
     get_project_root, get_data_dir,
-    is_text_readable_file, find_text_files_in_directory
+    is_text_readable_file, find_text_files_in_directory, is_safe_path
 )
 from src.utils.log_time_parser import (
     detect_time_format, get_file_time_range as get_log_time_range, read_log_lines,
@@ -25,6 +25,36 @@ from src.utils import get_logger
 logger = get_logger('log_viewer_api')
 
 log_viewer_bp = Blueprint('log_viewer_api', __name__)
+
+
+def get_allowed_base_dirs():
+    """获取允许访问的基础目录列表"""
+    return [
+        get_data_dir('temp'),
+        get_data_dir('uploads'),
+        get_data_dir('analysis_output')
+    ]
+
+
+def validate_path_access(path: str) -> tuple:
+    """
+    验证路径是否在允许范围内
+
+    Args:
+        path: 要验证的路径
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    try:
+        abs_path = os.path.abspath(path)
+        allowed_dirs = get_allowed_base_dirs()
+        for base_dir in allowed_dirs:
+            if is_safe_path(abs_path, base_dir):
+                return True, None
+        return False, '非法路径访问'
+    except Exception as e:
+        return False, f'路径验证失败: {str(e)}'
 
 
 def determine_analysis_type(work_dir: str) -> Tuple[str, List]:
@@ -321,6 +351,12 @@ def validate_path():
             logger.warning(f"路径格式无效: {path}, {str(e)}")
             return jsonify({'success': False, 'error': '路径格式无效'})
 
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(abs_path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {abs_path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
+
         if not os.path.exists(abs_path):
             return jsonify({'success': False, 'error': '路径不存在'})
 
@@ -374,6 +410,12 @@ def get_file_tree():
         # 处理 URL 编码
         path = urllib.parse.unquote(path)
 
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
+
         if not os.path.exists(path):
             return jsonify({'success': False, 'error': '路径不存在'})
 
@@ -415,6 +457,12 @@ def get_file_content():
             return jsonify({'success': False, 'error': '文件路径不能为空'})
 
         path = urllib.parse.unquote(path)
+
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
 
         if not os.path.exists(path):
             return jsonify({'success': False, 'error': '文件不存在'})
@@ -502,6 +550,12 @@ def get_file_time_range():
 
         path = urllib.parse.unquote(path)
 
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
+
         if not os.path.exists(path):
             return jsonify({'success': False, 'error': '文件不存在'})
 
@@ -553,11 +607,23 @@ def get_multi_file_content():
         # 如果传递了file_paths参数，直接使用；否则从目录查找
         if file_paths_json:
             log_files = json.loads(urllib.parse.unquote(file_paths_json))
+            # 验证每个文件路径的安全性
+            for file_path in log_files:
+                is_valid, error_msg = validate_path_access(file_path)
+                if not is_valid:
+                    logger.warning(f"非法路径访问尝试: {file_path}")
+                    return jsonify({'success': False, 'error': error_msg}), 403
         else:
             if not dir_path:
                 return jsonify({'success': False, 'error': '目录路径不能为空'})
 
             dir_path = urllib.parse.unquote(dir_path)
+
+            # 安全检查：路径必须在允许范围内
+            is_valid, error_msg = validate_path_access(dir_path)
+            if not is_valid:
+                logger.warning(f"非法路径访问尝试: {dir_path}")
+                return jsonify({'success': False, 'error': error_msg}), 403
 
             if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
                 return jsonify({'success': False, 'error': '路径不存在或不是目录'})
@@ -637,6 +703,12 @@ def get_analysis_unit_info():
             return jsonify({'success': False, 'error': '路径不能为空'})
 
         path = urllib.parse.unquote(path)
+
+        # 安全检查：路径必须在允许范围内
+        is_valid, error_msg = validate_path_access(path)
+        if not is_valid:
+            logger.warning(f"非法路径访问尝试: {path}")
+            return jsonify({'success': False, 'error': error_msg}), 403
 
         if not os.path.exists(path) or not os.path.isdir(path):
             return jsonify({'success': False, 'error': '路径不存在或不是目录'})

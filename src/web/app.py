@@ -7,7 +7,10 @@ Flask 应用工厂
 import os
 import sys
 
-from flask import Flask
+from flask import Flask, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from src.web.routes import register_routes
 from src.system_config_manager.manager import SystemConfigManager
 from src.utils import get_logger
@@ -45,6 +48,14 @@ def create_app():
 
     # 配置
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ai-log-analyzer-secret-key-change-in-production')
+
+    # 安全检查：检测是否使用默认SECRET_KEY
+    if app.config['SECRET_KEY'] == 'ai-log-analyzer-secret-key-change-in-production':
+        logger.warning("=" * 60)
+        logger.warning("安全警告: 正在使用默认 SECRET_KEY!")
+        logger.warning("生产环境请设置环境变量: SECRET_KEY=<your-secret-key>")
+        logger.warning("=" * 60)
+
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 最大文件大小 50MB
 
     # 数据库配置
@@ -60,6 +71,27 @@ def create_app():
     # 初始化 Flask-Login
     from src.web.routes.auth_api import init_login_manager
     init_login_manager(app)
+
+    # 初始化 CSRF 保护
+    csrf = CSRFProtect(app)
+
+    # 初始化 Flask-Limiter（限流保护）
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="memory://"  # 使用内存存储，适合单实例部署
+    )
+    # 存储limiter实例供其他模块使用
+    app.extensions['limiter'] = limiter
+
+    # 配置限流错误响应
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return jsonify({
+            'success': False,
+            'error': '请求过于频繁，请稍后再试'
+        }), 429
 
     # 创建数据库表和默认管理员
     with app.app_context():
@@ -86,6 +118,23 @@ def create_app():
 
     # 注册路由
     register_routes(app)
+
+    # 为认证接口添加额外限流保护
+    # 登录接口: 每IP每分钟5次
+    limiter.limit("5 per minute")(app.view_functions['auth.do_login'])
+    # 注册接口: 每IP每小时10次
+    limiter.limit("10 per hour")(app.view_functions['auth.do_register'])
+
+    # CSRF豁免：SSE流式端点无法使用标准CSRF Token
+    csrf.exempt(app.view_functions['analyze_api.analyze_stream'])
+    csrf.exempt(app.view_functions['analyze_api.analyze_local_stream'])
+    csrf.exempt(app.view_functions['analyze_api.analyze_batch_stream'])
+
+    # CSRF豁免：JSON API端点使用其他保护机制（限流+认证）
+    csrf.exempt(app.view_functions['auth.do_login'])
+    csrf.exempt(app.view_functions['auth.do_register'])
+    csrf.exempt(app.view_functions['auth.do_logout'])
+    csrf.exempt(app.view_functions['auth.change_password'])
 
     return app
 

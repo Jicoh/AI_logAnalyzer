@@ -3,7 +3,7 @@
 处理用户注册、登录、登出、修改密码等。
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, current_app
 from flask_login import login_user, logout_user, current_user, LoginManager
 from src.models.user import User, db
 from src.auth.password import hash_password, verify_password

@@ -6,6 +6,7 @@ AI分析器模块
 
 import os
 import json
+import html
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Generator, Dict, Any, List
@@ -572,13 +573,15 @@ class AIAnalyzer:
 
 
 def generate_error_html(title: str, detail: str) -> str:
-    """生成错误HTML"""
+    """生成错误HTML（内容已转义防止XSS）"""
+    escaped_title = html.escape(title)
+    escaped_detail = html.escape(detail)
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>分析错误</title></head>
 <body style="font-family:sans-serif;padding:20px;">
 <div style="background:white;padding:20px;margin:20px;border-radius:8px;border:1px solid #dc3545;">
-<h2 style="color:#dc3545;">{title}</h2>
-<p>{detail}</p>
+<h2 style="color:#dc3545;">{escaped_title}</h2>
+<p>{escaped_detail}</p>
 </div>
 </body></html>"""
