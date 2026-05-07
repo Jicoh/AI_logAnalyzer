@@ -116,12 +116,12 @@ class TestMCPServerConfigLogic:
 
 
 class TestAnalyzeWithAgentLogSource:
-    """analyze_with_agent log_source参数测试"""
+    """LogAnalyzerSubagent测试"""
 
     def test_analyzer_import_with_log_source(self):
-        """测试analyzer模块导入"""
-        from src.ai_analyzer.analyzer import analyze_with_agent
-        assert analyze_with_agent is not None
+        """测试LogAnalyzerSubagent模块导入"""
+        from src.ai_analyzer.subagents.log_analyzer import LogAnalyzerSubagent
+        assert LogAnalyzerSubagent is not None
 
     def test_log_source_parameter_handling(self):
         """测试log_source参数处理"""

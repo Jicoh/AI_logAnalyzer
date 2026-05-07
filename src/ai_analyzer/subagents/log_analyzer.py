@@ -354,7 +354,7 @@ class LogAnalyzerSubagent(SubagentBase):
         self.max_tokens = 60000
         self.max_rounds = 10
 
-    def _init_client(self, api_config: Dict = None):
+    def init_client(self, api_config: Dict = None):
         """延迟初始化AI客户端"""
         if self.client is None:
             if api_config:
@@ -370,10 +370,10 @@ class LogAnalyzerSubagent(SubagentBase):
                 self.max_rounds = agent_config.get('max_rounds', 10)
 
             # 加载模板
-            self._load_template()
-            self._get_prompt_path()
+            self.load_template()
+            self.get_prompt_path()
 
-    def _get_prompt_path(self) -> str:
+    def get_prompt_path(self) -> str:
         """获取prompt文件路径"""
         if self.prompt_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -381,7 +381,7 @@ class LogAnalyzerSubagent(SubagentBase):
             self.prompt_path = os.path.join(project_root, 'prompts', 'subagent_log_analyze_prompt.txt')
         return self.prompt_path
 
-    def _get_template_path(self) -> str:
+    def get_template_path(self) -> str:
         """获取HTML模板路径"""
         if self.template_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -389,10 +389,10 @@ class LogAnalyzerSubagent(SubagentBase):
             self.template_path = os.path.join(project_root, 'src', 'ai_analyzer', 'templates', 'ai_report_template.html')
         return self.template_path
 
-    def _load_template(self):
+    def load_template(self):
         """加载HTML模板（启用自动转义防止XSS）"""
         if self.html_template is None:
-            template_path = self._get_template_path()
+            template_path = self.get_template_path()
             if os.path.exists(template_path):
                 template_dir = os.path.dirname(template_path)
                 env = Environment(
@@ -401,15 +401,15 @@ class LogAnalyzerSubagent(SubagentBase):
                 )
                 self.html_template = env.get_template(os.path.basename(template_path))
 
-    def _load_prompt(self) -> str:
+    def load_prompt(self) -> str:
         """加载prompt模板"""
-        prompt_path = self._get_prompt_path()
+        prompt_path = self.get_prompt_path()
         if os.path.exists(prompt_path):
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 return f.read()
-        return self._default_prompt()
+        return self.default_prompt()
 
-    def _default_prompt(self) -> str:
+    def default_prompt(self) -> str:
         """默认prompt"""
         return """你是BMC服务器日志分析专家。
 
@@ -427,7 +427,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
 直接输出JSON对象，不要包裹在代码块中。"""
 
-    def _build_tools(self) -> list:
+    def build_tools(self) -> list:
         """构建完整工具列表（内置工具 + MCP工具）"""
         tools = BUILTIN_TOOLS.copy()
         if self.mcp_client:
@@ -440,160 +440,89 @@ class LogAnalyzerSubagent(SubagentBase):
         self,
         log_files: List[str],
         plugin_result: Dict = None,
-        machine_info: Dict = None,
-        knowledge_content: str = None,
-        log_rules: str = None,
-        analysis_templates: str = None,
         kb_id: str = None,
         user_prompt: str = None,
+        log_rules_id: str = None,
         user_intent: str = None,
         api_config: Dict = None
     ) -> Dict[str, Any]:
         """
-        统一分析接口
+        统一分析接口 - 唯一入口
 
         Args:
             log_files: 日志文件路径列表
-            plugin_result: 插件分析结果（分析流程传入）
-            machine_info: 机器信息（分析流程传入）
-            knowledge_content: 知识库内容（分析流程传入）
-            log_rules: 日志规则描述
-            analysis_templates: 分析模板
+            plugin_result: 插件分析结果（可选，为None时触发智能选择）
             kb_id: 知识库ID
             user_prompt: 用户提示词
-            user_intent: 用户意图（主流程传入）
+            log_rules_id: 日志规则ID
+            user_intent: 用户意图
             api_config: API配置（可选）
 
         Returns:
             dict: {'html': str, 'interaction_record': dict, 'intent_response': str}
         """
-        self._init_client(api_config)
+        self.init_client(api_config)
 
         if self.client is None:
-            return {
-                'html': self._generate_error_html("初始化失败", "AI客户端未初始化"),
-                'interaction_record': {'error': 'AI客户端未初始化'},
-                'intent_response': ''
-            }
+            return self.generate_error_html_result("初始化失败", "AI客户端未初始化")
 
         if not log_files:
-            return {
-                'html': self._generate_error_html("无日志文件", "没有可分析的日志文件"),
-                'interaction_record': {'error': '无日志文件'},
-                'intent_response': ''
-            }
+            return self.generate_error_html_result("无日志文件", "没有可分析的日志文件")
 
-        return self._run_ai_analysis(
+        # 智能选择：plugin_result=None时自动执行
+        if plugin_result is None and self.plugin_manager and user_prompt:
+            selection = self.smart_select(log_files, user_prompt, log_rules_id)
+            if not selection.get('fallback', True):
+                plugin_result = self.run_plugin_analysis(
+                    selection['selected_plugins'],
+                    selection['selected_files']
+                )
+                log_files = selection['selected_files']
+
+        # 预处理（内部完成）
+        machine_info = self.extract_machine_info(plugin_result or {})
+        log_rules = self.get_log_rules(log_files, log_rules_id)
+        knowledge_content = self.retrieve_knowledge(kb_id, plugin_result)
+        analysis_templates = self.load_analysis_templates()
+
+        # 执行AI分析
+        result = self.run_ai_analysis(
             log_files=log_files,
             plugin_result=plugin_result or {},
-            machine_info=machine_info or {},
-            knowledge_content=knowledge_content or "",
-            log_rules=log_rules or "无日志规则",
-            analysis_templates=analysis_templates or "",
+            machine_info=machine_info,
+            knowledge_content=knowledge_content,
+            log_rules=log_rules,
+            analysis_templates=analysis_templates,
             user_prompt=user_prompt or "",
             kb_id=kb_id,
             user_intent=user_intent
         )
 
-    def execute(
-        self,
-        request: str,
-        context: Dict[str, Any],
-        work_dir: str
-    ) -> SubagentResult:
-        """
-        SubagentBase 接口实现（供 OrchestratorAgent 调用）
-        主流程路径：自动选择插件并执行分析
-        """
-        log_files = context.get('log_files', [])
-        kb_id = context.get('kb_id')
-        user_intent = context.get('user_intent', request)
-        api_config = context.get('subagent_api_config')
+        # 内部保存ai_temp记录
+        self.save_ai_temp_record(result)
 
-        self._init_client(api_config)
+        return result
 
-        if self.client is None:
-            return SubagentResult(
-                success=False,
-                content="",
-                error="AI客户端未初始化"
-            )
+    def generate_error_html_result(self, title: str, detail: str) -> Dict:
+        """生成错误HTML结果"""
+        return {
+            'html': self.generate_error_html(title, detail),
+            'interaction_record': {'error': detail},
+            'intent_response': ''
+        }
 
-        if not log_files:
-            return SubagentResult(
-                success=False,
-                content="",
-                error="缺少日志文件"
-            )
+    def save_ai_temp_record(self, result: Dict):
+        """保存ai_temp记录"""
+        try:
+            from src.utils.file_utils import get_ai_temp_dir, write_json
+            ai_temp_dir = get_ai_temp_dir()
+            output_file = os.path.join(ai_temp_dir, 'ai_analysis.json')
+            write_json(output_file, result.get('interaction_record', {}))
+            logger.debug(f"AI交互记录已保存: {output_file}")
+        except Exception as e:
+            logger.warning(f"保存AI记录失败: {str(e)}")
 
-        # 主流程：自动选择插件并执行
-        plugin_result = {}
-        machine_info = {}
-        knowledge_content = ""
-        log_rules = ""
-        analysis_templates = ""
-
-        # 智能选择插件（如果组件可用）
-        if self.plugin_manager and user_intent:
-            selection = self._smart_select(log_files, user_intent)
-            if not selection.get('fallback', True):
-                # 执行选择的插件
-                plugin_result = self._run_plugin_analysis(
-                    selection['selected_plugins'],
-                    selection['selected_files']
-                )
-                # 更新 log_files 为选中的文件
-                log_files = selection['selected_files']
-
-        # 提取机器信息
-        if plugin_result:
-            machine_info = self._extract_machine_info(plugin_result)
-
-        # 获取日志规则
-        if self.log_metadata_manager and log_files:
-            log_rules = self._get_log_rules(log_files)
-
-        # 检索知识库
-        if kb_id and self.kb_manager and plugin_result:
-            knowledge_content = self._retrieve_knowledge(kb_id, plugin_result)
-
-        # 加载分析模板
-        analysis_templates = self._load_analysis_templates()
-
-        # 执行AI分析
-        result = self._run_ai_analysis(
-            log_files=log_files,
-            plugin_result=plugin_result,
-            machine_info=machine_info,
-            knowledge_content=knowledge_content,
-            log_rules=log_rules,
-            analysis_templates=analysis_templates,
-            user_prompt=request,
-            kb_id=kb_id,
-            user_intent=user_intent
-        )
-
-        html = result.get('html', '')
-        interaction_record = result.get('interaction_record', {})
-        intent_response = result.get('intent_response', '')
-
-        return SubagentResult(
-            success=True,
-            content=intent_response or "分析完成，请查看详细报告",
-            data={
-                "html": html,
-                "interaction_record": interaction_record,
-                "intent_response": intent_response
-            },
-            metadata={
-                "analysis_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "log_files": [os.path.basename(f) for f in log_files],
-                "kb_used": bool(knowledge_content),
-                "user_intent": user_intent
-            }
-        )
-
-    def _smart_select(
+    def smart_select(
         self,
         log_files: List[str],
         user_prompt: str,
@@ -612,11 +541,11 @@ class LogAnalyzerSubagent(SubagentBase):
         """
         if not self.log_metadata_manager or not self.plugin_manager:
             logger.warning("缺少log_metadata_manager或plugin_manager，执行全量分析")
-            return self._fallback_result(log_files, "缺少必要组件")
+            return self.fallback_result(log_files, "缺少必要组件")
 
         if not user_prompt or not user_prompt.strip():
             logger.debug("无用户提示词，执行全量分析")
-            return self._fallback_result(log_files, "无用户提示词")
+            return self.fallback_result(log_files, "无用户提示词")
 
         api_config = {}
         if self.config_manager:
@@ -624,7 +553,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         if not api_config.get('base_url') or not api_config.get('api_key'):
             logger.warning("API配置不完整，执行全量分析")
-            return self._fallback_result(log_files, "API配置不完整")
+            return self.fallback_result(log_files, "API配置不完整")
 
         plugin_descriptions = self.plugin_manager.get_plugins_ai_description()
         file_descriptions = self.log_metadata_manager.get_file_descriptions(log_files, rules_id)
@@ -644,15 +573,15 @@ class LogAnalyzerSubagent(SubagentBase):
             for chunk in ai_client.chat(messages):
                 response_text += chunk
 
-            result = self._parse_selection_response(response_text, log_files)
+            result = self.parse_selection_response(response_text, log_files)
             logger.debug(f"智能选择完成，结果: {result.get('reason', '未知')}")
             return result
 
         except Exception as e:
             logger.error(f"智能选择失败: {str(e)}", exc_info=True)
-            return self._fallback_result(log_files, f"智能选择失败: {str(e)}")
+            return self.fallback_result(log_files, f"智能选择失败: {str(e)}")
 
-    def _parse_selection_response(self, response_text: str, log_files: List[str]) -> Dict[str, Any]:
+    def parse_selection_response(self, response_text: str, log_files: List[str]) -> Dict[str, Any]:
         """解析智能选择响应"""
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_text)
         if json_match:
@@ -664,17 +593,17 @@ class LogAnalyzerSubagent(SubagentBase):
             result = json.loads(json_text.strip())
 
             if not isinstance(result, dict):
-                return self._fallback_result(log_files, "响应格式错误")
+                return self.fallback_result(log_files, "响应格式错误")
 
             if result.get('fallback', False):
-                return self._fallback_result(log_files, result.get('reason', '用户请求不明确'))
+                return self.fallback_result(log_files, result.get('reason', '用户请求不明确'))
 
             selected_plugins = result.get('selected_plugins', [])
             all_plugin_ids = [p.id for p in self.plugin_manager.get_all_plugins()]
             valid_plugins = [p for p in selected_plugins if p in all_plugin_ids]
 
             if not valid_plugins:
-                return self._fallback_result(log_files, "未选择有效插件")
+                return self.fallback_result(log_files, "未选择有效插件")
 
             selected_files = result.get('selected_files', [])
             valid_files = []
@@ -685,7 +614,7 @@ class LogAnalyzerSubagent(SubagentBase):
                         break
 
             if not valid_files:
-                return self._fallback_result(log_files, "未选择有效文件")
+                return self.fallback_result(log_files, "未选择有效文件")
 
             return {
                 'selected_plugins': valid_plugins,
@@ -695,9 +624,9 @@ class LogAnalyzerSubagent(SubagentBase):
             }
 
         except json.JSONDecodeError:
-            return self._fallback_result(log_files, "JSON解析失败")
+            return self.fallback_result(log_files, "JSON解析失败")
 
-    def _fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:
+    def fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:
         """生成fallback结果"""
         all_plugin_ids = [p.id for p in self.plugin_manager.get_all_plugins()] if self.plugin_manager else []
         return {
@@ -707,7 +636,7 @@ class LogAnalyzerSubagent(SubagentBase):
             'reason': reason
         }
 
-    def _run_plugin_analysis(self, plugin_ids: List[str], log_files: List[str]) -> Dict[str, Any]:
+    def run_plugin_analysis(self, plugin_ids: List[str], log_files: List[str]) -> Dict[str, Any]:
         """执行插件分析"""
         if not self.plugin_manager:
             return {}
@@ -724,7 +653,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return result
 
-    def _extract_machine_info(self, plugin_result: Dict) -> Dict[str, Any]:
+    def extract_machine_info(self, plugin_result: Dict) -> Dict[str, Any]:
         """从插件结果中提取机器信息"""
         machine_info = {
             'serial_number': '未知',
@@ -784,7 +713,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return machine_info
 
-    def _get_log_rules(self, log_files: List[str], rules_id: str = None) -> str:
+    def get_log_rules(self, log_files: List[str], rules_id: str = None) -> str:
         """获取日志规则描述"""
         if not self.log_metadata_manager:
             return "无日志规则"
@@ -796,7 +725,7 @@ class LogAnalyzerSubagent(SubagentBase):
             logger.warning(f"获取日志规则失败: {str(e)}")
             return "无文件描述规则"
 
-    def _retrieve_knowledge(self, kb_id: str, plugin_result: Dict) -> str:
+    def retrieve_knowledge(self, kb_id: str, plugin_result: Dict) -> str:
         """检索知识库内容"""
         if not self.kb_manager or not kb_id:
             return ""
@@ -836,7 +765,7 @@ class LogAnalyzerSubagent(SubagentBase):
             logger.warning(f"知识库检索失败: {str(e)}")
             return ""
 
-    def _load_analysis_templates(self) -> str:
+    def load_analysis_templates(self) -> str:
         """加载分析模板配置"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
@@ -871,7 +800,7 @@ class LogAnalyzerSubagent(SubagentBase):
             logger.warning(f"加载分析模板失败: {str(e)}")
             return ""
 
-    def _run_ai_analysis(
+    def run_ai_analysis(
         self,
         log_files: List[str],
         plugin_result: Dict,
@@ -887,22 +816,22 @@ class LogAnalyzerSubagent(SubagentBase):
         logger.info(f"开始分析，日志文件数: {len(log_files)}")
 
         tool_executor = ToolExecutor(log_files, self.kb_manager, kb_id)
-        tools = self._build_tools()
+        tools = self.build_tools()
 
         prompt_data = {
-            'plugin_result': self._format_plugin_result(plugin_result),
-            'machine_info': self._format_machine_info(machine_info),
+            'plugin_result': self.format_plugin_result(plugin_result),
+            'machine_info': self.format_machine_info(machine_info),
             'knowledge_content': knowledge_content or "无知识库内容",
             'log_rules': log_rules or "无日志规则",
-            'log_files_overview': self._format_log_files(log_files),
+            'log_files_overview': self.format_log_files(log_files),
             'analysis_templates': analysis_templates or "无分析模板",
             'user_prompt': user_prompt or "无用户提示词"
         }
 
-        prompt_template = self._load_prompt()
-        system_prompt = prompt_template.format(**{k: self._escape_braces(v) for k, v in prompt_data.items()})
+        prompt_template = self.load_prompt()
+        system_prompt = prompt_template.format(**{k: self.escape_braces(v) for k, v in prompt_data.items()})
 
-        enhanced_prompt = self._build_enhanced_prompt(user_prompt, user_intent)
+        enhanced_prompt = self.build_enhanced_prompt(user_prompt, user_intent)
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -975,23 +904,23 @@ class LogAnalyzerSubagent(SubagentBase):
                 interactions.append(round_record)
                 final_response = response.content
 
-                data, errors = self._validate_output(final_response)
+                data, errors = self.validate_output(final_response)
                 if not errors:
-                    html = self._render_html(data)
+                    html = self.render_html(data)
                     logger.info(f"分析完成，共{round_count}轮交互")
                     return {
                         'html': html,
-                        'interaction_record': self._build_interaction_record(
+                        'interaction_record': self.build_interaction_record(
                             system_prompt, prompt_data, interactions, data, True, []
                         ),
-                        'intent_response': self._extract_intent_response(data, user_intent)
+                        'intent_response': self.extract_intent_response(data, user_intent)
                     }
 
                 validation_errors = errors
                 logger.warning(f"验证失败: {errors}")
 
                 if round_count < 2:
-                    retry_prompt = self._build_retry_prompt(errors, final_response)
+                    retry_prompt = self.build_retry_prompt(errors, final_response)
                     messages.append(response.to_message())
                     messages.append({"role": "user", "content": retry_prompt})
                     continue
@@ -999,31 +928,31 @@ class LogAnalyzerSubagent(SubagentBase):
                     break
 
         logger.warning("验证重试失败，启用降级HTML生成")
-        html, fallback_interaction = self._generate_html_fallback(
+        html, fallback_interaction = self.generate_html_fallback(
             prompt_data, final_response, validation_errors
         )
 
         return {
             'html': html,
-            'interaction_record': self._build_interaction_record(
+            'interaction_record': self.build_interaction_record(
                 system_prompt, prompt_data, interactions, None, False, validation_errors,
                 fallback_interaction
             ),
             'intent_response': ""
         }
 
-    def _build_enhanced_prompt(self, user_prompt: str, user_intent: str) -> str:
+    def build_enhanced_prompt(self, user_prompt: str, user_intent: str) -> str:
         """构建增强的用户提示词"""
         if user_intent and user_intent != user_prompt:
             return f"【用户关注点】{user_intent}\n\n【分析请求】{user_prompt or '请开始分析'}"
         return user_prompt or "请开始分析日志，输出JSON结果。"
 
-    def _validate_output(self, response_text: str) -> tuple:
+    def validate_output(self, response_text: str) -> tuple:
         """验证AI输出"""
         if not response_text:
             return None, ["AI返回空内容"]
 
-        json_text = self._extract_json(response_text)
+        json_text = self.extract_json(response_text)
 
         try:
             data = json.loads(json_text)
@@ -1049,7 +978,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return data, []
 
-    def _extract_json(self, text: str) -> str:
+    def extract_json(self, text: str) -> str:
         """从响应中提取JSON"""
         text = text.strip()
 
@@ -1073,7 +1002,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return text
 
-    def _build_retry_prompt(self, errors: List[str], failed_response: str) -> str:
+    def build_retry_prompt(self, errors: List[str], failed_response: str) -> str:
         """构建重试提示词"""
         error_preview = failed_response[:1000] if failed_response else ""
         return f"""你之前的JSON输出验证失败，请修正后重新输出。
@@ -1091,7 +1020,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
 请直接输出修正后的JSON，不要包含其他内容。"""
 
-    def _generate_html_fallback(
+    def generate_html_fallback(
         self,
         prompt_data: dict,
         original_response: str,
@@ -1122,14 +1051,14 @@ class LogAnalyzerSubagent(SubagentBase):
 
         try:
             response = self.client.chat_with_tools(messages)
-            html = self._extract_html(response.content)
+            html = self.extract_html(response.content)
             fallback_record = {
                 "prompt": fallback_prompt,
                 "response": response.content[:2000],
                 "success": True
             }
         except Exception as e:
-            html = self._generate_error_html("降级HTML生成失败", str(e))
+            html = self.generate_error_html("降级HTML生成失败", str(e))
             fallback_record = {
                 "success": False,
                 "error": str(e)
@@ -1137,7 +1066,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return html, fallback_record
 
-    def _extract_html(self, text: str) -> str:
+    def extract_html(self, text: str) -> str:
         """从响应中提取HTML"""
         text = text.strip()
 
@@ -1152,9 +1081,9 @@ class LogAnalyzerSubagent(SubagentBase):
         if html_start >= 0:
             return text[html_start:]
 
-        return self._generate_simple_html(text)
+        return self.generate_simple_html(text)
 
-    def _generate_simple_html(self, content: str) -> str:
+    def generate_simple_html(self, content: str) -> str:
         """生成简单HTML（内容已转义防止XSS）"""
         escaped_content = html.escape(content)
         return f"""<!DOCTYPE html>
@@ -1167,7 +1096,7 @@ class LogAnalyzerSubagent(SubagentBase):
 </div>
 </body></html>"""
 
-    def _render_html(self, data: dict) -> str:
+    def render_html(self, data: dict) -> str:
         """渲染HTML报告"""
         problems = data.get('problems', [])
         summary = {
@@ -1188,9 +1117,9 @@ class LogAnalyzerSubagent(SubagentBase):
                 analysis_coverage=data.get('analysis_coverage', {}),
                 analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
-        return self._generate_fallback_html(data)
+        return self.generate_fallback_html(data)
 
-    def _generate_fallback_html(self, data: dict) -> str:
+    def generate_fallback_html(self, data: dict) -> str:
         """生成备用HTML（所有动态内容已转义防止XSS）"""
         html_parts = ['<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">']
         html_parts.append('<title>AI日志分析报告</title>')
@@ -1278,7 +1207,7 @@ class LogAnalyzerSubagent(SubagentBase):
         html_parts.append('</body></html>')
         return ''.join(html_parts)
 
-    def _generate_error_html(self, title: str, detail: str) -> str:
+    def generate_error_html(self, title: str, detail: str) -> str:
         """生成错误HTML（内容已转义防止XSS）"""
         escaped_title = html.escape(title)
         escaped_detail = html.escape(detail)
@@ -1292,7 +1221,7 @@ class LogAnalyzerSubagent(SubagentBase):
 </div>
 </body></html>"""
 
-    def _build_interaction_record(
+    def build_interaction_record(
         self,
         system_prompt: str,
         prompt_data: dict,
@@ -1323,7 +1252,7 @@ class LogAnalyzerSubagent(SubagentBase):
             }
         }
 
-    def _extract_intent_response(self, data: dict, user_intent: str) -> str:
+    def extract_intent_response(self, data: dict, user_intent: str) -> str:
         """从分析结果中提取针对用户意图的回应"""
         if not user_intent:
             return ""
@@ -1335,13 +1264,13 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return ""
 
-    def _escape_braces(self, text: str) -> str:
+    def escape_braces(self, text: str) -> str:
         """转义花括号"""
         if not text:
             return ""
         return text.replace('{', '{{').replace('}', '}}')
 
-    def _format_plugin_result(self, plugin_result: Dict) -> str:
+    def format_plugin_result(self, plugin_result: Dict) -> str:
         """格式化插件结果"""
         lines = []
         for plugin_id, plugin_data in plugin_result.items():
@@ -1376,7 +1305,7 @@ class LogAnalyzerSubagent(SubagentBase):
 
         return '\n'.join(lines)
 
-    def _format_machine_info(self, machine_info: Dict) -> str:
+    def format_machine_info(self, machine_info: Dict) -> str:
         """格式化机器信息"""
         if not machine_info:
             return "暂无机器信息"
@@ -1385,7 +1314,7 @@ class LogAnalyzerSubagent(SubagentBase):
             lines.append(f"- {k}: {v}")
         return '\n'.join(lines)
 
-    def _format_log_files(self, log_files: List[str]) -> str:
+    def format_log_files(self, log_files: List[str]) -> str:
         """格式化日志文件列表"""
         if not log_files:
             return "无日志文件"
@@ -1404,7 +1333,63 @@ class LogAnalyzerSubagent(SubagentBase):
 
     def validate_context(self, context: Dict[str, Any]) -> bool:
         """验证上下文"""
-        return 'log_files' in context and len(context.get('log_files', [])) > 0
+        uploaded_files = context.get('uploaded_files', [])
+        return len(uploaded_files) > 0
+
+    def execute(self, request: str, context: Dict[str, Any], work_dir: str) -> SubagentResult:
+        """
+        执行日志分析任务（SubagentBase 标准接口）
+
+        Args:
+            request: 用户请求/任务描述
+            context: 上下文信息
+            work_dir: 工作目录
+
+        Returns:
+            SubagentResult: 执行结果
+        """
+        uploaded_files = context.get('uploaded_files', [])
+        log_files = []
+        for filename in uploaded_files:
+            file_path = os.path.join(work_dir, filename)
+            if os.path.exists(file_path):
+                log_files.append(file_path)
+
+        if not log_files:
+            return SubagentResult(
+                success=False,
+                content="",
+                error="没有可分析的日志文件"
+            )
+
+        kb_id = context.get('kb_id')
+        user_intent = context.get('user_intent', request)
+        api_config = context.get('subagent_api_config', {})
+
+        try:
+            result = self.analyze(
+                log_files=log_files,
+                kb_id=kb_id,
+                user_prompt=request,
+                user_intent=user_intent,
+                api_config=api_config
+            )
+
+            return SubagentResult(
+                success=bool(result.get('html')),
+                content=result.get('intent_response', ''),
+                data={
+                    'html': result.get('html', ''),
+                    'interaction_record': result.get('interaction_record', {})
+                }
+            )
+        except Exception as e:
+            logger.error(f"日志分析执行失败: {str(e)}")
+            return SubagentResult(
+                success=False,
+                content="",
+                error=str(e)
+            )
 
 
 def register_log_analyzer_subagent(registry, config_manager=None, kb_manager=None,

@@ -140,7 +140,9 @@ class OrchestratorAgent:
         session_id: str,
         settings_manager: SystemConfigManager = None,
         kb_manager: KnowledgeBaseManager = None,
-        mcp_client: MCPClient = None
+        mcp_client: MCPClient = None,
+        log_metadata_manager=None,
+        plugin_manager=None
     ):
         """
         初始化OrchestratorAgent
@@ -151,6 +153,8 @@ class OrchestratorAgent:
             settings_manager: 配置管理器
             kb_manager: 知识库管理器
             mcp_client: MCP客户端
+            log_metadata_manager: 日志元数据管理器
+            plugin_manager: 插件管理器
         """
         self.user_id = user_id
         self.session_id = session_id
@@ -175,6 +179,23 @@ class OrchestratorAgent:
 
         # MCP客户端
         self.mcp_client = mcp_client
+
+        # 日志元数据管理器
+        self.log_metadata_manager = log_metadata_manager
+
+        # 插件管理器
+        self.plugin_manager = plugin_manager
+
+        # 注册 LogAnalyzerSubagent
+        from .subagents.log_analyzer import register_log_analyzer_subagent
+        register_log_analyzer_subagent(
+            self.subagent_registry,
+            config_manager=self.settings_manager,
+            kb_manager=self.kb_manager,
+            mcp_client=self.mcp_client,
+            log_metadata_manager=self.log_metadata_manager,
+            plugin_manager=self.plugin_manager
+        )
 
         # 会话管理
         self.session_manager = SessionManager(user_id)
@@ -618,29 +639,23 @@ class OrchestratorAgent:
         if not request:
             return {"error": "request不能为空"}
 
-        # 检查Subagent是否存在
+        # 统一通过注册表调用
         if not self.subagent_registry.has(subagent_name):
             return {"error": f"Subagent不存在: {subagent_name}",
                     "available": [info["name"] for info in self.subagent_registry.list_all()]}
 
-        # 构建执行上下文，包含user_intent
+        # 构建执行上下文
         context = {
             "work_dir": self.work_dir,
             "outputs_dir": self.outputs_dir,
             "session_notes": self.session_state.get("notes", {}),
             "uploaded_files": self.session_state.get("uploaded_files", []),
             "kb_id": self.session_state.get("kb_id"),
+            "kb_manager": self.kb_manager,
             "subagent_api_config": self.get_subagent_api_config(subagent_name),
-            "user_intent": user_intent or request  # 如果未提供user_intent，使用request
+            "user_intent": user_intent or request
         }
 
-        # 如果有知识库管理器，添加相关信息
-        if self.kb_manager:
-            kb_id = self.session_state.get("kb_id")
-            if kb_id:
-                context["kb_manager"] = self.kb_manager
-
-        # 执行Subagent
         try:
             logger.info(f"调度Subagent: {subagent_name}")
             result = self.subagent_registry.execute(
@@ -653,10 +668,7 @@ class OrchestratorAgent:
             if result is None:
                 return {"error": f"Subagent执行返回空结果: {subagent_name}"}
 
-            # 更新调用计数
             self.session_state["subagent_calls"] = self.session_state.get("subagent_calls", 0) + 1
-
-            # 提取intent_response
             intent_response = result.data.get("intent_response", "") if result.data else ""
 
             return {

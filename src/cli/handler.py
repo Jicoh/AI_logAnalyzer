@@ -13,7 +13,7 @@ from src.cli.parser import get_parser
 
 from src.system_config_manager import SystemConfigManager
 from src.knowledge_base import KnowledgeBaseManager
-from src.ai_analyzer.analyzer import analyze_with_agent
+from src.ai_analyzer.subagents.log_analyzer import LogAnalyzerSubagent
 from src.log_metadata import LogMetadataManager
 from src.utils import read_file, write_json, ensure_dir, get_logger
 from src.utils.file_utils import (
@@ -215,12 +215,15 @@ def cmd_analyze(args):
         if log_rules_id:
             log_metadata_manager.set_active_rules(log_rules_id)
 
-        result = analyze_with_agent(
-            settings_manager=settings_manager,
+        subagent = LogAnalyzerSubagent(
+            config_manager=settings_manager,
             kb_manager=kb_manager,
             log_metadata_manager=log_metadata_manager,
+            plugin_manager=plugin_manager
+        )
+        result = subagent.analyze(
+            log_files=log_file_paths,
             plugin_result=result_dict,
-            log_source={'type': 'local_file', 'paths': log_file_paths},
             kb_id=kb_id,
             user_prompt=user_prompt,
             log_rules_id=log_rules_id
@@ -598,12 +601,15 @@ def cmd_analyze_batch(args):
                             if log_rules_id:
                                 log_metadata_manager.set_active_rules(log_rules_id)
 
-                        result = analyze_with_agent(
-                            settings_manager=settings_manager,
+                        subagent = LogAnalyzerSubagent(
+                            config_manager=settings_manager,
                             kb_manager=kb_manager,
                             log_metadata_manager=log_metadata_manager,
+                            plugin_manager=plugin_manager
+                        )
+                        result = subagent.analyze(
+                            log_files=current_log_files,
                             plugin_result=plugin_result,
-                            log_source={'type': 'local_file', 'paths': current_log_files},
                             kb_id=kb_id,
                             user_prompt=user_prompt,
                             log_rules_id=log_rules_id
