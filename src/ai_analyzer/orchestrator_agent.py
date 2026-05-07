@@ -523,11 +523,33 @@ class OrchestratorAgent:
                 })
                 break
 
-        # 更新对话历史（只保留user/assistant消息）
+        # 更新对话历史（保存完整消息链，包括tool交互）
         if user_input:
             self.conversation_history.append({"role": "user", "content": user_input})
-        if final_response:
-            self.conversation_history.append({"role": "assistant", "content": final_response})
+
+        # 保存本轮新增的消息（tool调用和结果）
+        # messages结构: [system] + conversation_history + [user] + [本轮新增消息]
+        history_len = len(self.conversation_history)
+        new_messages_start = 1 + history_len + 1  # 跳过system、旧历史、user
+        for msg in messages[new_messages_start:]:
+            role = msg.get('role')
+            if role == 'assistant':
+                # 保存assistant消息（可能包含tool_calls）
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": msg.get('content', ''),
+                    "tool_calls": msg.get('tool_calls')
+                })
+            elif role == 'tool':
+                # tool结果可能很长，截断处理
+                content = msg.get('content', '')
+                if len(content) > 500:
+                    content = content[:500] + "...(已截断)"
+                self.conversation_history.append({
+                    "role": "tool",
+                    "tool_call_id": msg.get('tool_call_id', ''),
+                    "content": content
+                })
 
         # 保存消息到会话
         if user_input:

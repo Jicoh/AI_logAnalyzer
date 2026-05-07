@@ -254,7 +254,20 @@ class ToolExecutor:
         }
 
     def get_file_info(self) -> dict:
-        """获取所有日志文件信息"""
+        """获取所有日志文件信息（基于mtime检查缓存有效性）"""
+        # 检查缓存是否过期
+        if self.file_info_cache and self.file_info_cache.get('files'):
+            cached_files = self.file_info_cache.get('files', [])
+            for cached in cached_files:
+                path = cached.get('path')
+                if path and os.path.exists(path):
+                    current_mtime = os.path.getmtime(path)
+                    cached_mtime = cached.get('mtime', 0)
+                    if current_mtime != cached_mtime:
+                        # mtime变化，清除缓存
+                        self.file_info_cache = None
+                        break
+
         if self.file_info_cache:
             return self.file_info_cache
 
@@ -264,6 +277,7 @@ class ToolExecutor:
                 continue
             try:
                 size = os.path.getsize(path)
+                mtime = os.path.getmtime(path)
                 with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                     line_count = sum(1 for _ in f)
                 files_info.append({
@@ -271,7 +285,8 @@ class ToolExecutor:
                     "path": path,
                     "size_bytes": size,
                     "size_kb": round(size / 1024, 2),
-                    "line_count": line_count
+                    "line_count": line_count,
+                    "mtime": mtime
                 })
             except Exception:
                 continue
