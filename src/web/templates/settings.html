@@ -14,19 +14,16 @@
                         <div class="nav-item" :class="{ active: activeSection === 'config' }" @click="scrollTo('config')">
                             <i class="bi bi-gear"></i> 系统配置
                         </div>
-                        <div class="nav-item" :class="{ active: activeSection === 'kb' }" @click="scrollTo('kb')">
-                            <i class="bi bi-database"></i> 知识库
-                        </div>
                     </div>
                 </template>
-                <div class="nav-item" :class="{ active: activeSection === 'rules' }" @click="scrollTo('rules')">
-                    <i class="bi bi-journal-text"></i> 日志规则
+                <div class="nav-item" :class="{ active: activeSection === 'kb' }" @click="scrollTo('kb')">
+                    <i class="bi bi-database"></i> 知识库
+                </div>
+                <div class="nav-item" :class="{ active: activeSection === 'analysis' }" @click="scrollTo('analysis')">
+                    <i class="bi bi-journal-text"></i> 日志分析设置
                 </div>
                 <div class="nav-item" :class="{ active: activeSection === 'mcp' }" @click="scrollTo('mcp')">
                     <i class="bi bi-plug"></i> MCP Server
-                </div>
-                <div class="nav-item" :class="{ active: activeSection === 'templates' }" @click="scrollTo('templates')">
-                    <i class="bi bi-file-earmark-text"></i> 分析模板
                 </div>
                 <div class="nav-item" :class="{ active: activeSection === 'skills' }" @click="scrollTo('skills')">
                     <i class="bi bi-wrench-adjustable"></i> Skill列表
@@ -293,15 +290,19 @@
                 </div>
             </div>
 
-            <!-- 日志规则管理 -->
-            <div id="section-rules" class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-journal-text"></i> 日志规则</span>
-                    <button class="btn btn-primary btn-sm" @click="showCreateRulesModal = true" x-show="userInfo.is_admin">
-                        <i class="bi bi-plus"></i> 新增
-                    </button>
+            <!-- 日志分析设置 -->
+            <div id="section-analysis" class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-journal-text"></i> 日志分析设置
                 </div>
                 <div class="card-body">
+                    <!-- 日志规则 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-list-check"></i> 日志规则</h6>
+                    <div class="d-flex justify-content-end mb-2" x-show="userInfo.is_admin">
+                        <button class="btn btn-primary btn-sm" @click="showCreateRulesModal = true">
+                            <i class="bi bi-plus"></i> 新增规则集
+                        </button>
+                    </div>
                     <table class="table table-sm table-hover">
                         <thead>
                             <tr>
@@ -338,6 +339,52 @@
                             </template>
                             <tr x-show="ruleSets.length === 0">
                                 <td colspan="5" class="text-center text-muted">暂无日志规则</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <hr class="my-4">
+
+                    <!-- 分析模板 -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-file-earmark-text"></i> 分析模板</h6>
+                    <div class="d-flex justify-content-end mb-2" x-show="userInfo.is_admin">
+                        <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true">
+                            <i class="bi bi-plus"></i> 新增模板
+                        </button>
+                    </div>
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>问题类型</th>
+                                <th>关键词</th>
+                                <th>分析步骤</th>
+                                <th>典型原因</th>
+                                <th x-show="userInfo.is_admin">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="template in analysisTemplates" :key="template.problem_type">
+                                <tr>
+                                    <td x-text="template.problem_type"></td>
+                                    <td>
+                                        <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
+                                    </td>
+                                    <td x-text="template.analysis_logic.length + '步'"></td>
+                                    <td x-text="template.typical_causes.length + '个'"></td>
+                                    <td x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="analysisTemplates.length === 0">
+                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
                             </tr>
                         </tbody>
                     </table>
@@ -393,54 +440,6 @@
                             </template>
                             <tr x-show="mcpServers.length === 0">
                                 <td colspan="5" class="text-center text-muted">暂无MCP Server</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- 分析模板管理 -->
-            <div id="section-templates" class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-file-earmark-text"></i> 分析模板</span>
-                    <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true" x-show="userInfo.is_admin">
-                        <i class="bi bi-plus"></i> 新增
-                    </button>
-                </div>
-                <div class="card-body">
-                    <table class="table table-sm table-hover">
-                        <thead>
-                            <tr>
-                                <th>问题类型</th>
-                                <th>关键词</th>
-                                <th>分析步骤</th>
-                                <th>典型原因</th>
-                                <th x-show="userInfo.is_admin">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template x-for="template in analysisTemplates" :key="template.problem_type">
-                                <tr>
-                                    <td x-text="template.problem_type"></td>
-                                    <td>
-                                        <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
-                                    </td>
-                                    <td x-text="template.analysis_logic.length + '步'"></td>
-                                    <td x-text="template.typical_causes.length + '个'"></td>
-                                    <td x-show="userInfo.is_admin">
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </template>
-                            <tr x-show="analysisTemplates.length === 0">
-                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
                             </tr>
                         </tbody>
                     </table>
@@ -984,7 +983,7 @@ function settingsApp() {
 
             // 默认选中第一个可见的section
             if (!this.userInfo.is_admin) {
-                this.activeSection = 'rules';
+                this.activeSection = 'analysis';
             }
         },
 
@@ -1003,7 +1002,7 @@ function settingsApp() {
         },
 
         setupScrollObserver() {
-            const sections = ['config', 'kb', 'rules', 'mcp', 'templates', 'skills', 'cache'];
+            const sections = ['config', 'kb', 'analysis', 'mcp', 'skills', 'cache'];
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {

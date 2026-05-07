@@ -108,8 +108,7 @@ def check_existing_server(port=None):
         return False
 
     # 端口被占用，复用现有服务
-    webbrowser.open(f"http://127.0.0.1:{check_port}/")
-    print(f"已有服务运行，已打开浏览器 (端口 {check_port})")
+    print(f"已有服务运行 (端口 {check_port})，访问地址: http://127.0.0.1:{check_port}/")
     return True
 
 
@@ -160,21 +159,6 @@ def run_web(args):
     # 注册退出清理
     import atexit
     atexit.register(remove_lock_file)
-
-    # 自动打开浏览器
-    if not no_browser:
-        # 0.0.0.0 无法在浏览器直接访问，替换为 localhost
-        display_host = "localhost" if host == "0.0.0.0" else host
-        url = f"http://{display_host}:{port}"
-
-        def open_browser():
-            time.sleep(1.5)
-            try:
-                webbrowser.open(url)
-            except Exception as e:
-                logger.warning(f"打开浏览器失败: {e}")
-
-        threading.Thread(target=open_browser, daemon=True).start()
 
     print("=" * 50)
     print("AI Log Analyzer - Web Interface")

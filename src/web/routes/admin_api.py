@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from src.models.user import User, db
 from src.auth.password import hash_password, verify_password
-from src.auth.decorators import admin_required
+from src.auth.decorators import admin_required, login_required
 from src.settings_manager.manager import SettingsManager
 from src.storage.quota import StorageQuota, format_size, get_dir_size, check_disk_space
 from src.utils.file_utils import get_user_data_dir, get_data_dir
@@ -393,7 +393,7 @@ def get_configurable_subagents():
 # ================= MCP Server 配置 API =================
 
 @admin_bp.route('/api/admin/mcp/servers', methods=['GET'])
-@admin_required
+@login_required
 def get_mcp_servers():
     """获取MCP Server配置列表"""
     try:
@@ -538,7 +538,7 @@ def delete_mcp_server(name):
 
 
 @admin_bp.route('/api/admin/mcp/servers/<name>/test', methods=['POST'])
-@admin_required
+@login_required
 def test_mcp_server(name):
     """测试MCP Server连接"""
     try:
