@@ -153,6 +153,20 @@ def create_app():
     # CSRF豁免：Skill API
     csrf.exempt(app.view_functions['skill_api.reload_skills'])
 
+    # CSRF豁免：日志规则API（已使用登录保护）
+    csrf.exempt(app.view_functions['log_metadata_api.create_rule_set'])
+    csrf.exempt(app.view_functions['log_metadata_api.import_rule_set'])
+    csrf.exempt(app.view_functions['log_metadata_api.update_rule_set'])
+    csrf.exempt(app.view_functions['log_metadata_api.delete_rule_set'])
+    csrf.exempt(app.view_functions['log_metadata_api.add_rule'])
+    csrf.exempt(app.view_functions['log_metadata_api.update_rule'])
+    csrf.exempt(app.view_functions['log_metadata_api.delete_rule'])
+
+    # CSRF豁免：分析模板API（已使用登录保护）
+    csrf.exempt(app.view_functions['admin_api.create_analysis_template'])
+    csrf.exempt(app.view_functions['admin_api.update_user_analysis_template'])
+    csrf.exempt(app.view_functions['admin_api.delete_user_analysis_template'])
+
     return app
 
 

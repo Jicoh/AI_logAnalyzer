@@ -294,7 +294,7 @@
                 <div class="card-body">
                     <!-- 日志规则 -->
                     <h6 class="text-muted mb-3"><i class="bi bi-list-check"></i> 日志规则</h6>
-                    <div class="d-flex justify-content-end mb-2" x-show="userInfo.is_admin">
+                    <div class="d-flex justify-content-end mb-2">
                         <button class="btn btn-primary btn-sm" @click="showCreateRulesModal = true">
                             <i class="bi bi-plus"></i> 新增规则集
                         </button>
@@ -303,38 +303,44 @@
                         <thead>
                             <tr>
                                 <th>名称</th>
+                                <th>来源</th>
                                 <th>ID</th>
                                 <th>描述</th>
                                 <th>规则数</th>
-                                <th x-show="userInfo.is_admin">操作</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             <template x-for="rules in ruleSets" :key="rules.rules_id">
                                 <tr>
                                     <td x-text="rules.name"></td>
+                                    <td>
+                                        <span class="badge" :class="rules.source === 'global' ? 'bg-primary' : 'bg-success'" x-text="rules.source === 'global' ? '全局' : '个人'"></span>
+                                    </td>
                                     <td><code x-text="rules.rules_id"></code></td>
                                     <td x-text="rules.description || '-'"></td>
                                     <td x-text="rules.rule_count || 0"></td>
-                                    <td x-show="userInfo.is_admin">
+                                    <td>
                                         <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-primary" @click="showRulesDetail(rules)" title="详情">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            <button class="btn btn-outline-danger" @click="confirmDeleteRules(rules)" title="删除">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                            <template x-if="rules.source === 'global' && userInfo.is_admin">
+                                                <button class="btn btn-outline-danger" @click="confirmDeleteRules(rules)" title="删除">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </template>
+                                            <template x-if="rules.source === 'private'">
+                                                <button class="btn btn-outline-danger" @click="confirmDeleteRules(rules)" title="删除">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </template>
                                         </div>
-                                    </td>
-                                    <td x-show="!userInfo.is_admin">
-                                        <button class="btn btn-outline-primary btn-sm" @click="showRulesDetail(rules)" title="详情">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
                                     </td>
                                 </tr>
                             </template>
                             <tr x-show="ruleSets.length === 0">
-                                <td colspan="5" class="text-center text-muted">暂无日志规则</td>
+                                <td colspan="6" class="text-center text-muted">暂无日志规则</td>
                             </tr>
                         </tbody>
                     </table>
@@ -343,7 +349,7 @@
 
                     <!-- 分析模板 -->
                     <h6 class="text-muted mb-3"><i class="bi bi-file-earmark-text"></i> 分析模板</h6>
-                    <div class="d-flex justify-content-end mb-2" x-show="userInfo.is_admin">
+                    <div class="d-flex justify-content-end mb-2">
                         <button class="btn btn-primary btn-sm" @click="showAddTemplateModal = true">
                             <i class="bi bi-plus"></i> 新增模板
                         </button>
@@ -352,35 +358,46 @@
                         <thead>
                             <tr>
                                 <th>问题类型</th>
+                                <th>来源</th>
                                 <th>关键词</th>
                                 <th>分析步骤</th>
                                 <th>典型原因</th>
-                                <th x-show="userInfo.is_admin">操作</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <template x-for="template in analysisTemplates" :key="template.problem_type">
+                            <template x-for="template in analysisTemplates" :key="template.problem_type + template.source">
                                 <tr>
                                     <td x-text="template.problem_type"></td>
+                                    <td>
+                                        <span class="badge" :class="template.source === 'global' ? 'bg-primary' : 'bg-success'" x-text="template.source === 'global' ? '全局' : '个人'"></span>
+                                    </td>
                                     <td>
                                         <span x-text="template.keywords.slice(0, 3).join(', ') + (template.keywords.length > 3 ? '...' : '')"></span>
                                     </td>
                                     <td x-text="template.analysis_logic.length + '步'"></td>
                                     <td x-text="template.typical_causes.length + '个'"></td>
-                                    <td x-show="userInfo.is_admin">
+                                    <td>
                                         <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-primary" @click="editTemplate(template)" title="编辑">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type)" title="删除">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                            <template x-if="template.source === 'global' && userInfo.is_admin">
+                                                <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type, template.source)" title="删除">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </template>
+                                            <template x-if="template.source === 'private'">
+                                                <button class="btn btn-outline-danger" @click="deleteTemplate(template.problem_type, template.source)" title="删除">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </template>
                                         </div>
                                     </td>
                                 </tr>
                             </template>
                             <tr x-show="analysisTemplates.length === 0">
-                                <td colspan="5" class="text-center text-muted">暂无分析模板</td>
+                                <td colspan="6" class="text-center text-muted">暂无分析模板</td>
                             </tr>
                         </tbody>
                     </table>
@@ -631,13 +648,17 @@
                     <template x-if="selectedRules">
                         <div>
                             <div class="row mb-3">
-                                <div class="col-md-4"><strong>名称：</strong> <span x-text="selectedRules.name"></span></div>
-                                <div class="col-md-4"><strong>ID：</strong> <code x-text="selectedRules.rules_id"></code></div>
-                                <div class="col-md-4"><strong>规则数：</strong> <span x-text="selectedRules.rules?.length || 0"></span></div>
+                                <div class="col-md-3"><strong>名称：</strong> <span x-text="selectedRules.name"></span></div>
+                                <div class="col-md-3">
+                                    <strong>来源：</strong>
+                                    <span class="badge" :class="selectedRules.source === 'global' ? 'bg-primary' : 'bg-success'" x-text="selectedRules.source === 'global' ? '全局' : '个人'"></span>
+                                </div>
+                                <div class="col-md-3"><strong>ID：</strong> <code x-text="selectedRules.rules_id"></code></div>
+                                <div class="col-md-3"><strong>规则数：</strong> <span x-text="selectedRules.rules?.length || 0"></span></div>
                             </div>
                             <hr>
-                            <!-- 添加规则（仅管理员） -->
-                            <div class="mb-3" x-show="userInfo.is_admin">
+                            <!-- 添加规则 -->
+                            <div class="mb-3" x-show="selectedRules.source === 'global' && userInfo.is_admin || selectedRules.source === 'private'">
                                 <h6>添加规则</h6>
                                 <form @submit.prevent="addRule()" class="row g-2">
                                     <div class="col-md-3">
@@ -669,7 +690,7 @@
                                                 <i class="bi bi-tags"></i> <span x-text="rule.keywords.join(', ')"></span>
                                             </small>
                                         </div>
-                                        <div class="btn-group btn-group-sm" x-show="userInfo.is_admin">
+                                        <div class="btn-group btn-group-sm" x-show="selectedRules.source === 'global' && userInfo.is_admin || selectedRules.source === 'private'">
                                             <button class="btn btn-outline-primary" @click="openEditRuleModal(rule)">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
@@ -1493,7 +1514,7 @@ function settingsApp() {
         // 分析模板
         async loadAnalysisTemplates() {
             try {
-                const response = await fetch('/api/admin/analysis-templates');
+                const response = await fetch('/api/analysis-templates');
                 const data = await response.json();
                 if (data.success) this.analysisTemplates = data.data;
             } catch (e) { console.error('Load templates failed:', e); }
@@ -1502,6 +1523,7 @@ function settingsApp() {
         editTemplate(template) {
             this.templateForm = {
                 problem_type: template.problem_type,
+                source: template.source,
                 keywordsStr: template.keywords.join(', '),
                 logicStr: template.analysis_logic.join('\n'),
                 causesStr: template.typical_causes.join(', '),
@@ -1513,7 +1535,7 @@ function settingsApp() {
         closeTemplateModal() {
             this.showAddTemplateModal = false;
             this.showEditTemplateModal = false;
-            this.templateForm = { problem_type: '', keywordsStr: '', logicStr: '', causesStr: '', checksStr: '' };
+            this.templateForm = { problem_type: '', source: '', keywordsStr: '', logicStr: '', causesStr: '', checksStr: '' };
         },
 
         async saveTemplate() {
@@ -1526,7 +1548,7 @@ function settingsApp() {
                     typical_causes: this.templateForm.causesStr.split(',').map(s => s.trim()).filter(s => s),
                     check_points: this.templateForm.checksStr.split(',').map(s => s.trim()).filter(s => s)
                 };
-                const url = this.showEditTemplateModal ? `/api/admin/analysis-templates/${this.templateForm.problem_type}` : '/api/admin/analysis-templates';
+                const url = this.showEditTemplateModal ? `/api/analysis-templates/${this.templateForm.problem_type}` : '/api/analysis-templates';
                 const method = this.showEditTemplateModal ? 'PUT' : 'POST';
                 const response = await fetch(url, {
                     method,
@@ -1548,10 +1570,10 @@ function settingsApp() {
             }
         },
 
-        async deleteTemplate(problemType) {
+        async deleteTemplate(problemType, source) {
             if (!confirm(`确定删除模板 "${problemType}"？`)) return;
             try {
-                const response = await fetch(`/api/admin/analysis-templates/${problemType}`, { method: 'DELETE' });
+                const response = await fetch(`/api/analysis-templates/${problemType}`, { method: 'DELETE' });
                 const data = await response.json();
                 if (data.success) {
                     this.showToast('success', '成功', data.message);

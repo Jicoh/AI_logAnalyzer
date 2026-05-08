@@ -645,6 +645,33 @@ def save_templates_file(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def get_user_templates_path(user_id: str) -> str:
+    """获取用户模板文件路径"""
+    from src.utils.file_utils import get_user_data_dir
+    return os.path.join(get_user_data_dir(user_id), 'analysis_templates.json')
+
+
+def load_user_templates(user_id: str) -> dict:
+    """加载用户模板文件"""
+    path = get_user_templates_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {'templates': []}
+
+
+def save_user_templates(user_id: str, data: dict):
+    """保存用户模板文件"""
+    path = get_user_templates_path(user_id)
+    from src.utils.file_utils import ensure_dir
+    ensure_dir(os.path.dirname(path))
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 @admin_bp.route('/api/admin/analysis-templates', methods=['GET'])
 @admin_required
 def get_analysis_templates():
@@ -749,6 +776,214 @@ def delete_analysis_template(problem_type):
         save_templates_file(file_data)
 
         logger.info(f"管理员 {current_user.employee_id} 删除分析模板: {problem_type}")
+        return jsonify({'success': True, 'message': f'模板 {problem_type} 已删除'})
+    except Exception as e:
+        logger.error(f"删除分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ================= 用户级分析模板 API =================
+
+@admin_bp.route('/api/analysis-templates', methods=['GET'])
+@login_required
+def get_all_analysis_templates():
+    """获取所有分析模板（全局+用户私有）"""
+    try:
+        # 全局模板
+        file_data = load_templates_file()
+        global_templates = file_data.get('templates', [])
+        for t in global_templates:
+            t['source'] = 'global'
+
+        # 用户私有模板
+        user_templates = []
+        if current_user.is_authenticated:
+            user_data = load_user_templates(current_user.employee_id)
+            user_templates = user_data.get('templates', [])
+            for t in user_templates:
+                t['source'] = 'private'
+
+        return jsonify({'success': True, 'data': global_templates + user_templates})
+    except Exception as e:
+        logger.error(f"获取分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/analysis-templates', methods=['POST'])
+@login_required
+def create_analysis_template():
+    """创建分析模板（管理员创建全局，普通用户创建私有）"""
+    try:
+        if not current_user.is_authenticated:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        problem_type = data.get('problem_type', '').strip()
+
+        if not problem_type:
+            return jsonify({'success': False, 'error': '问题类型不能为空'}), 400
+
+        # 管理员创建全局模板
+        if current_user.is_admin:
+            file_data = load_templates_file()
+            templates = file_data.get('templates', [])
+
+            # 检查是否已存在
+            for t in templates:
+                if t.get('problem_type') == problem_type:
+                    return jsonify({'success': False, 'error': '问题类型已存在'}), 400
+
+            new_template = {
+                'problem_type': problem_type,
+                'keywords': data.get('keywords', []),
+                'analysis_logic': data.get('analysis_logic', []),
+                'typical_causes': data.get('typical_causes', []),
+                'check_points': data.get('check_points', [])
+            }
+
+            templates.append(new_template)
+            file_data['templates'] = templates
+            save_templates_file(file_data)
+
+            logger.info(f"管理员 {current_user.employee_id} 创建全局分析模板: {problem_type}")
+            return jsonify({'success': True, 'message': f'模板 {problem_type} 已添加', 'source': 'global'})
+
+        # 普通用户创建私有模板
+        else:
+            user_id = current_user.employee_id
+            user_data = load_user_templates(user_id)
+            templates = user_data.get('templates', [])
+
+            # 检查是否已存在
+            for t in templates:
+                if t.get('problem_type') == problem_type:
+                    return jsonify({'success': False, 'error': '问题类型已存在'}), 400
+
+            new_template = {
+                'problem_type': problem_type,
+                'keywords': data.get('keywords', []),
+                'analysis_logic': data.get('analysis_logic', []),
+                'typical_causes': data.get('typical_causes', []),
+                'check_points': data.get('check_points', [])
+            }
+
+            templates.append(new_template)
+            user_data['templates'] = templates
+            save_user_templates(user_id, user_data)
+
+            logger.info(f"用户 {user_id} 创建私有分析模板: {problem_type}")
+            return jsonify({'success': True, 'message': f'模板 {problem_type} 已添加', 'source': 'private'})
+    except Exception as e:
+        logger.error(f"创建分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/analysis-templates/<problem_type>', methods=['PUT'])
+@login_required
+def update_user_analysis_template(problem_type):
+    """更新分析模板（只能更新自己创建的模板）"""
+    try:
+        if not current_user.is_authenticated:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        user_id = current_user.employee_id
+
+        # 检查模板来源
+        # 先检查全局模板
+        file_data = load_templates_file()
+        global_templates = file_data.get('templates', [])
+        is_global = False
+        for t in global_templates:
+            if t.get('problem_type') == problem_type:
+                is_global = True
+                break
+
+        if is_global:
+            # 全局模板仅管理员可修改
+            if not current_user.is_admin:
+                return jsonify({'success': False, 'error': '需要管理员权限'}), 403
+
+            for t in global_templates:
+                if t.get('problem_type') == problem_type:
+                    t['keywords'] = data.get('keywords', t.get('keywords', []))
+                    t['analysis_logic'] = data.get('analysis_logic', t.get('analysis_logic', []))
+                    t['typical_causes'] = data.get('typical_causes', t.get('typical_causes', []))
+                    t['check_points'] = data.get('check_points', t.get('check_points', []))
+                    break
+
+            file_data['templates'] = global_templates
+            save_templates_file(file_data)
+            logger.info(f"管理员 {user_id} 更新全局分析模板: {problem_type}")
+            return jsonify({'success': True, 'message': '模板已更新'})
+
+        # 检查用户私有模板
+        user_data = load_user_templates(user_id)
+        user_templates = user_data.get('templates', [])
+        found = False
+        for t in user_templates:
+            if t.get('problem_type') == problem_type:
+                found = True
+                t['keywords'] = data.get('keywords', t.get('keywords', []))
+                t['analysis_logic'] = data.get('analysis_logic', t.get('analysis_logic', []))
+                t['typical_causes'] = data.get('typical_causes', t.get('typical_causes', []))
+                t['check_points'] = data.get('check_points', t.get('check_points', []))
+                break
+
+        if not found:
+            return jsonify({'success': False, 'error': '模板不存在'}), 404
+
+        user_data['templates'] = user_templates
+        save_user_templates(user_id, user_data)
+        logger.info(f"用户 {user_id} 更新私有分析模板: {problem_type}")
+        return jsonify({'success': True, 'message': '模板已更新'})
+    except Exception as e:
+        logger.error(f"更新分析模板失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/analysis-templates/<problem_type>', methods=['DELETE'])
+@login_required
+def delete_user_analysis_template(problem_type):
+    """删除分析模板（只能删除自己创建的模板）"""
+    try:
+        if not current_user.is_authenticated:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        user_id = current_user.employee_id
+
+        # 检查模板来源
+        # 先检查全局模板
+        file_data = load_templates_file()
+        global_templates = file_data.get('templates', [])
+        is_global = False
+        for t in global_templates:
+            if t.get('problem_type') == problem_type:
+                is_global = True
+                break
+
+        if is_global:
+            # 全局模板仅管理员可删除
+            if not current_user.is_admin:
+                return jsonify({'success': False, 'error': '需要管理员权限'}), 403
+
+            new_templates = [t for t in global_templates if t.get('problem_type') != problem_type]
+            file_data['templates'] = new_templates
+            save_templates_file(file_data)
+            logger.info(f"管理员 {user_id} 删除全局分析模板: {problem_type}")
+            return jsonify({'success': True, 'message': f'模板 {problem_type} 已删除'})
+
+        # 检查用户私有模板
+        user_data = load_user_templates(user_id)
+        user_templates = user_data.get('templates', [])
+        new_templates = [t for t in user_templates if t.get('problem_type') != problem_type]
+
+        if len(new_templates) == len(user_templates):
+            return jsonify({'success': False, 'error': '模板不存在'}), 404
+
+        user_data['templates'] = new_templates
+        save_user_templates(user_id, user_data)
+        logger.info(f"用户 {user_id} 删除私有分析模板: {problem_type}")
         return jsonify({'success': True, 'message': f'模板 {problem_type} 已删除'})
     except Exception as e:
         logger.error(f"删除分析模板失败: {str(e)}")

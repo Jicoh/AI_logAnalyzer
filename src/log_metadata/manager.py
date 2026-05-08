@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 from typing import Dict, List, Optional, Any
+from src.utils.file_utils import get_user_data_dir, ensure_dir
 
 
 class LogMetadataManager:
@@ -445,3 +446,297 @@ class LogMetadataManager:
         """清除所有自定义文件描述"""
         self.config['file_descriptions'] = {}
         self.save_config()
+
+    # ==================== 用户级规则管理 ====================
+
+    def get_user_rules_config_path(self, user_id: str) -> str:
+        """
+        获取用户规则配置文件路径
+
+        Args:
+            user_id: 用户ID
+
+        Returns:
+            str: 用户规则配置文件路径
+        """
+        user_dir = get_user_data_dir(user_id)
+        return os.path.join(user_dir, 'log_rules.json')
+
+    def load_user_rules_config(self, user_id: str) -> Dict:
+        """
+        加载用户规则配置
+
+        Args:
+            user_id: 用户ID
+
+        Returns:
+            dict: 用户规则配置
+        """
+        config_path = self.get_user_rules_config_path(user_id)
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {'rule_sets': {}}
+
+    def save_user_rules_config(self, user_id: str, config: Dict) -> None:
+        """
+        保存用户规则配置
+
+        Args:
+            user_id: 用户ID
+            config: 规则配置
+        """
+        config_path = self.get_user_rules_config_path(user_id)
+        ensure_dir(os.path.dirname(config_path))
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+
+    def list_user_rule_sets(self, user_id: str) -> List[Dict]:
+        """
+        列出用户的私有规则集
+
+        Args:
+            user_id: 用户ID
+
+        Returns:
+            list: 用户私有规则集列表
+        """
+        user_config = self.load_user_rules_config(user_id)
+        result = []
+        for rules_id, rules_set in user_config.get('rule_sets', {}).items():
+            result.append({
+                'rules_id': rules_id,
+                'name': rules_set.get('name', rules_id),
+                'description': rules_set.get('description', ''),
+                'rule_count': len(rules_set.get('rules', {})),
+                'source': 'private',
+                'owner_id': user_id
+            })
+        return result
+
+    def list_all_rule_sets(self, user_id: str = None) -> List[Dict]:
+        """
+        列出所有可见规则集（全局+用户私有）
+
+        Args:
+            user_id: 用户ID（可选，不传则只返回全局规则）
+
+        Returns:
+            list: 所有可见规则集列表
+        """
+        result = []
+
+        # 全局规则集
+        for rules_id, rules_set in self.rules_config.get('rule_sets', {}).items():
+            result.append({
+                'rules_id': rules_id,
+                'name': rules_set.get('name', rules_id),
+                'description': rules_set.get('description', ''),
+                'rule_count': len(rules_set.get('rules', {})),
+                'source': 'global',
+                'owner_id': None
+            })
+
+        # 用户私有规则集
+        if user_id:
+            user_rules = self.list_user_rule_sets(user_id)
+            result.extend(user_rules)
+
+        return result
+
+    def get_rule_set_with_source(self, rules_id: str, user_id: str = None) -> Optional[Dict]:
+        """
+        获取规则集详情（支持全局和私有）
+
+        Args:
+            rules_id: 规则集ID
+            user_id: 用户ID（可选）
+
+        Returns:
+            dict: 规则集详情
+        """
+        # 先查找全局规则集
+        rule_set = self.get_rule_set(rules_id)
+        if rule_set:
+            rule_set['source'] = 'global'
+            rule_set['owner_id'] = None
+            return rule_set
+
+        # 再查找用户私有规则集
+        if user_id:
+            user_config = self.load_user_rules_config(user_id)
+            if rules_id in user_config.get('rule_sets', {}):
+                rules_set = user_config['rule_sets'][rules_id]
+                rules_list = []
+                for rule_id, rule in rules_set.get('rules', {}).items():
+                    rules_list.append({
+                        'rule_id': rule_id,
+                        'file_path': rule.get('file_path', ''),
+                        'description': rule.get('description', ''),
+                        'keywords': rule.get('keywords', []),
+                        'suggested_plugins': rule.get('suggested_plugins', [])
+                    })
+                return {
+                    'rules_id': rules_id,
+                    'name': rules_set.get('name', rules_id),
+                    'description': rules_set.get('description', ''),
+                    'rules': rules_list,
+                    'source': 'private',
+                    'owner_id': user_id
+                }
+
+        return None
+
+    def create_user_rule_set(self, user_id: str, name: str, description: str = '') -> str:
+        """
+        创建用户私有规则集
+
+        Args:
+            user_id: 用户ID
+            name: 规则集名称
+            description: 规则集描述
+
+        Returns:
+            str: 新规则集ID
+        """
+        rules_id = f"user_{uuid.uuid4().hex[:8]}"
+        user_config = self.load_user_rules_config(user_id)
+        user_config['rule_sets'][rules_id] = {
+            'name': name,
+            'description': description,
+            'rules': {}
+        }
+        self.save_user_rules_config(user_id, user_config)
+        return rules_id
+
+    def delete_user_rule_set(self, user_id: str, rules_id: str) -> bool:
+        """
+        删除用户私有规则集
+
+        Args:
+            user_id: 用户ID
+            rules_id: 规则集ID
+
+        Returns:
+            bool: 是否成功
+        """
+        user_config = self.load_user_rules_config(user_id)
+        if rules_id not in user_config.get('rule_sets', {}):
+            return False
+        del user_config['rule_sets'][rules_id]
+        self.save_user_rules_config(user_id, user_config)
+        return True
+
+    def add_rule_to_user_set(self, user_id: str, rules_id: str, rule: Dict) -> str:
+        """
+        向用户私有规则集添加规则
+
+        Args:
+            user_id: 用户ID
+            rules_id: 规则集ID
+            rule: 规则内容
+
+        Returns:
+            str: 规则ID
+        """
+        user_config = self.load_user_rules_config(user_id)
+        if rules_id not in user_config.get('rule_sets', {}):
+            return None
+
+        file_path = rule.get('file_path', '').strip()
+        if not file_path:
+            return None
+
+        rule_id = f"rule_{uuid.uuid4().hex[:8]}"
+        user_config['rule_sets'][rules_id]['rules'][rule_id] = {
+            'file_path': file_path,
+            'description': rule.get('description', ''),
+            'keywords': rule.get('keywords', []),
+            'suggested_plugins': rule.get('suggested_plugins', [])
+        }
+        self.save_user_rules_config(user_id, user_config)
+        return rule_id
+
+    def update_rule_in_user_set(self, user_id: str, rules_id: str, rule_id: str, rule: Dict) -> bool:
+        """
+        更新用户私有规则集中的规则
+
+        Args:
+            user_id: 用户ID
+            rules_id: 规则集ID
+            rule_id: 规则ID
+            rule: 更新的规则内容
+
+        Returns:
+            bool: 是否成功
+        """
+        user_config = self.load_user_rules_config(user_id)
+        if rules_id not in user_config.get('rule_sets', {}):
+            return False
+
+        rules = user_config['rule_sets'][rules_id].get('rules', {})
+        if rule_id not in rules:
+            return False
+
+        existing_rule = rules[rule_id]
+        if 'file_path' in rule:
+            existing_rule['file_path'] = rule['file_path']
+        existing_rule['description'] = rule.get('description', existing_rule.get('description', ''))
+        existing_rule['keywords'] = rule.get('keywords', existing_rule.get('keywords', []))
+        existing_rule['suggested_plugins'] = rule.get('suggested_plugins', existing_rule.get('suggested_plugins', []))
+
+        self.save_user_rules_config(user_id, user_config)
+        return True
+
+    def remove_rule_from_user_set(self, user_id: str, rules_id: str, rule_id: str) -> bool:
+        """
+        从用户私有规则集移除规则
+
+        Args:
+            user_id: 用户ID
+            rules_id: 规则集ID
+            rule_id: 规则ID
+
+        Returns:
+            bool: 是否成功
+        """
+        user_config = self.load_user_rules_config(user_id)
+        if rules_id not in user_config.get('rule_sets', {}):
+            return False
+
+        rules = user_config['rule_sets'][rules_id].get('rules', {})
+        if rule_id not in rules:
+            return False
+
+        del rules[rule_id]
+        self.save_user_rules_config(user_id, user_config)
+        return True
+
+    def is_global_rule_set(self, rules_id: str) -> bool:
+        """
+        检查规则集是否为全局规则
+
+        Args:
+            rules_id: 规则集ID
+
+        Returns:
+            bool: 是否为全局规则
+        """
+        return rules_id in self.rules_config.get('rule_sets', {})
+
+    def is_user_rule_set(self, user_id: str, rules_id: str) -> bool:
+        """
+        检查规则集是否为用户私有规则
+
+        Args:
+            user_id: 用户ID
+            rules_id: 规则集ID
+
+        Returns:
+            bool: 是否为用户私有规则
+        """
+        user_config = self.load_user_rules_config(user_id)
+        return rules_id in user_config.get('rule_sets', {})
