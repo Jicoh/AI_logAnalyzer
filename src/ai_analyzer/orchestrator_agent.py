@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from .client import AIClient, AIResponse
 from .subagents import SubagentRegistry, get_registry
 from .mcp_client import MCPClient
+from .skill_loader import get_skill_loader
 from src.session_manager.manager import SessionManager
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
@@ -197,6 +198,10 @@ class OrchestratorAgent:
             plugin_manager=self.plugin_manager
         )
 
+        # Skill加载器
+        self.skill_loader = get_skill_loader()
+        self.skill_loader.scan()
+
         # 会话管理
         self.session_manager = SessionManager(user_id)
         self.session = self.session_manager.get_session(session_id)
@@ -312,13 +317,17 @@ class OrchestratorAgent:
 
 你是用户与专业技能之间的桥梁，职责包括:
 1. 理解用户意图，判断任务类型
-2. 选择合适的技能(Subagent)来执行专业任务
+2. 根据需要选择合适的技能(Skill)来处理请求
 3. 可直接调用MCP工具处理简单请求
 4. 维护对话上下文，确保沟通连贯
 
 # 可用技能
 
 {available_skills}
+
+# 可用Subagent
+
+{available_subagents}
 
 # 当前会话状态
 
@@ -335,13 +344,26 @@ class OrchestratorAgent:
         """构建系统提示"""
         prompt_template = self.load_prompt()
 
-        # 获取可用Subagent列表
+        # 获取可用Skill列表
         available_skills = []
+        for skill in self.skill_loader.list_all():
+            skill_name = skill.get('name', '')
+            skill_desc = skill.get('description', '')
+            skill_content = skill.get('content', '')
+
+            # 格式化Skill信息
+            skill_info = f"## {skill_name}\n{skill_desc}\n"
+            if skill_content:
+                skill_info += f"\n{skill_content}\n"
+            available_skills.append(skill_info)
+
+        # 同时列出Subagent作为工具参考
+        subagent_list = []
         for info in self.subagent_registry.list_all():
-            skill_desc = f"- {info['name']}: {info['description']}"
+            subagent_desc = f"- {info['name']}: {info['description']}"
             if info.get('capabilities'):
-                skill_desc += f" (能力: {', '.join(info['capabilities'])})"
-            available_skills.append(skill_desc)
+                subagent_desc += f" (能力: {', '.join(info['capabilities'])})"
+            subagent_list.append(subagent_desc)
 
         # 知识库上下文部分
         kb_context_section = ""
@@ -351,6 +373,7 @@ class OrchestratorAgent:
         # 填充模板
         prompt_data = {
             'available_skills': '\n'.join(available_skills) if available_skills else '暂无可用技能',
+            'available_subagents': '\n'.join(subagent_list) if subagent_list else '暂无可用Subagent',
             'work_dir': self.work_dir,
             'context_usage': f"{self.context_state.usage_ratio * 100:.1f}",
             'uploaded_files': ', '.join(self.session_state.get('uploaded_files', [])) or '无',

@@ -50,7 +50,7 @@ class Session:
 class SessionManager:
     """会话管理器"""
 
-    MAX_SESSIONS_PER_USER = 3
+    MAX_SESSIONS_PER_USER = 2
 
     def __init__(self, user_id: str):
         """
@@ -81,7 +81,7 @@ class SessionManager:
         existing = self.list_sessions()
         if len(existing) >= self.MAX_SESSIONS_PER_USER:
             logger.warning(f"用户 {self.user_id} 会话数量已达上限")
-            return None, "会话数量已达上限（3个），请先删除旧会话"
+            return None, "会话数量已达上限（2个），请先删除旧会话"
 
         session_id = self.generate_session_id()
         session_dir = os.path.join(self.sessions_dir, session_id)

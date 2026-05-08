@@ -4,7 +4,6 @@ description: BMC服务器日志分析，识别问题并提供解决方案
 metadata:
   version: "1.0"
   category: analysis
-allowed-tools: dispatch_subagent
 ---
 
 # 日志分析技能
@@ -40,11 +39,4 @@ allowed-tools: dispatch_subagent
 
 ## 调用方式
 
-使用`dispatch_subagent`工具：
-
-```json
-{
-  "subagent_name": "log_analyzer",
-  "request": "用户的具体分析需求描述"
-}
-```
+调用LogAnalyzerSubagent执行日志分析

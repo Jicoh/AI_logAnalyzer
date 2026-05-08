@@ -311,7 +311,7 @@ RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+ra
 | 模块 | 位置 | 功能 |
 |------|------|------|
 | Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent，理解用户意图、调度Subagent/MCP工具 |
-| Session Manager | `src/session_manager/` | 会话管理，最多3个活跃会话 |
+| Session Manager | `src/session_manager/` | 会话管理，最多2个活跃会话 |
 | Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
 | Log Analyzer Subagent | `src/ai_analyzer/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎） |
 | Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
