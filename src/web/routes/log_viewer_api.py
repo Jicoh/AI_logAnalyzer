@@ -9,9 +9,10 @@ import urllib.parse
 from datetime import datetime, timedelta
 from typing import Tuple, List, Dict
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 from src.utils.file_utils import (
     find_log_files_in_directory, get_files_in_directory, is_valid_log_file,
-    get_project_root, get_data_dir,
+    get_project_root, get_data_dir, get_user_data_dir,
     is_text_readable_file, find_text_files_in_directory, is_safe_path
 )
 from src.utils.log_time_parser import (
@@ -27,12 +28,22 @@ logger = get_logger('log_viewer_api')
 log_viewer_bp = Blueprint('log_viewer_api', __name__)
 
 
+def get_current_user_id():
+    """获取当前登录用户的ID"""
+    if current_user.is_authenticated:
+        return current_user.employee_id
+    return None
+
+
 def get_allowed_base_dirs():
-    """获取允许访问的基础目录列表"""
+    """获取允许访问的基础目录列表（用户专属）"""
+    user_id = get_current_user_id()
+    if not user_id:
+        return []
     return [
-        get_data_dir('temp'),
-        get_data_dir('uploads'),
-        get_data_dir('analysis_output')
+        get_user_data_dir(user_id, 'temp'),
+        get_user_data_dir(user_id, 'uploads'),
+        get_user_data_dir(user_id, 'analysis_output')
     ]
 
 
@@ -57,9 +68,13 @@ def validate_path_access(path: str) -> tuple:
         return False, f'路径验证失败: {str(e)}'
 
 
-def determine_analysis_type(work_dir: str) -> Tuple[str, List]:
+def determine_analysis_type(work_dir: str, user_id: str = None) -> Tuple[str, List]:
     """
     判断分析类型（通过检查 analysis_output 目录）
+
+    Args:
+        work_dir: 工作目录路径
+        user_id: 用户ID（用于查找用户专属目录）
 
     Returns:
         tuple: (analysis_type, items)
@@ -69,8 +84,10 @@ def determine_analysis_type(work_dir: str) -> Tuple[str, List]:
     items = os.listdir(work_dir)
 
     # 通过检查对应的 analysis_output 目录来判断类型
-    # temp 目录名和 analysis_output 目录名相同（都是时间戳_文件名格式）
-    analysis_output_base = get_data_dir('analysis_output')
+    if user_id:
+        analysis_output_base = get_user_data_dir(user_id, 'analysis_output')
+    else:
+        analysis_output_base = get_data_dir('analysis_output')
     folder_name = os.path.basename(work_dir)
     output_dir = os.path.join(analysis_output_base, folder_name)
 
@@ -123,8 +140,12 @@ def determine_analysis_type(work_dir: str) -> Tuple[str, List]:
 
 
 def get_recent_work_dir():
-    """获取最近一次分析的工作目录及分析类型"""
-    temp_dir = get_data_dir('temp')
+    """获取最近一次分析的工作目录及分析类型（用户专属）"""
+    user_id = get_current_user_id()
+    if not user_id:
+        return None
+
+    temp_dir = get_user_data_dir(user_id, 'temp')
 
     if not os.path.exists(temp_dir):
         return None
@@ -138,7 +159,7 @@ def get_recent_work_dir():
             continue
 
         # 判断分析类型
-        analysis_type, items = determine_analysis_type(folder_path)
+        analysis_type, items = determine_analysis_type(folder_path, user_id)
 
         if analysis_type == 'unknown' or not items:
             continue
@@ -156,21 +177,25 @@ def get_recent_work_dir():
 
 
 def get_all_temp_folders():
-    """获取 temp 目录下所有工作目录列表"""
-    temp_dir = get_data_dir('temp')
-
-    if not os.path.exists(temp_dir):
+    """获取用户专属 temp 目录下所有工作目录列表"""
+    user_id = get_current_user_id()
+    if not user_id:
         return []
 
-    folders = sorted(os.listdir(temp_dir), reverse=True)
+    user_temp_dir = get_user_data_dir(user_id, 'temp')
+
+    if not os.path.exists(user_temp_dir):
+        return []
+
+    folders = sorted(os.listdir(user_temp_dir), reverse=True)
     result = []
 
     for folder in folders:
-        folder_path = os.path.join(temp_dir, folder)
+        folder_path = os.path.join(user_temp_dir, folder)
         if not os.path.isdir(folder_path):
             continue
 
-        analysis_type, items = determine_analysis_type(folder_path)
+        analysis_type, items = determine_analysis_type(folder_path, user_id)
         if analysis_type == 'unknown' or not items:
             continue
 

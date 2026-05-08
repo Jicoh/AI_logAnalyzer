@@ -18,6 +18,8 @@ from src.knowledge_base.manager import KnowledgeBaseManager
 from src.user_config_manager.manager import UserConfigManager
 from src.utils.file_utils import get_user_data_dir, is_safe_path
 from src.utils import get_logger
+from plugins.manager import get_plugin_manager
+from src.log_metadata.manager import LogMetadataManager
 
 logger = get_logger('assistant_api')
 
@@ -294,6 +296,55 @@ def download_all_files(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@assistant_bp.route('/api/assistant/sessions/<session_id>/files/upload', methods=['POST'])
+@login_required
+def upload_file(session_id):
+    """上传文件到会话工作目录"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        manager = SessionManager(user_id)
+        work_dir = manager.get_work_dir(session_id)
+        if not work_dir:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': '没有上传文件'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '文件名为空'}), 400
+
+        filename = file.filename
+        save_path = os.path.join(work_dir, filename)
+        if not is_safe_path(save_path, work_dir):
+            return jsonify({'success': False, 'error': '不安全的文件名'}), 400
+
+        file.save(save_path)
+
+        session = manager.get_session(session_id)
+        uploaded_files = session.state.get('uploaded_files', [])
+        if filename not in uploaded_files:
+            uploaded_files.append(filename)
+        manager.update_state(session_id, {'uploaded_files': uploaded_files})
+
+        logger.info(f"上传文件: user={user_id}, session={session_id}, file={filename}")
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'filename': filename,
+                'size': os.path.getsize(save_path),
+                'path': filename
+            }
+        })
+    except Exception as e:
+        logger.error(f"上传文件失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==================== 对话接口 ====================
 
 @assistant_bp.route('/api/assistant/sessions/<session_id>/chat', methods=['POST'])
@@ -332,16 +383,24 @@ def chat(session_id):
             logger.debug(f"知识库检索结果: {len(kb_context)}字符")
 
         # 初始化OrchestratorAgent
+        plugin_manager = get_plugin_manager()
+        log_metadata_manager = LogMetadataManager()
         agent = OrchestratorAgent(
             user_id=user_id,
             session_id=session_id,
             settings_manager=settings_manager,
-            kb_manager=kb_manager
+            kb_manager=kb_manager,
+            plugin_manager=plugin_manager,
+            log_metadata_manager=log_metadata_manager
         )
 
         # 设置知识库上下文
         if kb_context:
             agent.set_kb_context(kb_context)
+
+        # 设置知识库ID给Subagent使用
+        if kb_ids:
+            agent.set_kb_ids(kb_ids)
 
         # 调用chat方法
         response, metadata = agent.chat(user_input)
@@ -446,15 +505,23 @@ def chat_stream(session_id):
                 kb_context = retrieve_knowledge_context(kb_manager, kb_ids, user_input)
 
             # 初始化Agent
+            plugin_manager = get_plugin_manager()
+            log_metadata_manager = LogMetadataManager()
             agent = OrchestratorAgent(
                 user_id=user_id,
                 session_id=session_id,
                 settings_manager=settings_manager,
-                kb_manager=kb_manager
+                kb_manager=kb_manager,
+                plugin_manager=plugin_manager,
+                log_metadata_manager=log_metadata_manager
             )
 
             if kb_context:
                 agent.set_kb_context(kb_context)
+
+            # 设置知识库ID给Subagent使用
+            if kb_ids:
+                agent.set_kb_ids(kb_ids)
 
             # 流式调用
             for chunk in agent.chat_stream(user_input):

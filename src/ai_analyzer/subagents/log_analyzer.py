@@ -357,12 +357,12 @@ class LogAnalyzerSubagent(SubagentBase):
 
 返回JSON格式结果（仅返回JSON，不要包含其他内容）：
 ```json
-{
+{{
     "selected_plugins": ["plugin_id_1", "plugin_id_2"],
     "selected_files": ["file_1.log", "file_2.log"],
     "fallback": false,
     "reason": "选择原因的简要说明"
-}
+}}
 ```
 
 判断规则：
@@ -475,7 +475,8 @@ class LogAnalyzerSubagent(SubagentBase):
         user_prompt: str = None,
         log_rules_id: str = None,
         user_intent: str = None,
-        api_config: Dict = None
+        api_config: Dict = None,
+        user_id: str = None
     ) -> Dict[str, Any]:
         """
         统一分析接口 - 唯一入口
@@ -488,6 +489,7 @@ class LogAnalyzerSubagent(SubagentBase):
             log_rules_id: 日志规则ID
             user_intent: 用户意图
             api_config: API配置（可选）
+            user_id: 用户ID（用于保存ai_temp到用户目录）
 
         Returns:
             dict: {'html': str, 'interaction_record': dict, 'intent_response': str}
@@ -504,11 +506,14 @@ class LogAnalyzerSubagent(SubagentBase):
         if plugin_result is None and self.plugin_manager and user_prompt:
             selection = self.smart_select(log_files, user_prompt, log_rules_id)
             if not selection.get('fallback', True):
-                plugin_result = self.run_plugin_analysis(
-                    selection['selected_plugins'],
-                    selection['selected_files']
-                )
-                log_files = selection['selected_files']
+                # 验证返回结果完整性
+                selected_plugins = selection.get('selected_plugins', [])
+                selected_files = selection.get('selected_files', [])
+                if selected_plugins and selected_files:
+                    plugin_result = self.run_plugin_analysis(selected_plugins, selected_files)
+                    log_files = selected_files
+                else:
+                    logger.warning("智能选择返回结果不完整，执行全量分析")
 
         # 预处理（内部完成）
         machine_info = self.extract_machine_info(plugin_result or {})
@@ -530,7 +535,7 @@ class LogAnalyzerSubagent(SubagentBase):
         )
 
         # 内部保存ai_temp记录
-        self.save_ai_temp_record(result)
+        self.save_ai_temp_record(result, user_id)
 
         return result
 
@@ -542,11 +547,14 @@ class LogAnalyzerSubagent(SubagentBase):
             'intent_response': ''
         }
 
-    def save_ai_temp_record(self, result: Dict):
-        """保存ai_temp记录"""
+    def save_ai_temp_record(self, result: Dict, user_id: str = None):
+        """保存ai_temp记录到用户专属目录"""
         try:
-            from src.utils.file_utils import get_ai_temp_dir, write_json
-            ai_temp_dir = get_ai_temp_dir()
+            from src.utils.file_utils import get_user_data_dir, write_json
+            if user_id:
+                ai_temp_dir = get_user_data_dir(user_id, 'ai_temp')
+            else:
+                ai_temp_dir = get_user_data_dir('default', 'ai_temp')
             output_file = os.path.join(ai_temp_dir, 'ai_analysis.json')
             write_json(output_file, result.get('interaction_record', {}))
             logger.debug(f"AI交互记录已保存: {output_file}")
@@ -604,6 +612,9 @@ class LogAnalyzerSubagent(SubagentBase):
             for chunk in ai_client.chat(messages):
                 response_text += chunk
 
+            # 记录AI响应内容以便调试
+            logger.debug(f"智能选择AI响应: {response_text[:500]}")
+
             result = self.parse_selection_response(response_text, log_files)
             logger.debug(f"智能选择完成，结果: {result.get('reason', '未知')}")
             return result
@@ -620,8 +631,24 @@ class LogAnalyzerSubagent(SubagentBase):
         else:
             json_text = response_text
 
+        json_text = json_text.strip()
+
+        # 验证JSON基本格式
+        if not json_text.startswith('{') or not json_text.endswith('}'):
+            logger.warning(f"JSON格式不完整，开头或结尾不正确: {json_text[:100]}")
+            return self.fallback_result(log_files, "JSON格式不完整")
+
+        # 验证括号配对
+        open_braces = json_text.count('{')
+        close_braces = json_text.count('}')
+        open_brackets = json_text.count('[')
+        close_brackets = json_text.count(']')
+        if open_braces != close_braces or open_brackets != close_brackets:
+            logger.warning(f"JSON括号不配对: braces={open_braces}/{close_braces}, brackets={open_brackets}/{close_brackets}")
+            return self.fallback_result(log_files, "JSON括号不配对")
+
         try:
-            result = json.loads(json_text.strip())
+            result = json.loads(json_text)
 
             if not isinstance(result, dict):
                 return self.fallback_result(log_files, "响应格式错误")
@@ -654,7 +681,8 @@ class LogAnalyzerSubagent(SubagentBase):
                 'reason': result.get('reason', '智能选择完成')
             }
 
-        except json.JSONDecodeError:
+        except Exception as e:
+            logger.warning(f"解析智能选择响应失败: {str(e)[:200]}")
             return self.fallback_result(log_files, "JSON解析失败")
 
     def fallback_result(self, log_files: List[str], reason: str) -> Dict[str, Any]:
@@ -1368,8 +1396,8 @@ class LogAnalyzerSubagent(SubagentBase):
 
     def validate_context(self, context: Dict[str, Any]) -> bool:
         """验证上下文"""
-        uploaded_files = context.get('uploaded_files', [])
-        return len(uploaded_files) > 0
+        log_files = context.get('log_files', [])
+        return len(log_files) > 0
 
     def execute(self, request: str, context: Dict[str, Any], work_dir: str) -> SubagentResult:
         """
@@ -1383,12 +1411,11 @@ class LogAnalyzerSubagent(SubagentBase):
         Returns:
             SubagentResult: 执行结果
         """
-        uploaded_files = context.get('uploaded_files', [])
-        log_files = []
-        for filename in uploaded_files:
-            file_path = os.path.join(work_dir, filename)
-            if os.path.exists(file_path):
-                log_files.append(file_path)
+        log_files = context.get('log_files', [])
+        kb_ids = context.get('kb_ids', [])
+        user_intent = context.get('user_intent', request)
+        api_config = context.get('subagent_api_config', {})
+        user_id = context.get('user_id')
 
         if not log_files:
             return SubagentResult(
@@ -1397,17 +1424,14 @@ class LogAnalyzerSubagent(SubagentBase):
                 error="没有可分析的日志文件"
             )
 
-        kb_id = context.get('kb_id')
-        user_intent = context.get('user_intent', request)
-        api_config = context.get('subagent_api_config', {})
-
         try:
             result = self.analyze(
                 log_files=log_files,
-                kb_id=kb_id,
+                kb_ids=kb_ids,
                 user_prompt=request,
                 user_intent=user_intent,
-                api_config=api_config
+                api_config=api_config,
+                user_id=user_id
             )
 
             return SubagentResult(

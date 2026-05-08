@@ -16,7 +16,8 @@ from src.utils.file_utils import (
     is_valid_log_file, extract_archive_recursive,
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
-    get_project_root, get_data_dir, get_user_data_dir, clean_filename, is_safe_path
+    get_project_root, get_data_dir, get_user_data_dir, clean_filename, is_safe_path,
+    allowed_log_file, get_file_category
 )
 from src.storage.quota import StorageQuota
 from src.utils import get_logger
@@ -110,25 +111,6 @@ def get_log_metadata_manager():
     if log_metadata_manager is None:
         log_metadata_manager = LogMetadataManager()
     return log_metadata_manager
-
-
-def allowed_log_file(filename):
-    """检查文件扩展名是否为允许的日志文件。"""
-    lower_name = filename.lower()
-    # 支持的格式：tar.gz, tar, zip, txt, log
-    ALLOWED_EXTENSIONS = ['.tar.gz', '.tgz', '.tar', '.zip', '.txt', '.log']
-    for ext in ALLOWED_EXTENSIONS:
-        if lower_name.endswith(ext):
-            return True
-    return False
-
-
-def get_file_category(filename):
-    """获取文件类别：archive 或 log"""
-    lower_name = filename.lower()
-    if lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or lower_name.endswith('.tar') or lower_name.endswith('.zip'):
-        return 'archive'
-    return 'log'
 
 
 def generate_sse_event(data):

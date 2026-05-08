@@ -467,3 +467,38 @@ def clean_filename(filename: str) -> str:
             clean_name = clean_name[:-len(ext)]
             break
     return clean_name
+
+
+ALLOWED_LOG_EXTENSIONS = ['.tar.gz', '.tgz', '.tar', '.zip', '.txt', '.log']
+
+
+def allowed_log_file(filename: str) -> bool:
+    """
+    检查文件扩展名是否为允许的日志文件
+
+    Args:
+        filename: 文件名
+
+    Returns:
+        bool: 是否为允许的日志文件格式
+    """
+    lower_name = filename.lower()
+    for ext in ALLOWED_LOG_EXTENSIONS:
+        if lower_name.endswith(ext):
+            return True
+    return False
+
+
+def get_file_category(filename: str) -> str:
+    """
+    获取文件类别
+
+    Args:
+        filename: 文件名
+
+    Returns:
+        str: 'archive' 或 'log'
+    """
+    if is_archive_file(filename):
+        return 'archive'
+    return 'log'

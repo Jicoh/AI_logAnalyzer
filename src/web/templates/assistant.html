@@ -323,6 +323,43 @@
     background: #e9ecef;
 }
 
+/* 拖拽状态 */
+.chat-input-wrapper textarea.dragging {
+    border-color: #0d6efd;
+    background: #f0f6ff;
+}
+
+/* 待上传文件列表 */
+.pending-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.pending-file-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: #e9ecef;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.pending-file-item .remove-btn {
+    cursor: pointer;
+    color: #dc3545;
+    margin-left: 4px;
+}
+
+/* 侧边栏上传按钮 */
+.sidebar-upload-btn {
+    padding: 12px 16px;
+    border-top: 1px solid #dee2e6;
+    background: #fff;
+}
+
 /* 详情模态框 */
 .detail-modal {
     position: fixed;
@@ -565,16 +602,31 @@
 
         <!-- 输入区域 -->
         <div class="chat-input-area">
+            <!-- 待上传文件列表 -->
+            <div class="pending-files" x-show="pendingFiles.length > 0">
+                <template x-for="(file, index) in pendingFiles" :key="index">
+                    <div class="pending-file-item">
+                        <i class="bi bi-file-earmark"></i>
+                        <span x-text="file.name"></span>
+                        <i class="bi bi-x-circle remove-btn" @click="removePendingFile(index)"></i>
+                    </div>
+                </template>
+            </div>
+
             <div class="chat-input-wrapper">
                 <textarea class="form-control"
                           x-model="inputMessage"
                           @keydown.enter.prevent="sendMessage()"
-                          placeholder="输入消息，按 Enter 发送..."
+                          @dragover="handleDragOver($event)"
+                          @dragleave="handleDragLeave($event)"
+                          @drop="handleDrop($event)"
+                          :class="{ 'dragging': isDragging }"
+                          placeholder="输入消息，按 Enter 发送... 支持拖拽文件"
                           rows="1"
-                          :disabled="!currentSessionId || loading"
+                          :disabled="!currentSessionId || loading || uploadingFiles"
                           @input="autoResizeTextarea($event)"></textarea>
                 <button class="btn btn-primary btn-send" @click="sendMessage()"
-                        :disabled="!currentSessionId || loading || !inputMessage">
+                        :disabled="!currentSessionId || loading || uploadingFiles || (!inputMessage && pendingFiles.length === 0)">
                     <i class="bi bi-send"></i>
                 </button>
             </div>
@@ -609,6 +661,16 @@
                 <i class="bi bi-folder2-open"></i>
                 <p class="mt-1 small">暂无文件</p>
             </div>
+        </div>
+
+        <!-- 上传文件按钮 -->
+        <div class="sidebar-upload-btn">
+            <input type="file" x-ref="sidebarFileInput" multiple hidden @change="uploadFromSidebar($event)">
+            <button class="btn btn-outline-primary w-100"
+                    @click="$refs.sidebarFileInput.click()"
+                    :disabled="!currentSessionId || uploadingFiles">
+                <i class="bi bi-upload"></i> 上传文件
+            </button>
         </div>
     </div>
 
@@ -700,6 +762,11 @@ function assistantApp() {
         loading: false,
         creatingSession: false,
         contextUsage: 0,
+
+        // 文件上传状态
+        pendingFiles: [],
+        isDragging: false,
+        uploadingFiles: false,
 
         // 资源数据
         mcpServers: [],
@@ -1027,7 +1094,15 @@ function assistantApp() {
         },
 
         async sendMessage() {
-            if (!this.currentSessionId || !this.inputMessage || this.loading) return;
+            if (!this.currentSessionId || this.loading) return;
+
+            // 先上传待上传的文件
+            if (this.pendingFiles.length > 0) {
+                await this.uploadPendingFiles();
+            }
+
+            // 如果没有消息内容，不继续发送
+            if (!this.inputMessage) return;
 
             const message = this.inputMessage;
             this.inputMessage = '';
@@ -1087,6 +1162,81 @@ function assistantApp() {
             const textarea = event.target;
             textarea.style.height = 'auto';
             textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        },
+
+        // 拖拽处理
+        handleDragOver(event) {
+            event.preventDefault();
+            this.isDragging = true;
+        },
+
+        handleDragLeave(event) {
+            event.preventDefault();
+            this.isDragging = false;
+        },
+
+        handleDrop(event) {
+            event.preventDefault();
+            this.isDragging = false;
+
+            const files = event.dataTransfer.files;
+            for (let file of files) {
+                this.pendingFiles.push({
+                    name: file.name,
+                    size: file.size,
+                    file: file
+                });
+            }
+        },
+
+        removePendingFile(index) {
+            this.pendingFiles.splice(index, 1);
+        },
+
+        async uploadPendingFiles() {
+            if (!this.currentSessionId || this.pendingFiles.length === 0) return;
+
+            this.uploadingFiles = true;
+
+            const uploadPromises = this.pendingFiles.map(file => {
+                const formData = new FormData();
+                formData.append('file', file.file);
+
+                return fetch(`/api/assistant/sessions/${this.currentSessionId}/files/upload`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Utils.showToast(`文件 ${file.name} 上传成功`, 'success');
+                    } else {
+                        Utils.showToast(`上传失败: ${data.error}`, 'error');
+                    }
+                })
+                .catch(e => {
+                    Utils.showToast(`上传失败: ${e.message}`, 'error');
+                });
+            });
+
+            await Promise.all(uploadPromises);
+
+            this.pendingFiles = [];
+            this.uploadingFiles = false;
+            await this.loadFiles();
+        },
+
+        async uploadFromSidebar(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                this.pendingFiles.push({
+                    name: file.name,
+                    size: file.size,
+                    file: file
+                });
+            }
+            await this.uploadPendingFiles();
+            event.target.value = '';
         },
 
         formatMessage(content) {

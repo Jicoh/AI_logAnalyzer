@@ -240,7 +240,15 @@ class OrchestratorAgent:
         # Prompt路径
         self.prompt_path = self.get_prompt_path()
 
+        # Subagent准备函数注册表
+        self.prepare_handlers = {}
+        self.register_prepare_handlers()
+
         logger.info(f"OrchestratorAgent初始化完成: user={user_id}, session={session_id}")
+
+    def register_prepare_handlers(self):
+        """注册各Subagent的准备函数"""
+        self.prepare_handlers["log_analyzer"] = self.prepare_log_analyzer
 
     def load_config(self):
         """加载Orchestrator配置"""
@@ -666,7 +674,26 @@ class OrchestratorAgent:
 
         # MCP工具
         if self.mcp_client and tool_name in self.mcp_client.tool_to_server:
-            return self.mcp_client.call_tool(tool_name, args)
+            # MCP下载工具：强制传递工作目录
+            if tool_name == "download_bmc_log":
+                args["output_dir"] = self.work_dir
+
+            result = self.mcp_client.call_tool(tool_name, args)
+
+            # 处理下载结果
+            if tool_name == "download_bmc_log" and not result.get("isError"):
+                filename = result.get("filename")
+                if filename:
+                    uploaded_files = self.session_state.get("uploaded_files", [])
+                    if filename not in uploaded_files:
+                        uploaded_files.append(filename)
+                    self.session_state["uploaded_files"] = uploaded_files
+                    self.session_manager.update_state(self.session_id, {
+                        "uploaded_files": uploaded_files
+                    })
+                    logger.info(f"MCP下载文件已记录: {filename}")
+
+            return result
 
         # 未知工具
         return {"error": f"未知工具: {tool_name}"}
@@ -733,6 +760,31 @@ class OrchestratorAgent:
 
         return {"error": f"未实现的内置工具: {tool_name}"}
 
+    def prepare_log_analyzer(self) -> Dict:
+        """
+        为log_analyzer准备执行环境
+
+        Returns:
+            Dict: 包含 temp_work_dir, log_files 的字典，或者错误信息
+        """
+        # 检查是否有准备错误
+        prepare_error = self.session_state.get("prepare_error")
+        if prepare_error:
+            return {"error": prepare_error}
+
+        # 使用已有的log_file_paths（由upload_log_file工具设置）
+        temp_work_dir = self.session_state.get("temp_work_dir", "")
+        log_files = self.session_state.get("log_file_paths", [])
+
+        if not log_files:
+            return {"error": "没有可分析的日志文件，请先通过upload_log_file工具指定要分析的文件"}
+
+        logger.info(f"使用已准备的日志文件: {len(log_files)} 个")
+        return {
+            "temp_work_dir": temp_work_dir,
+            "log_files": log_files
+        }
+
     def dispatch_subagent(self, subagent_name: str, request: str, user_intent: str = "") -> Dict:
         """调度Subagent执行任务"""
         if not subagent_name:
@@ -746,16 +798,27 @@ class OrchestratorAgent:
             return {"error": f"Subagent不存在: {subagent_name}",
                     "available": [info["name"] for info in self.subagent_registry.list_all()]}
 
+        # 执行对应的准备函数（如果已注册）
+        log_files = []
+        temp_work_dir = ""
+        prepare_handler = self.prepare_handlers.get(subagent_name)
+        if prepare_handler:
+            prepare_result = prepare_handler()
+            if "error" in prepare_result:
+                return prepare_result
+            temp_work_dir = prepare_result.get("temp_work_dir", "")
+            log_files = prepare_result.get("log_files", [])
+
         # 构建执行上下文
         context = {
-            "work_dir": self.work_dir,
+            "work_dir": temp_work_dir if prepare_handler else self.work_dir,
             "outputs_dir": self.outputs_dir,
-            "session_notes": self.session_state.get("notes", {}),
-            "uploaded_files": self.session_state.get("uploaded_files", []),
-            "kb_id": self.session_state.get("kb_id"),
+            "log_files": log_files,
+            "kb_ids": self.session_state.get("kb_ids", []),
             "kb_manager": self.kb_manager,
             "subagent_api_config": self.get_subagent_api_config(subagent_name),
-            "user_intent": user_intent or request
+            "user_intent": user_intent or request,
+            "user_id": self.user_id
         }
 
         try:
@@ -764,7 +827,7 @@ class OrchestratorAgent:
                 subagent_name,
                 request,
                 context,
-                self.work_dir
+                temp_work_dir if prepare_handler else self.work_dir
             )
 
             if result is None:
@@ -788,40 +851,95 @@ class OrchestratorAgent:
             return {"error": f"Subagent执行失败: {str(e)}"}
 
     def upload_log_file(self, file_path: str) -> Dict:
-        """处理日志文件上传"""
+        """处理日志文件上传，准备到temp目录供后续分析"""
         if not file_path:
             return {"error": "file_path不能为空"}
 
-        if not os.path.exists(file_path):
-            return {"error": f"文件不存在: {file_path}"}
-
-        # 复制文件到工作目录
         import shutil
+        from src.utils.file_utils import (
+            create_work_directory, extract_archive_recursive,
+            get_file_category, allowed_log_file, find_log_files_in_directory,
+            get_user_data_dir
+        )
+
         filename = os.path.basename(file_path)
-        dest_path = os.path.join(self.work_dir, filename)
+
+        if not allowed_log_file(filename):
+            return {
+                "error": f"文件 '{filename}' 不是支持的日志格式。",
+                "detail": "支持的格式：.tar.gz, .tar, .zip, .tgz, .txt, .log",
+                "suggestion": "请上传日志文件或包含日志的压缩包后再进行分析。"
+            }
+
+        file_category = get_file_category(filename)
+        src_path = file_path
+
+        # 检查文件是否已在工作目录中，若不在则复制
+        src_real_path = os.path.realpath(file_path)
+        work_dir_real_path = os.path.realpath(self.work_dir)
+        file_in_work_dir = src_real_path.startswith(work_dir_real_path + os.sep) or src_real_path == work_dir_real_path
+
+        if not file_in_work_dir:
+            dest_path = os.path.join(self.work_dir, filename)
+            try:
+                shutil.copy2(file_path, dest_path)
+                src_path = dest_path
+                logger.info(f"复制文件到工作目录: {filename}")
+            except Exception as e:
+                logger.error(f"复制文件失败: {str(e)}")
+                return {"error": f"复制文件失败: {str(e)}"}
+        else:
+            logger.info(f"文件已在工作目录中: {filename}")
+
+        # 更新上传文件记录
+        uploaded_files = self.session_state.get("uploaded_files", [])
+        if filename not in uploaded_files:
+            uploaded_files.append(filename)
+            self.session_state["uploaded_files"] = uploaded_files
+
+        # 创建 temp 工作目录
+        temp_base = get_user_data_dir(self.user_id, 'temp')
+        temp_work_dir = create_work_directory(temp_base, filename)
+        log_file_paths = []
 
         try:
-            shutil.copy2(file_path, dest_path)
-            self.session_state["uploaded_files"].append(filename)
+            if file_category == 'archive':
+                extract_archive_recursive(src_path, temp_work_dir)
+                log_file_paths.extend(find_log_files_in_directory(temp_work_dir))
+            else:
+                dest_path = os.path.join(temp_work_dir, filename)
+                shutil.copy2(src_path, dest_path)
+                log_file_paths.append(dest_path)
+
+            # 一次性更新 session state
+            self.session_state["temp_work_dir"] = temp_work_dir
+            self.session_state["log_file_paths"] = log_file_paths
             self.session_manager.update_state(self.session_id, {
-                "uploaded_files": self.session_state["uploaded_files"]
+                "uploaded_files": uploaded_files,
+                "temp_work_dir": temp_work_dir,
+                "log_file_paths": log_file_paths
             })
-            logger.info(f"上传日志文件: {filename}")
+
+            logger.info(f"文件已准备到temp目录: {temp_work_dir}, 日志文件数: {len(log_file_paths)}")
+
             return {
                 "success": True,
                 "filename": filename,
-                "work_dir_path": dest_path,
-                "message": f"文件已上传到工作目录: {filename}"
+                "work_dir_path": src_path,
+                "temp_work_dir": temp_work_dir,
+                "log_file_paths": log_file_paths,
+                "message": f"文件已准备完成，可进行分析: {filename}"
             }
-        except Exception as e:
-            logger.error(f"文件上传失败: {str(e)}")
-            return {"error": f"文件上传失败: {str(e)}"}
 
-    def set_kb_id(self, kb_id: str):
-        """设置当前使用的知识库ID"""
-        self.session_state["kb_id"] = kb_id
-        self.session_manager.update_state(self.session_id, {"kb_id": kb_id})
-        logger.info(f"设置知识库: {kb_id}")
+        except Exception as e:
+            logger.error(f"文件准备失败: {str(e)}")
+            return {"error": f"文件准备失败: {str(e)}"}
+
+    def set_kb_ids(self, kb_ids: List[str]):
+        """设置当前使用的知识库ID列表"""
+        self.session_state["kb_ids"] = kb_ids
+        self.session_manager.update_state(self.session_id, {"kb_ids": kb_ids})
+        logger.info(f"设置知识库列表: {kb_ids}")
 
     def set_kb_context(self, kb_context: str):
         """
