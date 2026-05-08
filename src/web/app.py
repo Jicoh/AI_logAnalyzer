@@ -167,6 +167,40 @@ def create_app():
     csrf.exempt(app.view_functions['admin_api.update_user_analysis_template'])
     csrf.exempt(app.view_functions['admin_api.delete_user_analysis_template'])
 
+    # CSRF豁免：缓存清理API（已使用登录保护）
+    csrf.exempt(app.view_functions['cache_api.clear_temp'])
+    csrf.exempt(app.view_functions['cache_api.clear_results'])
+
+    # CSRF豁免：知识库API（已使用登录保护）
+    csrf.exempt(app.view_functions['kb_api.create_kb'])
+    csrf.exempt(app.view_functions['kb_api.upload_document'])
+    csrf.exempt(app.view_functions['kb_api.reindex_kb'])
+
+    # CSRF豁免：管理员API（已使用登录+管理员权限保护）
+    csrf.exempt(app.view_functions['admin_api.update_config'])
+    csrf.exempt(app.view_functions['admin_api.test_mcp_server'])
+    csrf.exempt(app.view_functions['admin_api.add_mcp_server'])
+    csrf.exempt(app.view_functions['admin_api.create_user'])
+    csrf.exempt(app.view_functions['admin_api.update_user_quota'])
+    csrf.exempt(app.view_functions['admin_api.reset_user_password'])
+    csrf.exempt(app.view_functions['admin_api.toggle_user_active'])
+    csrf.exempt(app.view_functions['feedback_api.reply_feedback'])
+
+    # CSRF豁免：反馈API（已使用登录保护）
+    csrf.exempt(app.view_functions['feedback_api.submit_feedback'])
+
+    # CSRF豁免：历史API（已使用登录保护）
+    csrf.exempt(app.view_functions['history_api.download_history'])
+
+    # CSRF豁免：用户配置API（已使用登录保护）
+    csrf.exempt(app.view_functions['user_config_api.update_user_config'])
+
+    # CSRF豁免：分析API（已使用登录保护）
+    csrf.exempt(app.view_functions['analyze_api.validate_local_path'])
+
+    # CSRF豁免：日志查看API（已使用登录保护）
+    csrf.exempt(app.view_functions['log_viewer_api.validate_path'])
+
     return app
 
 

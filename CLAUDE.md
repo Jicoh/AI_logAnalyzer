@@ -260,6 +260,26 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 5. 过度的抽象和封装
 6. 不必要的配置选项
 
+### CSRF Protection
+
+项目使用 Flask-WTF CSRF 保护，所有POST端点默认需要CSRF Token。
+
+**前端POST请求规则：**
+- 前端使用 `fetch()` 发送POST请求时无法携带CSRF Token
+- 所有POST端点必须在 `src/web/app.py` 中添加 `csrf.exempt()` 配置
+
+**新增POST API端点时：**
+1. 在对应蓝图文件中定义路由（如 `routes/my_api.py`）
+2. 在 `src/web/app.py` 的 CSRF豁免区块添加：
+   ```python
+   csrf.exempt(app.view_functions['蓝图名.端点函数名'])
+   ```
+3. 格式：`蓝图名.端点函数名`（如 `cache_api.clear_temp`）
+
+**CSRF豁免安全前提：**
+- 端点必须有其他保护机制：登录验证、管理员权限、限流等
+- 端点不应处理敏感操作（如删除数据）时缺少二次确认
+
 ## Configuration
 
 ### System Settings (管理员配置)
