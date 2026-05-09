@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 import pytest
 from system_config_manager import SystemConfigManager
-from ai_analyzer.client import AIClient
+from agent.client import AIClient
 
 
 def test_ai_connection():

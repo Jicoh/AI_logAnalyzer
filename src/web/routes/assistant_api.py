@@ -12,7 +12,7 @@ from flask_login import current_user
 
 from src.auth.decorators import login_required
 from src.session_manager.manager import SessionManager
-from src.ai_analyzer.orchestrator_agent import OrchestratorAgent
+from src.agent.orchestrator_agent import OrchestratorAgent
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.user_config_manager.manager import UserConfigManager

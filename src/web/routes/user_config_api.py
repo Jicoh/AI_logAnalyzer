@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 
 from src.user_config_manager.manager import UserConfigManager
 from src.system_config_manager.manager import SystemConfigManager
-from src.ai_analyzer.skill_loader import get_skill_loader
+from src.agent.skill_loader import get_skill_loader
 from src.utils import get_logger
 
 logger = get_logger('user_config_api')

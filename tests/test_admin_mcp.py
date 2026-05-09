@@ -120,7 +120,7 @@ class TestAnalyzeWithAgentLogSource:
 
     def test_analyzer_import_with_log_source(self):
         """测试LogAnalyzerSubagent模块导入"""
-        from src.ai_analyzer.subagents.log_analyzer import LogAnalyzerSubagent
+        from src.agent.subagents.log_analyzer import LogAnalyzerSubagent
         assert LogAnalyzerSubagent is not None
 
     def test_log_source_parameter_handling(self):

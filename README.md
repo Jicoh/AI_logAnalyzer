@@ -127,8 +127,7 @@ AI_logAnalyzer/
 ├── main.py                 # CLI入口
 ├── web_app.py              # Web应用入口
 ├── config/                 # 配置目录
-│   ├── skills/             # Skill目录
-│   └── orchestrator_prompt.txt  # 主Agent提示词
+│   └── skills/             # Skill目录
 ├── data/                   # 数据目录
 │   ├── uploads/            # 上传文件
 │   ├── temp/               # 处理临时目录
@@ -143,9 +142,12 @@ AI_logAnalyzer/
 ├── docs/                   # 文档目录
 │   └── development_plan_assistant.md  # 智能助手开发计划
 └── src/                    # 源代码
-    ├── ai_analyzer/        # AI分析模块
+    ├── agent/              # Agent模块
     │   ├── orchestrator_agent.py  # 主Agent编排器
     │   ├── skill_loader.py        # Skill加载器
+    │   ├── prompts/               # 提示词目录
+    │   │   ├── orchestrator_prompt.txt
+    │   │   └── subagent_log_analyze_prompt.txt
     │   └── subagents/             # Subagent模块
     │       ├── base.py            # Subagent基类
     │       ├── registry.py        # Subagent注册表

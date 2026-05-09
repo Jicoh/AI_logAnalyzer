@@ -296,8 +296,7 @@ class OrchestratorAgent:
     def get_prompt_path(self) -> str:
         """获取prompt文件路径"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current_dir))
-        return os.path.join(project_root, 'prompts', 'orchestrator_prompt.txt')
+        return os.path.join(current_dir, 'prompts', 'orchestrator_prompt.txt')
 
     def build_tools(self) -> List[Dict]:
         """构建工具列表（内置 + MCP）"""

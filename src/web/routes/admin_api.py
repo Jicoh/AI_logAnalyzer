@@ -373,7 +373,7 @@ def update_config():
 def get_configurable_subagents():
     """获取可配置的Subagent列表"""
     try:
-        from src.ai_analyzer.subagents import get_registry
+        from src.agent.subagents import get_registry
         registry = get_registry()
 
         subagents = []
@@ -551,7 +551,7 @@ def test_mcp_server(name):
         server_config = mcp_servers[name]
 
         # 创建临时MCP客户端测试连接
-        from src.ai_analyzer.mcp_client import MCPClient
+        from src.agent.mcp_client import MCPClient
 
         # 禁用自动连接，手动测试单个Server
         mcp_client = MCPClient(settings_manager, auto_connect=False)
@@ -601,7 +601,7 @@ def test_mcp_server(name):
 def get_mcp_tools():
     """获取所有MCP工具列表（预览）"""
     try:
-        from src.ai_analyzer.mcp_client import MCPClient
+        from src.agent.mcp_client import MCPClient
 
         settings_manager = SystemConfigManager()
         mcp_client = MCPClient(settings_manager)

@@ -111,7 +111,7 @@ def create_app():
 
     # 预加载Skill
     logger.info("正在预加载Skill...")
-    from src.ai_analyzer.skill_loader import get_skill_loader
+    from src.agent.skill_loader import get_skill_loader
     skill_loader = get_skill_loader()
     skills = skill_loader.scan()
     logger.info(f"已加载 {len(skills)} 个Skill: {[s.name for s in skills]}")

@@ -12,7 +12,7 @@ from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .base import SubagentBase, SubagentResult
-from src.ai_analyzer.client import AIClient
+from src.agent.client import AIClient
 from src.utils import get_logger
 
 logger = get_logger('log_analyzer_subagent')
@@ -408,16 +408,16 @@ class LogAnalyzerSubagent(SubagentBase):
         """获取prompt文件路径"""
         if self.prompt_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            self.prompt_path = os.path.join(project_root, 'prompts', 'subagent_log_analyze_prompt.txt')
+            agent_dir = os.path.dirname(os.path.dirname(current_dir))
+            self.prompt_path = os.path.join(agent_dir, 'prompts', 'subagent_log_analyze_prompt.txt')
         return self.prompt_path
 
     def get_template_path(self) -> str:
         """获取HTML模板路径"""
         if self.template_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(current_dir))
-            self.template_path = os.path.join(project_root, 'src', 'ai_analyzer', 'templates', 'ai_report_template.html')
+            agent_dir = os.path.dirname(os.path.dirname(current_dir))
+            self.template_path = os.path.join(agent_dir, 'templates', 'ai_report_template.html')
         return self.template_path
 
     def load_template(self):

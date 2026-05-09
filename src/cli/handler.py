@@ -13,7 +13,7 @@ from src.cli.parser import get_parser
 
 from src.system_config_manager import SystemConfigManager
 from src.knowledge_base import KnowledgeBaseManager
-from src.ai_analyzer.subagents.log_analyzer import LogAnalyzerSubagent
+from src.agent.subagents.log_analyzer import LogAnalyzerSubagent
 from src.log_metadata import LogMetadataManager
 from src.utils import read_file, write_json, ensure_dir, get_logger
 from src.utils.file_utils import (

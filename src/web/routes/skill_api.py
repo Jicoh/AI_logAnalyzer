@@ -5,7 +5,7 @@ Skill API路由。
 
 from flask import Blueprint, jsonify
 from src.auth.decorators import login_required, admin_required
-from src.ai_analyzer.skill_loader import get_skill_loader
+from src.agent.skill_loader import get_skill_loader
 from src.utils import get_logger
 
 logger = get_logger('skill_api')

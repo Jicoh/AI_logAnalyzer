@@ -16,10 +16,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(project_root, 'src'))
 sys.path.insert(0, project_root)
 
-from ai_analyzer.subagents.log_analyzer import (
+from agent.subagents.log_analyzer import (
     ToolExecutor, LogAnalyzerSubagent, BUILTIN_TOOLS, BUILTIN_TOOL_NAMES
 )
-from ai_analyzer.client import AIResponse
+from agent.client import AIResponse
 
 
 # ==================== ToolExecutor 测试 ====================
@@ -59,10 +59,11 @@ class TestToolExecutor:
 
         assert result["found"] is True
         assert result["keyword"] == "ERROR"
-        assert result["matched_line"] == 2  # 第一个ERROR在第2行（从1开始）
         assert result["total_matches"] == 2
-        assert "content" in result
-        assert ">>>" in result["content"]  # 标记匹配行
+        assert "matches" in result
+        assert len(result["matches"]) > 0
+        assert result["matches"][0]["matched_line"] == 2  # 第一个ERROR在第2行（从1开始）
+        assert ">>>" in result["matches"][0]["content"]  # 标记匹配行
 
     def test_read_log_by_keyword_not_found(self):
         """测试关键词搜索未找到"""
@@ -209,8 +210,8 @@ class TestLogAnalyzerSubagentValidation:
         }.get(key, default)
 
         # 使用patch避免加载实际模板
-        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=Mock()):
-            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test prompt"):
+        with patch.object(LogAnalyzerSubagent, 'load_template', return_value=Mock()):
+            with patch.object(LogAnalyzerSubagent, 'load_prompt', return_value="test prompt"):
                 self.agent = LogAnalyzerSubagent(self.mock_config_manager)
 
     def test_extract_json_from_code_block(self):
@@ -218,7 +219,7 @@ class TestLogAnalyzerSubagentValidation:
         text = """```json
 {"machine_info": {}, "analysis_summary": "test"}
 ```"""
-        result = self.agent._extract_json(text)
+        result = self.agent.extract_json(text)
         assert result.startswith("{")
         assert result.endswith("}")
 
@@ -227,20 +228,20 @@ class TestLogAnalyzerSubagentValidation:
         text = """```
 {"machine_info": {}, "analysis_summary": "test"}
 ```"""
-        result = self.agent._extract_json(text)
+        result = self.agent.extract_json(text)
         assert result.startswith("{")
 
     def test_extract_json_with_nested_braces(self):
         """测试嵌套花括号"""
         text = '{"outer": {"inner": {"deep": "value"}}}'
-        result = self.agent._extract_json(text)
+        result = self.agent.extract_json(text)
         parsed = json.loads(result)
         assert parsed["outer"]["inner"]["deep"] == "value"
 
     def test_extract_json_with_prefix_text(self):
         """测试有前缀文本的JSON"""
         text = "这是分析结果：\n{\"summary\": \"test\"}"
-        result = self.agent._extract_json(text)
+        result = self.agent.extract_json(text)
         assert result.startswith("{")
 
     def test_validate_output_valid_json(self):
@@ -253,14 +254,14 @@ class TestLogAnalyzerSubagentValidation:
             "solutions": [],
             "risk_assessment": {"level": "中"}
         })
-        data, errors = self.agent._validate_output(valid_json)
+        data, errors = self.agent.validate_output(valid_json)
         assert data is not None
         assert len(errors) == 0
 
     def test_validate_output_invalid_json(self):
         """测试非法JSON验证"""
         invalid_json = "{invalid json}"
-        data, errors = self.agent._validate_output(invalid_json)
+        data, errors = self.agent.validate_output(invalid_json)
         assert data is None
         assert len(errors) > 0
         assert "JSON格式错误" in errors[0]
@@ -271,7 +272,7 @@ class TestLogAnalyzerSubagentValidation:
             "machine_info": {},
             "problems": []
         })
-        data, errors = self.agent._validate_output(incomplete_json)
+        data, errors = self.agent.validate_output(incomplete_json)
         assert data is None
         assert "缺少必需字段" in errors[0]
 
@@ -285,7 +286,7 @@ class TestLogAnalyzerSubagentValidation:
             "solutions": [],
             "risk_assessment": {"level": "低"}
         })
-        data, errors = self.agent._validate_output(normal_json)
+        data, errors = self.agent.validate_output(normal_json)
         assert data is not None
         assert len(errors) == 0
 
@@ -299,14 +300,14 @@ class TestLogAnalyzerSubagentValidation:
             "solutions": [],
             "risk_assessment": {"level": "低"}
         })
-        data, errors = self.agent._validate_output(empty_json)
+        data, errors = self.agent.validate_output(empty_json)
         # 应触发警告
         assert len(errors) > 0
         assert "未发现任何问题或风险" in errors[0]
 
     def test_validate_output_empty_response(self):
         """测试空响应"""
-        data, errors = self.agent._validate_output("")
+        data, errors = self.agent.validate_output("")
         assert data is None
         assert "AI返回空内容" in errors[0]
 
@@ -325,8 +326,8 @@ class TestLogAnalyzerSubagentHTMLGeneration:
         }.get(key, default)
 
         # 创建agent，不加载模板（使用备用HTML）
-        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test"):
+        with patch.object(LogAnalyzerSubagent, 'load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, 'load_prompt', return_value="test"):
                 self.agent = LogAnalyzerSubagent(self.mock_config_manager)
 
     def test_generate_fallback_html(self):
@@ -343,7 +344,7 @@ class TestLogAnalyzerSubagentHTMLGeneration:
             "risk_assessment": {"level": "中", "description": "风险描述"},
             "analysis_coverage": {"analysis_depth": "全面", "files_analyzed": ["test.log"]}
         }
-        html = self.agent._generate_fallback_html(data)
+        html = self.agent.generate_fallback_html(data)
 
         assert "<!DOCTYPE html>" in html
         assert "机器信息" in html
@@ -357,7 +358,7 @@ class TestLogAnalyzerSubagentHTMLGeneration:
 
     def test_generate_error_html(self):
         """测试错误HTML生成"""
-        html = self.agent._generate_error_html("分析失败", "API连接超时")
+        html = self.agent.generate_error_html("分析失败", "API连接超时")
         assert "<!DOCTYPE html>" in html
         assert "分析失败" in html
         assert "API连接超时" in html
@@ -367,18 +368,18 @@ class TestLogAnalyzerSubagentHTMLGeneration:
         text = """```html
 <!DOCTYPE html><html><body>Test</body></html>
 ```"""
-        html = self.agent._extract_html(text)
+        html = self.agent.extract_html(text)
         assert "<!DOCTYPE html>" in html
 
     def test_extract_html_direct(self):
         """测试直接提取HTML"""
         text = "<!DOCTYPE html><html><body>Test</body></html>"
-        html = self.agent._extract_html(text)
+        html = self.agent.extract_html(text)
         assert html == text
 
     def test_generate_simple_html(self):
         """测试简单HTML包装"""
-        html = self.agent._generate_simple_html("原始内容")
+        html = self.agent.generate_simple_html("原始内容")
         assert "<!DOCTYPE html>" in html
         assert "原始内容" in html
 
@@ -408,10 +409,10 @@ class TestLogAnalyzerSubagentInteraction:
             agent = LogAnalyzerSubagent(self.mock_config_manager)
 
             # 初始化client
-            agent._init_client()
+            agent.init_client()
 
             # mock prompt加载方法返回简单模板
-            agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
+            agent.load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
 
             # 直接mock agent的client方法
             valid_json = json.dumps({
@@ -427,10 +428,6 @@ class TestLogAnalyzerSubagentInteraction:
             result = agent.analyze(
                 log_files=[log_file],
                 plugin_result={},
-                machine_info={"serial_number": "SN001"},
-                knowledge_content="",
-                log_rules="",
-                analysis_templates="",
                 user_prompt=""
             )
 
@@ -453,10 +450,10 @@ class TestLogAnalyzerSubagentInteraction:
             agent = LogAnalyzerSubagent(self.mock_config_manager)
 
             # 初始化client
-            agent._init_client()
+            agent.init_client()
 
             # mock prompt加载方法
-            agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
+            agent.load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
 
             # 第一轮返回tool_call，第二轮返回JSON
             tool_call_response = AIResponse(
@@ -482,10 +479,6 @@ class TestLogAnalyzerSubagentInteraction:
             result = agent.analyze(
                 log_files=[log_file],
                 plugin_result={},
-                machine_info={},
-                knowledge_content="",
-                log_rules="",
-                analysis_templates="",
                 user_prompt=""
             )
 
@@ -510,10 +503,10 @@ class TestLogAnalyzerSubagentInteraction:
             agent = LogAnalyzerSubagent(self.mock_config_manager)
 
             # 初始化client
-            agent._init_client()
+            agent.init_client()
 
             # mock prompt加载方法
-            agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
+            agent.load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
 
             # 第一轮返回非法JSON，第二轮返回合法JSON
             invalid_response = AIResponse(content="{invalid json}")
@@ -532,10 +525,6 @@ class TestLogAnalyzerSubagentInteraction:
             result = agent.analyze(
                 log_files=[log_file],
                 plugin_result={},
-                machine_info={},
-                knowledge_content="",
-                log_rules="",
-                analysis_templates="",
                 user_prompt=""
             )
 
@@ -557,10 +546,10 @@ class TestLogAnalyzerSubagentInteraction:
             agent = LogAnalyzerSubagent(self.mock_config_manager)
 
             # 初始化client
-            agent._init_client()
+            agent.init_client()
 
             # mock prompt加载方法
-            agent._load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
+            agent.load_prompt = Mock(return_value="{plugin_result}\n{machine_info}\n{knowledge_content}\n{log_rules}\n{log_files_overview}\n{analysis_templates}\n{user_prompt}")
 
             # 所有轮次都返回非法JSON
             invalid_response = AIResponse(content="{invalid json}")
@@ -574,10 +563,6 @@ class TestLogAnalyzerSubagentInteraction:
             result = agent.analyze(
                 log_files=[log_file],
                 plugin_result={},
-                machine_info={},
-                knowledge_content="",
-                log_rules="",
-                analysis_templates="",
                 user_prompt=""
             )
 
@@ -594,7 +579,7 @@ class TestLogAnalyzerSubagentInteraction:
 class TestInteractionRecord:
     """ai_temp记录结构测试"""
 
-    def test_build_interaction_record_structure(self):
+    def testbuild_interaction_record_structure(self):
         """测试交互记录结构"""
         mock_config_manager = Mock()
         mock_config_manager.get.side_effect = lambda key, default=None: {
@@ -602,11 +587,11 @@ class TestInteractionRecord:
             'agent': {'max_tokens': 60000, 'max_rounds': 10}
         }.get(key, default)
 
-        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value="test"):
+        with patch.object(LogAnalyzerSubagent, 'load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, 'load_prompt', return_value="test"):
                 agent = LogAnalyzerSubagent(mock_config_manager)
 
-        record = agent._build_interaction_record(
+        record = agent.build_interaction_record(
             system_prompt="system prompt content",
             prompt_data={"plugin_result": "test", "knowledge_content": "kb content"},
             interactions=[{"round": 1, "response": "test"}],
@@ -638,8 +623,8 @@ class TestFormattingHelpers:
             'agent': {}
         }.get(key, default)
 
-        with patch.object(LogAnalyzerSubagent, '_load_template', return_value=None):
-            with patch.object(LogAnalyzerSubagent, '_load_prompt', return_value=""):
+        with patch.object(LogAnalyzerSubagent, 'load_template', return_value=None):
+            with patch.object(LogAnalyzerSubagent, 'load_prompt', return_value=""):
                 self.agent = LogAnalyzerSubagent(mock_config_manager)
 
     def test_format_plugin_result(self):
@@ -657,7 +642,7 @@ class TestFormattingHelpers:
                 ]
             }
         }
-        result = self.agent._format_plugin_result(plugin_result)
+        result = self.agent.format_plugin_result(plugin_result)
         assert "BMC信息" in result
         assert "序列号" in result
         assert "SN001" in result
@@ -667,7 +652,7 @@ class TestFormattingHelpers:
     def test_format_machine_info(self):
         """测试机器信息格式化"""
         machine_info = {"serial_number": "SN001", "model": "ModelX"}
-        result = self.agent._format_machine_info(machine_info)
+        result = self.agent.format_machine_info(machine_info)
         assert "serial_number" in result
         assert "SN001" in result
 
@@ -679,7 +664,7 @@ class TestFormattingHelpers:
             f.write("test content\n")
 
         try:
-            result = self.agent._format_log_files([log_file])
+            result = self.agent.format_log_files([log_file])
             assert "test.log" in result
             assert "KB" in result  # 包含大小信息
         finally:
@@ -688,7 +673,7 @@ class TestFormattingHelpers:
 
     def test_format_log_files_empty(self):
         """测试空文件列表"""
-        result = self.agent._format_log_files([])
+        result = self.agent.format_log_files([])
         assert "无日志文件" in result
 
 

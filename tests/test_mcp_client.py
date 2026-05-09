@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch, MagicMock
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.ai_analyzer.mcp_client import (
+from src.agent.mcp_client import (
     MCPClient, MCPTool, MCPServerConnection,
     StdioConnection, WebSocketConnection
 )
@@ -120,7 +120,7 @@ class TestWebSocketConnection:
     def test_websocket_connection_without_library(self):
         """测试无websocket库时的行为"""
         # 模拟无websocket库
-        with patch('src.ai_analyzer.mcp_client.WEBSOCKET_AVAILABLE', False):
+        with patch('src.agent.mcp_client.WEBSOCKET_AVAILABLE', False):
             connection = WebSocketConnection("test", {"url": "ws://localhost"})
             result = connection.connect()
             assert result == False

@@ -54,11 +54,11 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Settings Manager | `src/system_config_manager/` | System config (API, BM25, embedding) |
 | User Config | `src/user_config_manager/` | User-level preferences (plugin selection, KB selection) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
-| AI Analyzer | `src/ai_analyzer/` | Prompt building, API calls with streaming |
-| Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
-| Log Analyzer Subagent | `src/ai_analyzer/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎，含智能选择） |
-| Subagent Registry | `src/ai_analyzer/subagents/registry.py` | Subagent注册表 |
-| Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
+| Agent | `src/agent/` | Prompt building, API calls with streaming |
+| Orchestrator Agent | `src/agent/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
+| Log Analyzer Subagent | `src/agent/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎，含智能选择） |
+| Subagent Registry | `src/agent/subagents/registry.py` | Subagent注册表 |
+| Skill Loader | `src/agent/skill_loader.py` | Skill扫描和加载 |
 | Log Metadata | `src/log_metadata/` | Log file description rules for AI selection |
 | Plugin System | `plugins/` (submodule) | Dynamic plugin discovery and execution |
 | Custom Plugins | `custom_plugins/` | User-defined plugins |
@@ -308,8 +308,8 @@ File: `config/user_config_template.json`
 ### Prompt files
 - `config/default_prompt_template.txt` - Read-only template
 - `config/default_prompt.txt` - User-customizable prompt (overrides template)
-- `prompts/subagent_log_analyze_prompt.txt` - Log Analyzer Subagent prompt
-- `prompts/orchestrator_prompt.txt` - Orchestrator Agent prompt
+- `src/agent/prompts/subagent_log_analyze_prompt.txt` - Log Analyzer Subagent prompt
+- `src/agent/prompts/orchestrator_prompt.txt` - Orchestrator Agent prompt
 - `config/log_metadata_rules.json` - Log file description rulesets for AI selection
 
 ## Knowledge Base Retrieval
@@ -330,15 +330,15 @@ RRF formula: `score(d) = bm25_weight * 1/(k+rank_bm25) + vector_weight * 1/(k+ra
 
 | 模块 | 位置 | 功能 |
 |------|------|------|
-| Orchestrator Agent | `src/ai_analyzer/orchestrator_agent.py` | 主Agent，理解用户意图、调度Subagent/MCP工具 |
+| Orchestrator Agent | `src/agent/orchestrator_agent.py` | 主Agent，理解用户意图、调度Subagent/MCP工具 |
 | Session Manager | `src/session_manager/` | 会话管理，最多2个活跃会话 |
-| Subagent Registry | `src/ai_analyzer/subagent_registry.py` | Subagent注册表 |
-| Log Analyzer Subagent | `src/ai_analyzer/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎） |
-| Skill Loader | `src/ai_analyzer/skill_loader.py` | Skill扫描和加载 |
+| Subagent Registry | `src/agent/subagents/registry.py` | Subagent注册表 |
+| Log Analyzer Subagent | `src/agent/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎） |
+| Skill Loader | `src/agent/skill_loader.py` | Skill扫描和加载 |
 
 ### Skill系统
 
-Skill定义存放在`config/skills/`目录，采用SKILL.md格式：
+Skill定义存放在`src/agent/skills/`目录，采用SKILL.md格式：
 
 ```markdown
 ---

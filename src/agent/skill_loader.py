@@ -46,10 +46,9 @@ class SkillLoader:
             skills_dir: Skill目录路径，默认为项目根目录下的skills
         """
         if skills_dir is None:
-            # 获取项目根目录
+            # skills目录在当前目录下
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(current_dir))
-            skills_dir = os.path.join(project_root, 'skills')
+            skills_dir = os.path.join(current_dir, 'skills')
 
         self.skills_dir = skills_dir
         self._skills: Dict[str, SkillInfo] = {}

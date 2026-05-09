@@ -8,7 +8,7 @@ from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify
 from flask_login import current_user
 
-from src.ai_analyzer.subagents.log_analyzer import LogAnalyzerSubagent
+from src.agent.subagents.log_analyzer import LogAnalyzerSubagent
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.system_config_manager.manager import SystemConfigManager
