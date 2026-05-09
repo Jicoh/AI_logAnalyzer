@@ -625,9 +625,11 @@
                           rows="1"
                           :disabled="!currentSessionId || loading || uploadingFiles"
                           @input="autoResizeTextarea($event)"></textarea>
-                <button class="btn btn-primary btn-send" @click="sendMessage()"
-                        :disabled="!currentSessionId || loading || uploadingFiles || (!inputMessage && pendingFiles.length === 0)">
-                    <i class="bi bi-send"></i>
+                <button class="btn btn-primary btn-send"
+                        @click="loading ? stopGeneration() : sendMessage()"
+                        :disabled="!currentSessionId || uploadingFiles || (!loading && !inputMessage && pendingFiles.length === 0)"
+                        :title="loading ? '停止生成' : '发送消息'">
+                    <i class="bi" :class="loading ? 'bi-stop-fill' : 'bi-send'"></i>
                 </button>
             </div>
         </div>
@@ -768,6 +770,7 @@ function assistantApp() {
         loading: false,
         creatingSession: false,
         contextUsage: 0,
+        abortController: null,  // 用于取消请求的控制器
 
         // 文件上传状态
         pendingFiles: [],
@@ -1116,6 +1119,9 @@ function assistantApp() {
             this.inputMessage = '';
             this.loading = true;
 
+            // 创建AbortController
+            this.abortController = new AbortController();
+
             // 添加用户消息
             const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             this.messages.push({
@@ -1130,7 +1136,8 @@ function assistantApp() {
                 const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message, kb_ids: this.selectedKbIds })
+                    body: JSON.stringify({ message, kb_ids: this.selectedKbIds }),
+                    signal: this.abortController.signal
                 });
                 const data = await response.json();
 
@@ -1151,12 +1158,23 @@ function assistantApp() {
                     this.inputMessage = message;
                 }
             } catch (e) {
-                Utils.showToast('发送消息失败: ' + e.message, 'error');
-                this.messages.pop();
-                this.inputMessage = message;
+                if (e.name === 'AbortError') {
+                    Utils.showToast('已停止生成', 'info');
+                } else {
+                    Utils.showToast('发送消息失败: ' + e.message, 'error');
+                    this.messages.pop();
+                    this.inputMessage = message;
+                }
             }
 
             this.loading = false;
+            this.abortController = null;
+        },
+
+        stopGeneration() {
+            if (this.abortController) {
+                this.abortController.abort();
+            }
         },
 
         scrollToBottom() {
