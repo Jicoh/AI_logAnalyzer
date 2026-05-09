@@ -18,13 +18,21 @@ import re
 
 
 def load_plugin_dependencies(project_root):
-    """读取插件依赖配置"""
-    deps_file = os.path.join(project_root, 'plugins', 'plugin_dependencies.json')
-    if os.path.exists(deps_file):
-        with open(deps_file, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            return config.get('dependencies', [])
-    return []
+    """读取插件依赖配置，从 requirements.txt 解析包名"""
+    req_file = os.path.join(project_root, 'plugins', 'requirements.txt')
+    dependencies = []
+    if os.path.exists(req_file):
+        with open(req_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # 跳过空行和注释
+                if not line or line.startswith('#'):
+                    continue
+                # 提取包名，去掉版本约束 (如 pandas>=2.0.0 -> pandas)
+                package = re.split(r'[<>=!~\s]', line)[0]
+                if package:
+                    dependencies.append(package)
+    return dependencies
 
 
 def update_spec_file(spec_file, plugin_deps):
@@ -264,10 +272,9 @@ def create_usage_file(dist_dir):
 }
 
 【重要】插件依赖声明:
-如果插件需要额外的Python模块（如 pandas、numpy 等），需要在打包前声明依赖：
-1. 编辑 plugins/plugin_dependencies.json 文件
-2. 在 dependencies 数组中添加需要的模块名
-   例如: {"dependencies": ["pandas", "numpy", "openpyxl"]}
+如果插件需要额外的Python模块，需要在打包前声明依赖：
+1. 编辑 plugins/requirements.txt 文件
+2. 添加需要的模块，格式如: pandas>=2.0.0
 3. 运行打包脚本，依赖模块会被自动包含在 exe 中
 
 ================================================================================

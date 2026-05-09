@@ -5,9 +5,9 @@
         "debug": false
     },
     "api": {
-        "base_url": "http://127.0.0.1:18000/v1",
-        "api_key": "123",
-        "model": "MiniMax-M2.5",
+        "base_url": "https://qianfan.baidubce.com/v2/coding",
+        "api_key": "bce-v3/ALTAKSP-Wkuk9Me9zkwvP1xEVSzj8/a6e997b18a58b4bd820fdc993d4790ae392107b4",
+        "model": "kimi-k2.5",
         "temperature": 0.7,
         "max_tokens": 60000
     },
