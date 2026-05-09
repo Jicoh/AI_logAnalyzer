@@ -142,6 +142,8 @@ def create_app():
     csrf.exempt(app.view_functions['assistant_api.chat'])
     csrf.exempt(app.view_functions['assistant_api.chat_stream'])
     csrf.exempt(app.view_functions['assistant_api.upload_file'])
+    csrf.exempt(app.view_functions['assistant_api.download_selected_files'])
+    csrf.exempt(app.view_functions['assistant_api.delete_files'])
 
     # CSRF豁免：用户配置API（已使用登录保护）
     csrf.exempt(app.view_functions['user_config_api.reload_mcp_servers'])

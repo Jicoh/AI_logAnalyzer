@@ -214,6 +214,33 @@ def list_files(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def resolve_session_file_path(rel_path: str, work_dir: str, outputs_dir: str):
+    """
+    解析会话文件路径，返回安全验证后的完整路径
+
+    Args:
+        rel_path: 相对路径，可能以'outputs/'开头
+        work_dir: 工作目录
+        outputs_dir: 输出目录
+
+    Returns:
+        tuple: (full_path, display_path) 或 (None, None) 如果路径无效
+    """
+    OUTPUTS_PREFIX = 'outputs/'
+
+    if rel_path.startswith(OUTPUTS_PREFIX):
+        actual_path = rel_path[len(OUTPUTS_PREFIX):]
+        output_file = os.path.join(outputs_dir, actual_path)
+        if is_safe_path(output_file, outputs_dir):
+            return output_file, os.path.join('outputs', actual_path)
+    else:
+        work_file = os.path.join(work_dir, rel_path)
+        if is_safe_path(work_file, work_dir):
+            return work_file, os.path.join('work_dir', rel_path)
+
+    return None, None
+
+
 @assistant_bp.route('/api/assistant/sessions/<session_id>/files/<path:file_path>', methods=['GET'])
 @login_required
 def download_file(session_id, file_path):
@@ -230,19 +257,9 @@ def download_file(session_id, file_path):
         if not work_dir:
             return jsonify({'success': False, 'error': '会话不存在'}), 404
 
-        # 处理outputs路径
-        full_path = None
-        if file_path.startswith('outputs/'):
-            actual_path = file_path.replace('outputs/', '')
-            output_file = os.path.join(outputs_dir, actual_path)
-            if os.path.exists(output_file) and is_safe_path(output_file, outputs_dir):
-                full_path = output_file
-        else:
-            work_file = os.path.join(work_dir, file_path)
-            if os.path.exists(work_file) and is_safe_path(work_file, work_dir):
-                full_path = work_file
+        full_path, _ = resolve_session_file_path(file_path, work_dir, outputs_dir)
 
-        if not full_path:
+        if not full_path or not os.path.exists(full_path):
             return jsonify({'success': False, 'error': '文件不存在'}), 404
 
         filename = os.path.basename(full_path)
@@ -293,6 +310,101 @@ def download_all_files(session_id):
         )
     except Exception as e:
         logger.error(f"打包下载失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@assistant_bp.route('/api/assistant/sessions/<session_id>/files/download', methods=['POST'])
+@login_required
+def download_selected_files(session_id):
+    """下载选中的文件（打包为zip）"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        paths = data.get('paths', [])
+        if not paths:
+            return jsonify({'success': False, 'error': '未选择文件'}), 400
+
+        manager = SessionManager(user_id)
+        work_dir = manager.get_work_dir(session_id)
+        outputs_dir = manager.get_outputs_dir(session_id)
+
+        if not work_dir:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+
+        zip_buffer = BytesIO()
+        skipped = []
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for rel_path in paths:
+                full_path, zip_inner_path = resolve_session_file_path(rel_path, work_dir, outputs_dir)
+                if full_path and os.path.exists(full_path):
+                    try:
+                        zf.write(full_path, zip_inner_path)
+                    except Exception as e:
+                        skipped.append({'path': rel_path, 'error': str(e)})
+                else:
+                    skipped.append({'path': rel_path, 'error': '文件不存在或路径不安全'})
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            download_name=f'session_{session_id}_selected.zip',
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        logger.error(f"下载选中文件失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@assistant_bp.route('/api/assistant/sessions/<session_id>/files', methods=['DELETE'])
+@login_required
+def delete_files(session_id):
+    """删除选中的文件"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+
+        data = request.get_json()
+        paths = data.get('paths', [])
+        if not paths:
+            return jsonify({'success': False, 'error': '未选择文件'}), 400
+
+        manager = SessionManager(user_id)
+        work_dir = manager.get_work_dir(session_id)
+        outputs_dir = manager.get_outputs_dir(session_id)
+
+        if not work_dir:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+
+        deleted = []
+        failed = []
+
+        for rel_path in paths:
+            full_path, _ = resolve_session_file_path(rel_path, work_dir, outputs_dir)
+            if full_path:
+                try:
+                    os.remove(full_path)
+                    deleted.append(rel_path)
+                except FileNotFoundError:
+                    failed.append({'path': rel_path, 'error': '文件不存在'})
+                except PermissionError as e:
+                    failed.append({'path': rel_path, 'error': str(e)})
+                except Exception as e:
+                    failed.append({'path': rel_path, 'error': str(e)})
+            else:
+                failed.append({'path': rel_path, 'error': '路径不安全或无效'})
+
+        logger.info(f"删除文件: user={user_id}, session={session_id}, deleted={len(deleted)}, failed={len(failed)}")
+        return jsonify({
+            'success': True,
+            'data': {'deleted': deleted, 'failed': failed}
+        })
+    except Exception as e:
+        logger.error(f"删除文件失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

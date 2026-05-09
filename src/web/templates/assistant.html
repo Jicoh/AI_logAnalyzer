@@ -638,23 +638,29 @@
         <div class="file-header">
             <div class="d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-folder"></i> 工作目录</span>
-                <button class="btn btn-sm btn-outline-primary" @click="downloadAllFiles()" :disabled="files.length === 0">
-                    <i class="bi bi-download"></i>
-                </button>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-primary"
+                            @click="downloadSelectedFiles()"
+                            :disabled="selectedFilePaths.length === 0">
+                        <i class="bi bi-download"></i> 下载
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger"
+                            @click="deleteSelectedFiles()"
+                            :disabled="selectedFilePaths.length === 0">
+                        <i class="bi bi-trash3"></i> 删除
+                    </button>
+                </div>
             </div>
         </div>
         <div class="file-list">
             <template x-for="file in files" :key="file.path">
-                <div class="file-item d-flex justify-content-between align-items-center">
-                    <div>
-                        <i class="bi bi-file-earmark text-primary"></i>
-                        <span class="ms-1" x-text="file.name"></span>
-                        <small class="text-muted ms-1" x-text="formatSize(file.size)"></small>
-                    </div>
-                    <a :href="'/api/assistant/sessions/' + currentSessionId + '/files/' + file.path"
-                       class="btn btn-sm btn-outline-secondary" target="_blank">
-                        <i class="bi bi-download"></i>
-                    </a>
+                <div class="file-item d-flex align-items-center">
+                    <input type="checkbox" class="form-check-input me-2 flex-shrink-0"
+                           :value="file.path"
+                           x-model="selectedFilePaths">
+                    <i class="bi bi-file-earmark text-primary"></i>
+                    <span class="ms-1 text-truncate" x-text="file.name"></span>
+                    <small class="text-muted ms-1 flex-shrink-0" x-text="formatSize(file.size)"></small>
                 </div>
             </template>
             <div x-show="files.length === 0" class="text-center text-muted p-3">
@@ -767,6 +773,7 @@ function assistantApp() {
         pendingFiles: [],
         isDragging: false,
         uploadingFiles: false,
+        selectedFilePaths: [],
 
         // 资源数据
         mcpServers: [],
@@ -1034,6 +1041,7 @@ function assistantApp() {
 
         async selectSession(sessionId) {
             this.currentSessionId = sessionId;
+            this.selectedFilePaths = [];
             await this.loadMessages();
             await this.loadFiles();
             await this.loadState();
@@ -1270,9 +1278,58 @@ function assistantApp() {
             return `${usedFormatted}/${maxFormatted} token`;
         },
 
-        downloadAllFiles() {
-            if (!this.currentSessionId || this.files.length === 0) return;
-            window.open(`/api/assistant/sessions/${this.currentSessionId}/files/download-all`, '_blank');
+        async downloadSelectedFiles() {
+            if (!this.currentSessionId || this.selectedFilePaths.length === 0) return;
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/files/download`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: this.selectedFilePaths })
+                });
+                if (!response.ok) {
+                    const data = await response.json();
+                    Utils.showToast(data.error || '下载失败', 'error');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `session_${this.currentSessionId}_selected.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                Utils.showToast('下载失败: ' + e.message, 'error');
+            }
+        },
+
+        async deleteSelectedFiles() {
+            if (!this.currentSessionId || this.selectedFilePaths.length === 0) return;
+            if (!confirm(`确定删除选中的 ${this.selectedFilePaths.length} 个文件？`)) return;
+            try {
+                const response = await fetch(`/api/assistant/sessions/${this.currentSessionId}/files`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: this.selectedFilePaths })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const failed = data.data.failed || [];
+                    if (failed.length > 0) {
+                        Utils.showToast(`${data.data.deleted.length} 个文件已删除，${failed.length} 个失败`, 'warning');
+                    } else {
+                        Utils.showToast(`${data.data.deleted.length} 个文件已删除`, 'success');
+                    }
+                    this.selectedFilePaths = [];
+                    await this.loadFiles();
+                } else {
+                    Utils.showToast(data.error || '删除失败', 'error');
+                }
+            } catch (e) {
+                Utils.showToast('删除失败: ' + e.message, 'error');
+            }
         }
     };
 }
