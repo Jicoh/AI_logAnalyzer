@@ -38,7 +38,7 @@
             "enabled": true,
             "transport": "stdio",
             "command": "python",
-            "args": ["mcp_servers/log_downloader/server.py"],
+            "args": ["src/agent/mcp_servers/log_downloader/server.py"],
             "description": "日志下载服务，支持从远程BMC下载日志",
             "timeout": 30
         }

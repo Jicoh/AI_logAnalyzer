@@ -18,7 +18,8 @@ from src.log_metadata import LogMetadataManager
 from src.utils import read_file, write_json, ensure_dir, get_logger
 from src.utils.file_utils import (
     is_archive_file, is_valid_log_file, extract_archive_recursive,
-    create_single_log_output_dir, get_data_dir, find_log_files_in_directory, clean_filename
+    create_single_log_output_dir, get_data_dir, find_log_files_in_directory, clean_filename,
+    read_log_files_to_content
 )
 from plugins.manager import get_plugin_manager
 from plugins import render_html
@@ -132,8 +133,8 @@ def cmd_analyze(args):
     if args.plugins:
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        # 默认使用 log_parser 插件
-        plugin_ids = ['log_parser']
+        # 默认使用 CloudBMC_00001 插件
+        plugin_ids = ['CloudBMC_00001']
 
     if not plugin_ids:
         logger.error("没有可用的插件")
@@ -145,8 +146,9 @@ def cmd_analyze(args):
     # 插件分析
     print(f"正在分析日志: {analysis_path}")
     try:
+        log_content = read_log_files_to_content(analysis_path)
         # 使用日志回调函数，支持不同日志级别
-        result_dict = plugin_manager.run_analysis(plugin_ids, analysis_path, log_callback=log_callback)
+        result_dict = plugin_manager.run_analysis('system', plugin_ids, log_content, log_callback=log_callback)
         logger.debug("插件分析完成")
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
@@ -463,8 +465,8 @@ def cmd_analyze_batch(args):
     if args.plugins:
         plugin_ids = [p.strip() for p in args.plugins.split(',')]
     else:
-        # CLI 默认使用 log_parser 插件
-        plugin_ids = ['log_parser']
+        # CLI 默认使用 CloudBMC_00001 插件
+        plugin_ids = ['CloudBMC_00001']
 
     if not plugin_ids:
         logger.error("没有可用的插件")
@@ -559,9 +561,10 @@ def cmd_analyze_batch(args):
         current_log_files = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
 
         try:
+            unit_log_content = read_log_files_to_content(unit_path)
             # 使用主程序的 logger 作为回调，保持日志一致性
             plugin_result = plugin_manager.run_analysis(
-                current_plugin_ids, unit_path,
+                'system', current_plugin_ids, unit_log_content,
                 log_callback=log_callback
             )
 

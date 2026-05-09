@@ -502,3 +502,23 @@ def get_file_category(filename: str) -> str:
     if is_archive_file(filename):
         return 'archive'
     return 'log'
+
+
+def read_log_files_to_content(path: str) -> dict:
+    """将日志文件读取为 {相对路径: 内容} 字典，支持文件和目录路径。"""
+    if os.path.isfile(path):
+        with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+            return {os.path.basename(path): fh.read()}
+
+    log_content = {}
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            if is_valid_log_file(f):
+                file_path = os.path.join(root, f)
+                rel_path = os.path.relpath(file_path, path).replace('\\', '/')
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as fh:
+                        log_content[rel_path] = fh.read()
+                except Exception:
+                    pass
+    return log_content

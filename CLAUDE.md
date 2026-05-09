@@ -30,6 +30,11 @@ python main.py plugin list
 python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
 python main.py log-rules list  # 日志规则管理
 python main.py cache stats  # 缓存统计
+
+# 插件独立CLI（脚本集成用）
+python plugins/cli_main.py plugin list
+echo '{"system.log": "内容"}' | python plugins/cli_main.py analyze --plugin-id CloudBMC_00001
+echo '{"system.log": "内容"}' | python plugins/cli_main.py analyze --plugin-id CloudBMC_00001 --task-name "任务" --bmc-ip "192.168.1.1" --date "2026-05-09"
 ```
 
 ## Architecture
@@ -77,10 +82,11 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
 - **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
-- Each plugin implements `BasePlugin` with `analyze(log_path)` returning `AnalysisResult`
-- `log_path` can be a file path or a directory path (for archives)
+- Each plugin implements `BasePlugin` with `analyze(log_content: Dict[str, str])` returning `AnalysisResult`
+- `log_content` is a `{"文件名/相对路径": "文件内容"}` dictionary, prepared by `read_log_files_to_content(path)`
 - Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
+- **Standalone CLI**: `plugins/cli_main.py` for script integration
 
 #### Section Types
 Plugins can return multiple section types in `AnalysisResult.sections`:
@@ -118,28 +124,18 @@ custom_plugins/my_plugin/
 from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem
 
 class MyPlugin(BasePlugin):
-    def analyze(self, log_path: str) -> AnalysisResult:
-        import os
+    def analyze(self, log_content: Dict[str, str]) -> AnalysisResult:
         from datetime import datetime
 
-        # 场景1：分析目录中的所有日志文件
-        log_files = []
-        for root, dirs, files in os.walk(log_path):
-            for f in files:
-                if f.endswith('.log') or f.endswith('.txt'):
-                    log_files.append(os.path.join(root, f))
-
-        # 场景2：分析特定文件名（如果插件只分析特定文件）
-        # target_file = os.path.join(log_path, "system.log")
-        # if os.path.exists(target_file):
-        #     log_files = [target_file]
+        # log_content 是 {"相对路径": "文件内容"} 字典
+        log_files = list(log_content.keys())
 
         meta = ResultMeta(
             plugin_id=self.id,
             plugin_name=self.name,
             version=self.get_version(),
             analysis_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            log_files=[os.path.basename(f) for f in log_files],
+            log_files=log_files,
             plugin_type=self.get_plugin_type()
         )
         result = AnalysisResult(meta=meta)

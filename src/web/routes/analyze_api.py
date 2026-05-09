@@ -17,7 +17,7 @@ from src.utils.file_utils import (
     create_work_directory, create_batch_work_directory, create_single_log_output_dir,
     ensure_dir, get_files_in_directory, find_log_files_in_directory,
     get_project_root, get_data_dir, get_user_data_dir, clean_filename, is_safe_path,
-    allowed_log_file, get_file_category
+    allowed_log_file, get_file_category, read_log_files_to_content
 )
 from src.storage.quota import StorageQuota
 from src.utils import get_logger
@@ -236,8 +236,9 @@ def _process_batch_units(
         single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
 
         try:
+            unit_log_content = read_log_files_to_content(unit_path)
             plugin_result = plugin_manager.run_analysis(
-                selected_plugins, unit_path,
+                'system', selected_plugins, unit_log_content,
                 log_callback=log_callback
             )
         except Exception as e:
@@ -446,9 +447,10 @@ def analyze_stream():
 
             # 使用选定的插件分析
             try:
+                log_content = read_log_files_to_content(analysis_path)
                 # 使用日志回调函数，支持不同日志级别
                 combined_result = plugin_manager.run_analysis(
-                    selected_plugins, analysis_path,
+                    'system', selected_plugins, log_content,
                     log_callback=log_callback
                 )
             except Exception as e:
@@ -685,8 +687,10 @@ def analyze_local_stream():
                     'message': f'使用 {len(selected_plugins)} 个插件分析...'
                 })
 
+                log_content = read_log_files_to_content(analysis_path)
+
                 combined_result = plugin_manager.run_analysis(
-                    selected_plugins, analysis_path,
+                    'system', selected_plugins, log_content,
                     log_callback=log_callback
                 )
 
