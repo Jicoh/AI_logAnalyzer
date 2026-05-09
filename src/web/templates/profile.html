@@ -36,34 +36,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- 存储配额 -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-hard-drive"></i> 存储空间
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>已使用</span>
-                            <span x-text="quotaStatus.used_formatted || '计算中...'"></span>
-                        </div>
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar"
-                                 :class="quotaStatus.percent > 80 ? 'bg-danger' : quotaStatus.percent > 60 ? 'bg-warning' : 'bg-success'"
-                                 :style="'width: ' + (quotaStatus.percent || 0) + '%'"
-                                 x-text="(quotaStatus.percent || 0) + '%'">
-                            </div>
-                        </div>
-                        <small class="text-muted">配额上限：300MB，剩余：<span x-text="quotaStatus.remaining || '300MB'"></span></small>
-                    </div>
-
-                    <div class="alert alert-warning" x-show="quotaStatus.percent > 80">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        存储空间即将用尽，请及时清理缓存
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="col-md-6">
@@ -187,7 +159,6 @@
 function profileApp() {
     return {
         userInfo: {},
-        quotaStatus: {},
         old_password: '',
         new_password: '',
         confirm_password: '',
@@ -206,7 +177,6 @@ function profileApp() {
                     this.loadMyFeedbacks();
                 }
             });
-            this.loadQuota();
         },
 
         async loadUserInfo() {
@@ -218,18 +188,6 @@ function profileApp() {
                 }
             } catch (e) {
                 console.error('Failed to load user info:', e);
-            }
-        },
-
-        async loadQuota() {
-            try {
-                const response = await fetch('/api/cache/stats');
-                const data = await response.json();
-                if (data.success) {
-                    this.quotaStatus = data.data.quota || {};
-                }
-            } catch (e) {
-                console.error('Failed to load quota:', e);
             }
         },
 

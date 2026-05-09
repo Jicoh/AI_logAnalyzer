@@ -9,7 +9,7 @@
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
-<body x-data="{ userInfo: {} }" x-init="fetch('/api/auth/me').then(r => r.json()).then(d => { if(d.success) userInfo = d.data; else window.location.href = '/login'; })">
+<body x-data="sidebarApp()" x-init="init()">
     <div class="d-flex" style="height: 100vh;">
         <!-- Sidebar -->
         <div class="sidebar bg-dark text-white d-flex flex-column">
@@ -44,6 +44,23 @@
                     <i class="bi bi-gear"></i> <span>设置</span>
                 </a>
             </nav>
+            <!-- 资源使用情况 -->
+            <div class="sidebar-usage border-top border-secondary">
+                <div class="sidebar-usage-expanded p-3">
+                    <div class="usage-item">
+                        <small class="text-white-50 d-block mb-1"><i class="bi bi-hard-drive"></i> 存储空间</small>
+                        <small class="text-white-50 d-block mb-1" x-text="quotaStatus.used_formatted + '/' + quotaStatus.quota_formatted + ' (' + (quotaStatus.percent || 0) + '%)'"></small>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar"
+                                 :class="(quotaStatus.percent || 0) > 80 ? 'bg-danger' : (quotaStatus.percent || 0) > 60 ? 'bg-warning' : 'bg-success'"
+                                 :style="'width: ' + (quotaStatus.percent || 0) + '%'"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sidebar-usage-collapsed p-2 text-center">
+                    <small class="text-white-50" x-text="(quotaStatus.percent || 0) + '%'"></small>
+                </div>
+            </div>
         </div>
 
         <!-- Main Content -->
@@ -56,6 +73,36 @@
     <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/alpine.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+    function sidebarApp() {
+        return {
+            userInfo: {},
+            quotaStatus: {},
+            init() {
+                this.loadUserInfo();
+                this.loadQuota();
+                // 定期刷新存储空间（每60秒）
+                setInterval(() => this.loadQuota(), 60000);
+            },
+            loadUserInfo() {
+                fetch('/api/auth/me').then(r => r.json()).then(d => {
+                    if(d.success) {
+                        this.userInfo = d.data;
+                    } else {
+                        window.location.href = '/login';
+                    }
+                });
+            },
+            loadQuota() {
+                fetch('/api/cache/stats').then(r => r.json()).then(d => {
+                    if(d.success) {
+                        this.quotaStatus = d.data.quota || {};
+                    }
+                }).catch(e => console.error('Failed to load quota:', e));
+            }
+        };
+    }
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

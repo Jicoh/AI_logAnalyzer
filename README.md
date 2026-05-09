@@ -140,7 +140,6 @@ AI_logAnalyzer/
 │   └── custom/             # 自定义插件
 ├── custom_plugins/         # 用户自定义插件
 ├── docs/                   # 文档目录
-│   └── development_plan_assistant.md  # 智能助手开发计划
 └── src/                    # 源代码
     ├── agent/              # Agent模块
     │   ├── orchestrator_agent.py  # 主Agent编排器

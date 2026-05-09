@@ -489,3 +489,34 @@ body {
     color: #ffc107;
     font-weight: 600;
 }
+
+/* 侧边栏底部资源使用情况 */
+.sidebar-usage {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-usage .usage-item {
+    font-size: 0.8rem;
+}
+
+.sidebar-usage .progress {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 展开状态：显示详细，隐藏简化 */
+.sidebar-usage-expanded {
+    display: block;
+}
+
+.sidebar-usage-collapsed {
+    display: none;
+}
+
+/* 收起状态：隐藏详细，显示简化 */
+.sidebar.collapsed .sidebar-usage-expanded {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-usage-collapsed {
+    display: block;
+}
