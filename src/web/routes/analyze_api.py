@@ -74,10 +74,19 @@ def log_callback(message: str, level: str = "info"):
     log_method = getattr(logger, log_level, logger.info)
     log_method(message)
 
-# 全局实例
-kb_manager = None
-log_metadata_manager = None
-settings_manager = None
+# 模块级单例实例（延迟初始化）
+_settings_manager = None
+_kb_manager = None
+_log_metadata_manager = None
+
+
+def _init_managers():
+    """初始化管理器实例（首次调用时创建）。"""
+    global _settings_manager, _kb_manager, _log_metadata_manager
+    if _settings_manager is None:
+        _settings_manager = SystemConfigManager()
+        _kb_manager = KnowledgeBaseManager(config=_settings_manager.get_all())
+        _log_metadata_manager = LogMetadataManager()
 
 
 def get_plugin_manager_with_custom():
@@ -88,29 +97,21 @@ def get_plugin_manager_with_custom():
 
 
 def get_settings_manager():
-    """获取或创建 SystemConfigManager 实例。"""
-    global settings_manager
-    if settings_manager is None:
-        settings_manager = SystemConfigManager()
-    return settings_manager
+    """获取 SystemConfigManager 单例实例。"""
+    _init_managers()
+    return _settings_manager
 
 
 def get_kb_manager():
-    """获取或创建 KnowledgeBaseManager 实例。"""
-    global kb_manager
-    if settings_manager is None:
-        get_settings_manager()
-    if kb_manager is None:
-        kb_manager = KnowledgeBaseManager(config=settings_manager.get_all())
-    return kb_manager
+    """获取 KnowledgeBaseManager 单例实例。"""
+    _init_managers()
+    return _kb_manager
 
 
 def get_log_metadata_manager():
-    """获取或创建 LogMetadataManager 实例。"""
-    global log_metadata_manager
-    if log_metadata_manager is None:
-        log_metadata_manager = LogMetadataManager()
-    return log_metadata_manager
+    """获取 LogMetadataManager 单例实例。"""
+    _init_managers()
+    return _log_metadata_manager
 
 
 def generate_sse_event(data):
@@ -164,11 +165,8 @@ def run_ai_analysis(
     Returns:
         dict: AI 分析结果信息，包含 html_path 和 analysis_time
     """
-    # 确保 settings_manager 已初始化
-    get_settings_manager()
-
     subagent = LogAnalyzerSubagent(
-        config_manager=settings_manager,
+        config_manager=get_settings_manager(),
         kb_manager=get_kb_manager(),
         log_metadata_manager=get_log_metadata_manager(),
         plugin_manager=get_plugin_manager_with_custom()
@@ -348,9 +346,6 @@ def analyze_stream():
     from werkzeug.utils import secure_filename
 
     def generate():
-        temp_file_path = None
-        work_dir = None
-
         try:
             # 获取当前用户
             user_id = get_current_user_id()
@@ -358,154 +353,33 @@ def analyze_stream():
                 yield generate_sse_event({'stage': 'error', 'message': '请先登录'})
                 return
 
-            # 检查是否有文件
-            if 'file' not in request.files:
-                yield generate_sse_event({'stage': 'error', 'message': 'No file provided'})
+            # 验证上传请求
+            validation_result = _validate_upload_request(user_id)
+            if validation_result.get('error'):
+                yield generate_sse_event({'stage': 'error', 'message': validation_result['error']})
                 return
 
-            file = request.files['file']
-            if file.filename == '':
-                yield generate_sse_event({'stage': 'error', 'message': 'No file selected'})
-                return
-
-            filename = secure_filename(file.filename)
-            if not allowed_log_file(filename):
-                yield generate_sse_event({'stage': 'error', 'message': 'Invalid file type. Allowed: tar.gz, tar, zip, txt, log'})
-                return
-
-            # 检查配额（预估文件大小）
-            quota = StorageQuota(user_id)
-            # 获取文件大小（从 Content-Length 或估算）
-            content_length = request.content_length or 50 * 1024 * 1024  # 默认估算50MB
-            allowed, quota_error = quota.check_upload(content_length)
-            if not allowed:
-                yield generate_sse_event({'stage': 'error', 'message': quota_error})
-                return
+            file = validation_result['file']
+            filename = validation_result['filename']
 
             # 获取表单数据
-            plugins = request.form.getlist('plugins')
-            enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
-            kb_ids = request.form.getlist('kb_ids')
-            user_prompt = request.form.get('user_prompt', '').strip() or None
-            log_rules_id = request.form.get('log_rules_id', '').strip() or None
+            form_data = _get_form_data()
 
-            # 创建工作目录（用户隔离）
-            temp_base = get_user_data_dir(user_id, 'temp')
-            work_dir = create_work_directory(temp_base, filename)
-
-            # 根据文件类型处理，确定分析路径
-            file_category = get_file_category(filename)
-            log_file_paths = []  # 用于AI分析读取日志内容
-            analysis_path = None  # 用于插件分析的路径
-
-            if file_category == 'archive':
-                # 保存压缩包到临时位置，解压后删除
-                temp_archive_path = os.path.join(temp_base, f"temp_{filename}")
-                file.save(temp_archive_path)
-
-                try:
-                    # 解压压缩文件到工作目录（递归解压嵌套压缩包）
-                    extracted_files = extract_archive_recursive(temp_archive_path, work_dir)
-                finally:
-                    # 删除临时压缩包
-                    if os.path.exists(temp_archive_path):
-                        os.remove(temp_archive_path)
-
-                # 查找所有日志文件（用于AI分析）
-                log_file_paths = find_log_files_in_directory(work_dir)
-
-                if not log_file_paths:
-                    yield generate_sse_event({'stage': 'error', 'message': 'No log files found in archive'})
-                    return
-
-                # 插件分析使用工作目录
-                analysis_path = work_dir
-            else:
-                # 直接是日志文件，保存到工作目录
-                uploaded_file_path = os.path.join(work_dir, filename)
-                file.save(uploaded_file_path)
-                log_file_paths = [uploaded_file_path]
-                # 插件分析使用文件路径
-                analysis_path = uploaded_file_path
-
-            # Get plugin manager
-            plugin_manager = get_plugin_manager_with_custom()
-
-            # 使用用户选择的插件或所有插件
-            selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-
-            # 第1阶段：插件分析
-            yield generate_sse_event({
-                'stage': 'plugin',
-                'status': 'start',
-                'message': f'Analyzing with {len(selected_plugins)} plugin(s)...'
-            })
-
-            if not selected_plugins:
-                yield generate_sse_event({'stage': 'error', 'message': 'No plugins available for analysis'})
+            # 处理上传文件
+            file_result = _handle_uploaded_file(user_id, file, filename)
+            if file_result.get('error'):
+                yield generate_sse_event({'stage': 'error', 'message': file_result['error']})
                 return
 
-            # 使用选定的插件分析
-            try:
-                log_content = read_log_files_to_content(analysis_path)
-                # 使用日志回调函数，支持不同日志级别
-                combined_result = plugin_manager.run_analysis(
-                    'system', selected_plugins, log_content,
-                    log_callback=log_callback
-                )
-            except Exception as e:
-                yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
-                return
-
-            # 保存插件分析结果（用户隔离）
-            analysis_output_dir, plugin_output_file, _ = create_analysis_output_dir(user_id, filename)
-            html_relative_path = save_and_render_plugin_result(combined_result, plugin_output_file)
-
-            yield generate_sse_event({
-                'stage': 'plugin',
-                'status': 'complete',
-                'result': combined_result
-            })
-
-            # 第2阶段：AI分析（如果启用）
-            ai_result_data = None
-            if enable_ai:
-                yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
-
-                try:
-                    ai_result_data = run_ai_analysis(
-                        combined_result, log_file_paths, analysis_output_dir,
-                        kb_ids, user_prompt, log_rules_id
-                    )
-
-                    yield generate_sse_event({
-                        'stage': 'ai',
-                        'status': 'complete',
-                        'html_path': ai_result_data['html_path']
-                    })
-
-                except Exception as e:
-                    logger.error(f"AI分析失败: {str(e)}")
-                    yield generate_sse_event({
-                        'stage': 'ai',
-                        'status': 'error',
-                        'message': f'AI analysis error: {str(e)}'
-                    })
-
-            # 第3阶段：完成
-
-            # 构建完成事件数据
-            complete_data = {
-                'stage': 'complete',
-                'message': 'Analysis complete',
-                'work_dir': work_dir,
-                'html_path': html_relative_path
-            }
-            # 如果有 AI 分析结果，也传递 ai_html_path
-            if ai_result_data and ai_result_data.get('html_path'):
-                complete_data['ai_html_path'] = ai_result_data['html_path']
-
-            yield generate_sse_event(complete_data)
+            # 执行分析流水线
+            yield from _run_analysis_pipeline(
+                user_id=user_id,
+                analysis_path=file_result['analysis_path'],
+                log_file_paths=file_result['log_file_paths'],
+                filename=filename,
+                work_dir=file_result['work_dir'],
+                **form_data
+            )
 
         except Exception as e:
             yield generate_sse_event({'stage': 'error', 'message': str(e)})
@@ -518,6 +392,180 @@ def analyze_stream():
             'X-Accel-Buffering': 'no'
         }
     )
+
+
+def _validate_upload_request(user_id: str) -> dict:
+    """
+    验证上传请求（用户、文件、配额）。
+
+    Returns:
+        dict: 验证结果，包含 file, filename 或 error
+    """
+    from werkzeug.utils import secure_filename
+
+    # 检查是否有文件
+    if 'file' not in request.files:
+        return {'error': 'No file provided'}
+
+    file = request.files['file']
+    if file.filename == '':
+        return {'error': 'No file selected'}
+
+    filename = secure_filename(file.filename)
+    if not allowed_log_file(filename):
+        return {'error': 'Invalid file type. Allowed: tar.gz, tar, zip, txt, log'}
+
+    # 检查配额
+    quota = StorageQuota(user_id)
+    content_length = request.content_length or 50 * 1024 * 1024
+    allowed, quota_error = quota.check_upload(content_length)
+    if not allowed:
+        return {'error': quota_error}
+
+    return {'file': file, 'filename': filename}
+
+
+def _get_form_data() -> dict:
+    """获取表单数据。"""
+    return {
+        'plugins': request.form.getlist('plugins'),
+        'enable_ai': request.form.get('enable_ai', 'false').lower() == 'true',
+        'kb_ids': request.form.getlist('kb_ids'),
+        'user_prompt': request.form.get('user_prompt', '').strip() or None,
+        'log_rules_id': request.form.get('log_rules_id', '').strip() or None
+    }
+
+
+def _handle_uploaded_file(user_id: str, file, filename: str) -> dict:
+    """
+    处理上传文件（保存、解压）。
+
+    Returns:
+        dict: 包含 work_dir, analysis_path, log_file_paths 或 error
+    """
+    temp_base = get_user_data_dir(user_id, 'temp')
+    work_dir = create_work_directory(temp_base, filename)
+
+    file_category = get_file_category(filename)
+    log_file_paths = []
+    analysis_path = None
+
+    if file_category == 'archive':
+        # 保存压缩包到临时位置，解压后删除
+        temp_archive_path = os.path.join(temp_base, f"temp_{filename}")
+        file.save(temp_archive_path)
+
+        try:
+            extract_archive_recursive(temp_archive_path, work_dir)
+        finally:
+            if os.path.exists(temp_archive_path):
+                os.remove(temp_archive_path)
+
+        log_file_paths = find_log_files_in_directory(work_dir)
+        if not log_file_paths:
+            return {'error': 'No log files found in archive'}
+
+        analysis_path = work_dir
+    else:
+        # 直接是日志文件，保存到工作目录
+        uploaded_file_path = os.path.join(work_dir, filename)
+        file.save(uploaded_file_path)
+        log_file_paths = [uploaded_file_path]
+        analysis_path = uploaded_file_path
+
+    return {
+        'work_dir': work_dir,
+        'analysis_path': analysis_path,
+        'log_file_paths': log_file_paths
+    }
+
+
+def _run_analysis_pipeline(
+    user_id: str,
+    analysis_path: str,
+    log_file_paths: list,
+    filename: str,
+    work_dir: str,
+    plugins: list,
+    enable_ai: bool,
+    kb_ids: list,
+    user_prompt: str,
+    log_rules_id: str
+):
+    """
+    执行分析流水线（生成器）。
+
+    Yields:
+        str: SSE 事件字符串
+    """
+    plugin_manager = get_plugin_manager_with_custom()
+    selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
+
+    # 第1阶段：插件分析
+    yield generate_sse_event({
+        'stage': 'plugin',
+        'status': 'start',
+        'message': f'Analyzing with {len(selected_plugins)} plugin(s)...'
+    })
+
+    if not selected_plugins:
+        yield generate_sse_event({'stage': 'error', 'message': 'No plugins available for analysis'})
+        return
+
+    try:
+        log_content = read_log_files_to_content(analysis_path)
+        combined_result = plugin_manager.run_analysis(
+            'system', selected_plugins, log_content,
+            log_callback=log_callback
+        )
+    except Exception as e:
+        yield generate_sse_event({'stage': 'error', 'message': f'Plugin analysis failed: {str(e)}'})
+        return
+
+    # 保存插件分析结果
+    analysis_output_dir, plugin_output_file, _ = create_analysis_output_dir(user_id, filename)
+    html_relative_path = save_and_render_plugin_result(combined_result, plugin_output_file)
+
+    yield generate_sse_event({
+        'stage': 'plugin',
+        'status': 'complete',
+        'result': combined_result
+    })
+
+    # 第2阶段：AI分析
+    ai_result_data = None
+    if enable_ai:
+        yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
+
+        try:
+            ai_result_data = run_ai_analysis(
+                combined_result, log_file_paths, analysis_output_dir,
+                kb_ids, user_prompt, log_rules_id
+            )
+            yield generate_sse_event({
+                'stage': 'ai',
+                'status': 'complete',
+                'html_path': ai_result_data['html_path']
+            })
+        except Exception as e:
+            logger.error(f"AI分析失败: {str(e)}")
+            yield generate_sse_event({
+                'stage': 'ai',
+                'status': 'error',
+                'message': f'AI analysis error: {str(e)}'
+            })
+
+    # 第3阶段：完成
+    complete_data = {
+        'stage': 'complete',
+        'message': 'Analysis complete',
+        'work_dir': work_dir,
+        'html_path': html_relative_path
+    }
+    if ai_result_data and ai_result_data.get('html_path'):
+        complete_data['ai_html_path'] = ai_result_data['html_path']
+
+    yield generate_sse_event(complete_data)
 
 
 @analyze_bp.route('/api/analyze/local-path', methods=['POST'])
@@ -601,9 +649,6 @@ def validate_local_path():
 def analyze_local_stream():
     """对本地路径执行流式分析（支持文件和目录）。"""
     def generate():
-        work_dir = None
-        batch_output_dir = None
-
         try:
             # 获取当前用户
             user_id = get_current_user_id()
@@ -614,192 +659,29 @@ def analyze_local_stream():
             # 获取路径参数
             data = request.get_json()
             path = data.get('path', '')
+
+            # 验证本地路径
+            validation_result = _validate_local_path(user_id, path)
+            if validation_result.get('error'):
+                yield generate_sse_event({'stage': 'error', 'message': validation_result['error']})
+                return
+
+            # 获取分析参数
             plugins = data.get('plugins', [])
             enable_ai = data.get('enable_ai', False)
             kb_id = data.get('kb_id', '').strip() or None
             user_prompt = data.get('user_prompt', '').strip() or None
             log_rules_id = data.get('log_rules_id', '').strip() or None
 
-            if not path:
-                yield generate_sse_event({'stage': 'error', 'message': '路径不能为空'})
-                return
-
-            # 安全检查：路径必须在允许范围内
-            is_valid, error_msg = validate_path_access(path)
-            if not is_valid:
-                logger.warning(f"非法路径访问尝试: {path}")
-                yield generate_sse_event({'stage': 'error', 'message': error_msg})
-                return
-
-            # 验证路径
-            if not os.path.exists(path):
-                yield generate_sse_event({'stage': 'error', 'message': f'路径不存在: {path}'})
-                return
-
-            # 检查配额
-            quota = StorageQuota(user_id)
-            # 估算文件/目录大小
-            if os.path.isfile(path):
-                estimated_size = os.path.getsize(path)
-            else:
-                estimated_size = sum(os.path.getsize(f) for f in find_log_files_in_directory(path))
-            allowed, quota_error = quota.check_upload(estimated_size)
-            if not allowed:
-                yield generate_sse_event({'stage': 'error', 'message': quota_error})
-                return
-
-            plugin_manager = get_plugin_manager_with_custom()
-            temp_base = get_user_data_dir(user_id, 'temp')
-
             if os.path.isfile(path):
                 # 单文件分析
-                filename = os.path.basename(path)
-                lower_name = filename.lower()
-                is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
-                              lower_name.endswith('.tar') or lower_name.endswith('.zip'))
-
-                work_dir = create_work_directory(temp_base, filename)
-
-                if is_archive:
-                    # 解压压缩包
-                    extracted_files = extract_archive_recursive(path, work_dir)
-                    log_file_paths = find_log_files_in_directory(work_dir)
-                    analysis_path = work_dir
-                else:
-                    # 普通日志文件，复制到工作目录
-                    import shutil
-                    dest_path = os.path.join(work_dir, filename)
-                    shutil.copy2(path, dest_path)
-                    log_file_paths = [dest_path]
-                    analysis_path = dest_path
-
-                if not log_file_paths:
-                    yield generate_sse_event({'stage': 'error', 'message': '未找到日志文件'})
-                    return
-
-                # 使用用户选择的插件或所有插件
-                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-
-                # 插件分析
-                yield generate_sse_event({
-                    'stage': 'plugin',
-                    'status': 'start',
-                    'message': f'使用 {len(selected_plugins)} 个插件分析...'
-                })
-
-                log_content = read_log_files_to_content(analysis_path)
-
-                combined_result = plugin_manager.run_analysis(
-                    'system', selected_plugins, log_content,
-                    log_callback=log_callback
+                yield from _analyze_single_local_file(
+                    user_id, path, plugins, enable_ai, kb_id, user_prompt, log_rules_id
                 )
-
-                # 保存结果（用户隔离）
-                analysis_output_dir, plugin_output_file, _ = create_analysis_output_dir(user_id, filename)
-                html_relative_path = save_and_render_plugin_result(combined_result, plugin_output_file)
-
-                yield generate_sse_event({
-                    'stage': 'plugin',
-                    'status': 'complete',
-                    'result': combined_result
-                })
-
-                # AI 分析
-                ai_result_data = None
-                if enable_ai:
-                    yield generate_sse_event({'stage': 'ai', 'status': 'start', 'message': 'AI 分析中...'})
-                    try:
-                        ai_result_data = run_ai_analysis(
-                            combined_result, log_file_paths, analysis_output_dir,
-                            kb_id, user_prompt, log_rules_id
-                        )
-                        yield generate_sse_event({
-                            'stage': 'ai',
-                            'status': 'complete',
-                            'html_path': ai_result_data['html_path']
-                        })
-                    except Exception as e:
-                        logger.error(f"AI分析失败: {str(e)}")
-                        yield generate_sse_event({
-                            'stage': 'ai',
-                            'status': 'error',
-                            'message': f'AI analysis error: {str(e)}'
-                        })
-
-                # 完成
-                root_dir = get_project_root()
-                html_relative_path = os.path.relpath(plugin_output_file.replace('.json', '.html'), root_dir)
-                complete_data = {
-                    'stage': 'complete',
-                    'message': 'Analysis complete',
-                    'work_dir': work_dir,
-                    'html_path': html_relative_path
-                }
-                if ai_result_data and ai_result_data.get('html_path'):
-                    complete_data['ai_html_path'] = ai_result_data['html_path']
-
-                yield generate_sse_event(complete_data)
-
             elif os.path.isdir(path):
                 # 目录批量分析
-                folder_name = os.path.basename(path) or 'analysis_folder'
-                work_dir = create_batch_work_directory(temp_base, folder_name)
-                batch_output_dir = os.path.join(temp_base, '..', 'analysis_output')
-                batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                batch_dir_name = f"{batch_timestamp}_{folder_name}"
-                batch_output_dir = os.path.join(batch_output_dir, batch_dir_name)
-                ensure_dir(batch_output_dir)
-
-                yield generate_sse_event({
-                    'stage': 'batch',
-                    'status': 'start',
-                    'message': '开始批量分析...',
-                    'work_dir': work_dir
-                })
-
-                # 查找分析单元
-                analysis_units = []
-                for f in get_files_in_directory(path):
-                    lower_f = f.lower()
-                    is_archive = (lower_f.endswith('.tar.gz') or lower_f.endswith('.tgz') or
-                                  lower_f.endswith('.tar') or lower_f.endswith('.zip'))
-                    is_log = lower_f.endswith('.log') or lower_f.endswith('.txt')
-
-                    if is_archive:
-                        extract_dir_name = os.path.splitext(os.path.basename(f))[0]
-                        if lower_f.endswith('.tar.gz'):
-                            extract_dir_name = os.path.basename(f)[:-7]
-                        elif lower_f.endswith('.tgz'):
-                            extract_dir_name = os.path.basename(f)[:-4]
-                        extract_dir = os.path.join(work_dir, extract_dir_name)
-                        ensure_dir(extract_dir)
-                        extract_archive_recursive(f, extract_dir)
-                        analysis_units.append({
-                            'path': extract_dir,
-                            'name': extract_dir_name,
-                            'is_archive': True
-                        })
-                    elif is_log:
-                        import shutil
-                        dest_path = os.path.join(work_dir, os.path.basename(f))
-                        shutil.copy2(f, dest_path)
-                        analysis_units.append({
-                            'path': dest_path,
-                            'name': os.path.basename(f),
-                            'is_archive': False
-                        })
-
-                if not analysis_units:
-                    yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
-                    return
-
-                # 选择插件
-                selected_plugins = plugins if plugins else [p.id for p in plugin_manager.get_all_plugins()]
-
-                # 执行批量分析
-                yield from _process_batch_units(
-                    analysis_units, selected_plugins, batch_output_dir, folder_name,
-                    enable_ai, kb_id, user_prompt, log_rules_id
+                yield from _analyze_local_directory(
+                    user_id, path, plugins, enable_ai, kb_id, user_prompt, log_rules_id
                 )
 
         except Exception as e:
@@ -816,15 +698,174 @@ def analyze_local_stream():
     )
 
 
+def _validate_local_path(user_id: str, path: str) -> dict:
+    """
+    验证本地路径（安全检查、配额检查）。
+
+    Returns:
+        dict: 包含 path_info 或 error
+    """
+    if not path:
+        return {'error': '路径不能为空'}
+
+    # 安全检查
+    is_valid, error_msg = validate_path_access(path)
+    if not is_valid:
+        logger.warning(f"非法路径访问尝试: {path}")
+        return {'error': error_msg}
+
+    # 验证路径存在
+    if not os.path.exists(path):
+        return {'error': f'路径不存在: {path}'}
+
+    # 检查配额
+    quota = StorageQuota(user_id)
+    if os.path.isfile(path):
+        estimated_size = os.path.getsize(path)
+    else:
+        estimated_size = sum(os.path.getsize(f) for f in find_log_files_in_directory(path))
+    allowed, quota_error = quota.check_upload(estimated_size)
+    if not allowed:
+        return {'error': quota_error}
+
+    return {'path': path}
+
+
+def _analyze_single_local_file(
+    user_id: str,
+    path: str,
+    plugins: list,
+    enable_ai: bool,
+    kb_id: str,
+    user_prompt: str,
+    log_rules_id: str
+):
+    """
+    分析单个本地文件（生成器）。
+
+    Yields:
+        str: SSE 事件字符串
+    """
+    import shutil
+
+    filename = os.path.basename(path)
+    lower_name = filename.lower()
+    is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
+                  lower_name.endswith('.tar') or lower_name.endswith('.zip'))
+
+    temp_base = get_user_data_dir(user_id, 'temp')
+    work_dir = create_work_directory(temp_base, filename)
+
+    if is_archive:
+        extract_archive_recursive(path, work_dir)
+        log_file_paths = find_log_files_in_directory(work_dir)
+        analysis_path = work_dir
+    else:
+        dest_path = os.path.join(work_dir, filename)
+        shutil.copy2(path, dest_path)
+        log_file_paths = [dest_path]
+        analysis_path = dest_path
+
+    if not log_file_paths:
+        yield generate_sse_event({'stage': 'error', 'message': '未找到日志文件'})
+        return
+
+    yield from _run_analysis_pipeline(
+        user_id=user_id,
+        analysis_path=analysis_path,
+        log_file_paths=log_file_paths,
+        filename=filename,
+        work_dir=work_dir,
+        plugins=plugins,
+        enable_ai=enable_ai,
+        kb_ids=[kb_id] if kb_id else [],
+        user_prompt=user_prompt,
+        log_rules_id=log_rules_id
+    )
+
+
+def _analyze_local_directory(
+    user_id: str,
+    path: str,
+    plugins: list,
+    enable_ai: bool,
+    kb_id: str,
+    user_prompt: str,
+    log_rules_id: str
+):
+    """
+    分析本地目录（批量分析生成器）。
+
+    Yields:
+        str: SSE 事件字符串
+    """
+    import shutil
+
+    temp_base = get_user_data_dir(user_id, 'temp')
+    folder_name = os.path.basename(path) or 'analysis_folder'
+    work_dir = create_batch_work_directory(temp_base, folder_name)
+
+    batch_output_dir = os.path.join(temp_base, '..', 'analysis_output')
+    batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    batch_dir_name = f"{batch_timestamp}_{folder_name}"
+    batch_output_dir = os.path.join(batch_output_dir, batch_dir_name)
+    ensure_dir(batch_output_dir)
+
+    yield generate_sse_event({
+        'stage': 'batch',
+        'status': 'start',
+        'message': '开始批量分析...',
+        'work_dir': work_dir
+    })
+
+    # 构建分析单元
+    analysis_units = []
+    for f in get_files_in_directory(path):
+        lower_f = f.lower()
+        is_archive = (lower_f.endswith('.tar.gz') or lower_f.endswith('.tgz') or
+                      lower_f.endswith('.tar') or lower_f.endswith('.zip'))
+        is_log = lower_f.endswith('.log') or lower_f.endswith('.txt')
+
+        if is_archive:
+            extract_dir_name = os.path.splitext(os.path.basename(f))[0]
+            if lower_f.endswith('.tar.gz'):
+                extract_dir_name = os.path.basename(f)[:-7]
+            elif lower_f.endswith('.tgz'):
+                extract_dir_name = os.path.basename(f)[:-4]
+            extract_dir = os.path.join(work_dir, extract_dir_name)
+            ensure_dir(extract_dir)
+            extract_archive_recursive(f, extract_dir)
+            analysis_units.append({
+                'path': extract_dir,
+                'name': extract_dir_name,
+                'is_archive': True
+            })
+        elif is_log:
+            dest_path = os.path.join(work_dir, os.path.basename(f))
+            shutil.copy2(f, dest_path)
+            analysis_units.append({
+                'path': dest_path,
+                'name': os.path.basename(f),
+                'is_archive': False
+            })
+
+    if not analysis_units:
+        yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
+        return
+
+    # 执行批量分析
+    yield from _process_batch_units(
+        analysis_units, plugins, batch_output_dir, folder_name,
+        enable_ai, kb_id, user_prompt, log_rules_id
+    )
+
+
 @analyze_bp.route('/api/analyze/batch/stream', methods=['POST'])
 def analyze_batch_stream():
     """批量分析多个日志文件（文件夹上传模式）。"""
     from werkzeug.utils import secure_filename
 
     def generate():
-        work_dir = None
-        batch_output_dir = None
-
         try:
             # 检查是否有文件
             files = request.files.getlist('files')
@@ -832,32 +873,19 @@ def analyze_batch_stream():
                 yield generate_sse_event({'stage': 'error', 'message': 'No files provided'})
                 return
 
-            # 获取文件夹名（从第一个文件的相对路径提取）
-            first_file = files[0]
-            folder_name = request.form.get('folder_name', 'uploaded_folder')
-
             # 获取表单数据
+            folder_name = request.form.get('folder_name', 'uploaded_folder')
             plugins = request.form.getlist('plugins')
             enable_ai = request.form.get('enable_ai', 'false').lower() == 'true'
             kb_ids = request.form.getlist('kb_ids')
             user_prompt = request.form.get('user_prompt', '').strip() or None
             log_rules_id = request.form.get('log_rules_id', '').strip() or None
 
-            # 创建批量工作目录
-            temp_base = get_data_dir('temp')
-            work_dir = create_batch_work_directory(temp_base, folder_name)
-
-            # 创建批量输出目录
-            analysis_output_base = os.path.join(temp_base, '..', 'analysis_output')
-            batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            clean_folder_name = folder_name
-            for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
-                if clean_folder_name.lower().endswith(ext):
-                    clean_folder_name = clean_folder_name[:-len(ext)]
-                    break
-            batch_dir_name = f"{batch_timestamp}_{clean_folder_name}"
-            batch_output_dir = os.path.join(analysis_output_base, batch_dir_name)
-            ensure_dir(batch_output_dir)
+            # 准备批量分析环境
+            batch_setup = _prepare_batch_analysis(folder_name)
+            work_dir = batch_setup['work_dir']
+            batch_output_dir = batch_setup['batch_output_dir']
+            clean_folder_name = batch_setup['clean_folder_name']
 
             yield generate_sse_event({
                 'stage': 'batch',
@@ -866,56 +894,8 @@ def analyze_batch_stream():
                 'work_dir': work_dir
             })
 
-            # 处理上传的文件，构建分析单元列表
-            # 每个分析单元是一个路径（目录或文件）
-            analysis_units = []
-            for file in files:
-                filename = secure_filename(file.filename)
-                if not filename:
-                    continue
-
-                # 检查文件类型
-                lower_name = filename.lower()
-                is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
-                              lower_name.endswith('.tar') or lower_name.endswith('.zip'))
-
-                if is_archive:
-                    # 压缩文件：先保存到临时位置，解压后删除压缩包
-                    temp_archive_path = os.path.join(work_dir, f"_temp_{filename}")
-                    file.save(temp_archive_path)
-
-                    try:
-                        # 解压到工作目录
-                        extract_dir_name = os.path.splitext(filename)[0]
-                        # 处理 .tar.gz 的双重扩展名
-                        if lower_name.endswith('.tar.gz'):
-                            extract_dir_name = filename[:-7]  # 移除 .tar.gz
-                        elif lower_name.endswith('.tgz'):
-                            extract_dir_name = filename[:-4]  # 移除 .tgz
-                        extract_dir = os.path.join(work_dir, extract_dir_name)
-                        ensure_dir(extract_dir)
-                        extract_archive_recursive(temp_archive_path, extract_dir)
-                        # 分析单元为解压后的目录
-                        analysis_units.append({
-                            'path': extract_dir,
-                            'name': extract_dir_name,
-                            'is_archive': True
-                        })
-                    finally:
-                        # 删除临时压缩包
-                        if os.path.exists(temp_archive_path):
-                            os.remove(temp_archive_path)
-                elif is_valid_log_file(filename):
-                    # 普通日志文件：直接保存到工作目录
-                    file_path = os.path.join(work_dir, filename)
-                    file.save(file_path)
-                    # 分析单元为文件
-                    analysis_units.append({
-                        'path': file_path,
-                        'name': filename,
-                        'is_archive': False
-                    })
-                # 其他文件类型跳过
+            # 处理上传文件
+            analysis_units = _process_uploaded_batch_files(files, work_dir)
 
             if not analysis_units:
                 yield generate_sse_event({'stage': 'error', 'message': '未找到有效的日志文件'})
@@ -932,7 +912,7 @@ def analyze_batch_stream():
             # 执行批量分析
             yield from _process_batch_units(
                 analysis_units, selected_plugins, batch_output_dir, clean_folder_name,
-                enable_ai, kb_id, user_prompt, log_rules_id
+                enable_ai, kb_ids, user_prompt, log_rules_id
             )
 
         except Exception as e:
@@ -946,3 +926,94 @@ def analyze_batch_stream():
             'X-Accel-Buffering': 'no'
         }
     )
+
+
+def _prepare_batch_analysis(folder_name: str) -> dict:
+    """
+    准备批量分析环境（创建工作目录和输出目录）。
+
+    Returns:
+        dict: 包含 work_dir, batch_output_dir, clean_folder_name
+    """
+    from werkzeug.utils import secure_filename
+
+    temp_base = get_data_dir('temp')
+    work_dir = create_batch_work_directory(temp_base, folder_name)
+
+    # 清理文件夹名
+    clean_folder_name = folder_name
+    for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
+        if clean_folder_name.lower().endswith(ext):
+            clean_folder_name = clean_folder_name[:-len(ext)]
+            break
+
+    # 创建输出目录
+    analysis_output_base = os.path.join(temp_base, '..', 'analysis_output')
+    batch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    batch_dir_name = f"{batch_timestamp}_{clean_folder_name}"
+    batch_output_dir = os.path.join(analysis_output_base, batch_dir_name)
+    ensure_dir(batch_output_dir)
+
+    return {
+        'work_dir': work_dir,
+        'batch_output_dir': batch_output_dir,
+        'clean_folder_name': clean_folder_name
+    }
+
+
+def _process_uploaded_batch_files(files: list, work_dir: str) -> list:
+    """
+    处理批量上传的文件（保存、解压）。
+
+    Args:
+        files: 上传的文件列表
+        work_dir: 工作目录
+
+    Returns:
+        list: 分析单元列表
+    """
+    from werkzeug.utils import secure_filename
+
+    analysis_units = []
+    for file in files:
+        filename = secure_filename(file.filename)
+        if not filename:
+            continue
+
+        lower_name = filename.lower()
+        is_archive = (lower_name.endswith('.tar.gz') or lower_name.endswith('.tgz') or
+                      lower_name.endswith('.tar') or lower_name.endswith('.zip'))
+
+        if is_archive:
+            # 压缩文件：保存、解压、删除
+            temp_archive_path = os.path.join(work_dir, f"_temp_{filename}")
+            file.save(temp_archive_path)
+
+            try:
+                extract_dir_name = os.path.splitext(filename)[0]
+                if lower_name.endswith('.tar.gz'):
+                    extract_dir_name = filename[:-7]
+                elif lower_name.endswith('.tgz'):
+                    extract_dir_name = filename[:-4]
+                extract_dir = os.path.join(work_dir, extract_dir_name)
+                ensure_dir(extract_dir)
+                extract_archive_recursive(temp_archive_path, extract_dir)
+                analysis_units.append({
+                    'path': extract_dir,
+                    'name': extract_dir_name,
+                    'is_archive': True
+                })
+            finally:
+                if os.path.exists(temp_archive_path):
+                    os.remove(temp_archive_path)
+        elif is_valid_log_file(filename):
+            # 普通日志文件
+            file_path = os.path.join(work_dir, filename)
+            file.save(file_path)
+            analysis_units.append({
+                'path': file_path,
+                'name': filename,
+                'is_archive': False
+            })
+
+    return analysis_units

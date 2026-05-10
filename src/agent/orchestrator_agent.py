@@ -507,26 +507,10 @@ class OrchestratorAgent:
         logger.debug(f"收到用户输入: {user_input[:100]}...")
 
         # 构建消息
-        messages = []
-        system_prompt = self.build_system_prompt()
-        messages.append({"role": "system", "content": system_prompt})
+        messages = self._build_chat_messages(user_input)
 
-        # 添加对话历史
-        messages.extend(self.conversation_history)
-
-        # 添加用户输入
-        if user_input:
-            messages.append({"role": "user", "content": user_input})
-
-        # 计算上下文使用率
-        current_tokens = self.calculate_context_usage(messages)
-        self.context_state.update(current_tokens)
-
-        # 检查是否需要压缩
-        if self.context_state.needs_compression:
-            messages = self.compress_context(messages)
-            current_tokens = self.calculate_context_usage(messages)
-            self.context_state.update(current_tokens)
+        # 计算上下文使用率并压缩
+        messages = self._check_and_compress_context(messages)
 
         # 多轮交互
         round_count = 0
@@ -540,8 +524,6 @@ class OrchestratorAgent:
 
             try:
                 response = self.client.chat_with_tools(messages, self.tools, "auto")
-
-                # 记录token使用量
                 if response.usage and response.usage.get('total_tokens'):
                     self.record_token_usage(response.usage['total_tokens'])
             except Exception as e:
@@ -550,87 +532,26 @@ class OrchestratorAgent:
                 break
 
             if response.has_tool_calls():
-                # 执行工具调用
                 messages.append(response.to_message())
-
                 for tool_call in response.tool_calls:
                     tool_call_count += 1
-                    tool_name = tool_call.get('function', {}).get('name', '')
-                    args_str = tool_call.get('function', {}).get('arguments', '{}')
-
-                    try:
-                        args = json.loads(args_str)
-                    except json.JSONDecodeError:
-                        args = {}
-
-                    logger.debug(f"执行工具: {tool_name}")
-
-                    # 执行工具
-                    result = self.execute_tool_call(tool_name, args)
-
-                    interactions.append({
-                        "tool": tool_name,
-                        "args": args,
-                        "result": result
-                    })
-
-                    # 添加工具结果
+                    result, interaction = self._process_tool_call(tool_call)
+                    interactions.append(interaction)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.get('id', ''),
                         "content": json.dumps(result, ensure_ascii=False)
                     })
-
             else:
-                # 最终响应
                 final_response = response.content or ""
-                interactions.append({
-                    "response": final_response
-                })
+                interactions.append({"response": final_response})
                 break
 
-        # 更新对话历史（保存完整消息链，包括tool交互）
-        if user_input:
-            self.conversation_history.append({"role": "user", "content": user_input})
+        # 更新对话历史
+        self._update_conversation_history(user_input, messages)
 
-        # 保存本轮新增的消息（tool调用和结果）
-        # messages结构: [system] + conversation_history + [user] + [本轮新增消息]
-        history_len = len(self.conversation_history)
-        new_messages_start = 1 + history_len + 1  # 跳过system、旧历史、user
-        for msg in messages[new_messages_start:]:
-            role = msg.get('role')
-            if role == 'assistant':
-                # 保存assistant消息（可能包含tool_calls）
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": msg.get('content', ''),
-                    "tool_calls": msg.get('tool_calls')
-                })
-            elif role == 'tool':
-                # tool结果可能很长，截断处理
-                content = msg.get('content', '')
-                if len(content) > 500:
-                    content = content[:500] + "...(已截断)"
-                self.conversation_history.append({
-                    "role": "tool",
-                    "tool_call_id": msg.get('tool_call_id', ''),
-                    "content": content
-                })
-
-        # 保存消息到会话
-        if user_input:
-            self.session_manager.save_message(self.session_id, "user", user_input)
-        if final_response:
-            self.session_manager.save_message(self.session_id, "assistant", final_response)
-
-        # 更新会话状态
-        self.session_state["tool_calls"] = self.session_state.get("tool_calls", 0) + tool_call_count
-        self.session_state["subagent_calls"] = self.session_state.get("subagent_calls", 0)
-        self.session_manager.update_state(self.session_id, {
-            "context_usage": self.context_state.usage_ratio,
-            "tool_calls": self.session_state["tool_calls"],
-            "subagent_calls": self.session_state["subagent_calls"]
-        })
+        # 保存会话
+        self._save_chat_session(user_input, final_response, tool_call_count)
 
         # 返回响应和元数据
         metadata = {
@@ -642,6 +563,95 @@ class OrchestratorAgent:
 
         logger.debug(f"对话完成: {round_count}轮, {tool_call_count}次工具调用")
         return final_response, metadata
+
+    def _build_chat_messages(self, user_input: str) -> List[Dict]:
+        """构建对话消息列表。"""
+        messages = []
+        system_prompt = self.build_system_prompt()
+        messages.append({"role": "system", "content": system_prompt})
+        messages.extend(self.conversation_history)
+        if user_input:
+            messages.append({"role": "user", "content": user_input})
+        return messages
+
+    def _check_and_compress_context(self, messages: List[Dict]) -> List[Dict]:
+        """检查上下文使用率并按需压缩。"""
+        current_tokens = self.calculate_context_usage(messages)
+        self.context_state.update(current_tokens)
+
+        if self.context_state.needs_compression:
+            messages = self.compress_context(messages)
+            current_tokens = self.calculate_context_usage(messages)
+            self.context_state.update(current_tokens)
+
+        return messages
+
+    def _process_tool_call(self, tool_call: Dict) -> Tuple[Dict, Dict]:
+        """
+        处理单个工具调用。
+
+        Returns:
+            tuple: (工具执行结果, 交互记录)
+        """
+        tool_name = tool_call.get('function', {}).get('name', '')
+        args_str = tool_call.get('function', {}).get('arguments', '{}')
+
+        try:
+            args = json.loads(args_str)
+        except json.JSONDecodeError:
+            args = {}
+
+        logger.debug(f"执行工具: {tool_name}")
+        result = self.execute_tool_call(tool_name, args)
+
+        interaction = {
+            "tool": tool_name,
+            "args": args,
+            "result": result
+        }
+        return result, interaction
+
+    def _update_conversation_history(self, user_input: str, messages: List[Dict]):
+        """更新对话历史。"""
+        if user_input:
+            self.conversation_history.append({"role": "user", "content": user_input})
+
+        # 保存本轮新增的消息
+        history_len = len(self.conversation_history)
+        new_messages_start = 1 + history_len + 1  # 跳过system、旧历史、user
+
+        for msg in messages[new_messages_start:]:
+            role = msg.get('role')
+            if role == 'assistant':
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": msg.get('content', ''),
+                    "tool_calls": msg.get('tool_calls')
+                })
+            elif role == 'tool':
+                content = msg.get('content', '')
+                if len(content) > 500:
+                    content = content[:500] + "...(已截断)"
+                self.conversation_history.append({
+                    "role": "tool",
+                    "tool_call_id": msg.get('tool_call_id', ''),
+                    "content": content
+                })
+
+    def _save_chat_session(self, user_input: str, final_response: str, tool_call_count: int):
+        """保存对话会话状态。"""
+        if user_input:
+            self.session_manager.save_message(self.session_id, "user", user_input)
+        if final_response:
+            self.session_manager.save_message(self.session_id, "assistant", final_response)
+
+        self.session_state["tool_calls"] = self.session_state.get("tool_calls", 0) + tool_call_count
+        self.session_state["subagent_calls"] = self.session_state.get("subagent_calls", 0)
+        self.session_manager.update_state(self.session_id, {
+            "context_usage": self.context_state.usage_ratio,
+            "tool_calls": self.session_state["tool_calls"],
+            "subagent_calls": self.session_state["subagent_calls"]
+        })
 
     def chat_stream(self, user_input: str):
         """

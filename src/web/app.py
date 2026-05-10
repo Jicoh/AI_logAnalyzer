@@ -28,25 +28,26 @@ def get_web_config():
     }
 
 
-def create_app():
-    """创建并配置 Flask 应用。"""
-    # 获取项目根目录（支持打包）
+def _get_app_dirs():
+    """获取应用目录路径（支持打包）。"""
     if getattr(sys, 'frozen', False):
         resource_dir = sys._MEIPASS
         root_dir = os.path.dirname(sys.executable)
     else:
-        # 当前文件在 src/web/app.py，项目根目录是上两级
         resource_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         root_dir = resource_dir
+    return resource_dir, root_dir
 
-    # 创建 Flask 应用，设置模板和静态文件夹
+
+def _create_flask_app(resource_dir):
+    """创建 Flask 应用实例。"""
     app = Flask(
         __name__,
         template_folder=os.path.join(resource_dir, 'src', 'web', 'templates'),
         static_folder=os.path.join(resource_dir, 'src', 'web', 'static')
     )
 
-    # 配置
+    # 基础配置
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'ai-log-analyzer-secret-key-change-in-production')
 
     # 安全检查：检测是否使用默认SECRET_KEY
@@ -57,36 +58,38 @@ def create_app():
         logger.warning("=" * 60)
 
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 最大文件大小 50MB
+    return app
 
-    # 数据库配置
+
+def _init_database(app, root_dir):
+    """初始化数据库。"""
     db_path = os.path.join(root_dir, 'data', 'app.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # 初始化数据库
     from src.models.user import db
     from src.models.feedback import Feedback
     from src.models.token_usage import TokenUsage
     db.init_app(app)
 
-    # 初始化 Flask-Login
     from src.web.routes.auth_api import init_login_manager
     init_login_manager(app)
 
-    # 初始化 CSRF 保护
+    return db
+
+
+def _init_security(app):
+    """初始化安全组件（CSRF和限流）。"""
     csrf = CSRFProtect(app)
 
-    # 初始化 Flask-Limiter（限流保护）
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://"  # 使用内存存储，适合单实例部署
+        storage_uri="memory://"
     )
-    # 存储limiter实例供其他模块使用
     app.extensions['limiter'] = limiter
 
-    # 配置限流错误响应
     @app.errorhandler(429)
     def ratelimit_handler(e):
         return jsonify({
@@ -94,53 +97,48 @@ def create_app():
             'error': '请求过于频繁，请稍后再试'
         }), 429
 
-    # 创建数据库表和默认管理员
-    with app.app_context():
-        db.create_all()
-        init_default_admin()
+    return csrf, limiter
 
-    # 确保数据目录存在
-    users_dir = os.path.join(root_dir, 'data', 'users')
-    os.makedirs(users_dir, exist_ok=True)
 
-    # 预加载插件
+def _preload_components(root_dir):
+    """预加载插件和Skill。"""
     logger.info("正在预加载插件...")
     from plugins.manager import get_plugin_manager
     custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
     plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
     logger.info(f"可用插件: {[p.id for p in plugin_manager.get_all_plugins()]}")
 
-    # 预加载Skill
     logger.info("正在预加载Skill...")
     from src.agent.skill_loader import get_skill_loader
     skill_loader = get_skill_loader()
     skills = skill_loader.scan()
     logger.info(f"已加载 {len(skills)} 个Skill: {[s.name for s in skills]}")
 
-    # 注册路由
-    register_routes(app)
 
-    # 为认证接口添加额外限流保护
-    # 登录接口: 每IP每分钟5次
+def _configure_rate_limits(app, limiter):
+    """配置限流规则。"""
+    # 认证接口限流
     limiter.limit("5 per minute")(app.view_functions['auth.do_login'])
-    # 注册接口: 每IP每小时10次
     limiter.limit("10 per hour")(app.view_functions['auth.do_register'])
 
-    # 缓存统计接口: 放宽限流（用于侧边栏存储空间显示）
+    # 缓存统计接口放宽限流
     limiter.limit("200 per minute")(app.view_functions['cache_api.get_cache_stats'])
 
-    # CSRF豁免：SSE流式端点无法使用标准CSRF Token
+
+def _configure_csrf_exemptions(app, csrf):
+    """配置CSRF豁免。"""
+    # SSE流式端点
     csrf.exempt(app.view_functions['analyze_api.analyze_stream'])
     csrf.exempt(app.view_functions['analyze_api.analyze_local_stream'])
     csrf.exempt(app.view_functions['analyze_api.analyze_batch_stream'])
 
-    # CSRF豁免：认证端点（使用限流保护）
+    # 认证端点
     csrf.exempt(app.view_functions['auth.do_login'])
     csrf.exempt(app.view_functions['auth.do_register'])
     csrf.exempt(app.view_functions['auth.do_logout'])
     csrf.exempt(app.view_functions['auth.change_password'])
 
-    # CSRF豁免：智能助手API（使用限流+认证保护）
+    # 智能助手API
     csrf.exempt(app.view_functions['assistant_api.create_session'])
     csrf.exempt(app.view_functions['assistant_api.delete_session'])
     csrf.exempt(app.view_functions['assistant_api.chat'])
@@ -149,18 +147,22 @@ def create_app():
     csrf.exempt(app.view_functions['assistant_api.download_selected_files'])
     csrf.exempt(app.view_functions['assistant_api.delete_files'])
 
-    # CSRF豁免：用户配置API（已使用登录保护）
+    # 用户配置API
     csrf.exempt(app.view_functions['user_config_api.reload_mcp_servers'])
     csrf.exempt(app.view_functions['user_config_api.toggle_mcp_server'])
     csrf.exempt(app.view_functions['user_config_api.toggle_skill'])
+    csrf.exempt(app.view_functions['user_config_api.update_user_config'])
 
-    # CSRF豁免：知识库API
+    # 知识库API
     csrf.exempt(app.view_functions['kb_api.reload_kb'])
+    csrf.exempt(app.view_functions['kb_api.create_kb'])
+    csrf.exempt(app.view_functions['kb_api.upload_document'])
+    csrf.exempt(app.view_functions['kb_api.reindex_kb'])
 
-    # CSRF豁免：Skill API
+    # Skill API
     csrf.exempt(app.view_functions['skill_api.reload_skills'])
 
-    # CSRF豁免：日志规则API（已使用登录保护）
+    # 日志规则API
     csrf.exempt(app.view_functions['log_metadata_api.create_rule_set'])
     csrf.exempt(app.view_functions['log_metadata_api.import_rule_set'])
     csrf.exempt(app.view_functions['log_metadata_api.update_rule_set'])
@@ -169,21 +171,16 @@ def create_app():
     csrf.exempt(app.view_functions['log_metadata_api.update_rule'])
     csrf.exempt(app.view_functions['log_metadata_api.delete_rule'])
 
-    # CSRF豁免：分析模板API（已使用登录保护）
+    # 分析模板API
     csrf.exempt(app.view_functions['admin_api.create_analysis_template'])
     csrf.exempt(app.view_functions['admin_api.update_user_analysis_template'])
     csrf.exempt(app.view_functions['admin_api.delete_user_analysis_template'])
 
-    # CSRF豁免：缓存清理API（已使用登录保护）
+    # 缓存清理API
     csrf.exempt(app.view_functions['cache_api.clear_temp'])
     csrf.exempt(app.view_functions['cache_api.clear_results'])
 
-    # CSRF豁免：知识库API（已使用登录保护）
-    csrf.exempt(app.view_functions['kb_api.create_kb'])
-    csrf.exempt(app.view_functions['kb_api.upload_document'])
-    csrf.exempt(app.view_functions['kb_api.reindex_kb'])
-
-    # CSRF豁免：管理员API（已使用登录+管理员权限保护）
+    # 管理员API
     csrf.exempt(app.view_functions['admin_api.update_config'])
     csrf.exempt(app.view_functions['admin_api.test_mcp_server'])
     csrf.exempt(app.view_functions['admin_api.add_mcp_server'])
@@ -194,20 +191,52 @@ def create_app():
     csrf.exempt(app.view_functions['admin_api.delete_user'])
     csrf.exempt(app.view_functions['feedback_api.reply_feedback'])
 
-    # CSRF豁免：反馈API（已使用登录保护）
+    # 反馈API
     csrf.exempt(app.view_functions['feedback_api.submit_feedback'])
 
-    # CSRF豁免：历史API（已使用登录保护）
+    # 历史API
     csrf.exempt(app.view_functions['history_api.download_history'])
 
-    # CSRF豁免：用户配置API（已使用登录保护）
-    csrf.exempt(app.view_functions['user_config_api.update_user_config'])
-
-    # CSRF豁免：分析API（已使用登录保护）
+    # 分析API
     csrf.exempt(app.view_functions['analyze_api.validate_local_path'])
 
-    # CSRF豁免：日志查看API（已使用登录保护）
+    # 日志查看API
     csrf.exempt(app.view_functions['log_viewer_api.validate_path'])
+
+
+def create_app():
+    """创建并配置 Flask 应用。"""
+    resource_dir, root_dir = _get_app_dirs()
+
+    # 创建 Flask 应用
+    app = _create_flask_app(resource_dir)
+
+    # 初始化数据库
+    db = _init_database(app, root_dir)
+
+    # 初始化安全组件
+    csrf, limiter = _init_security(app)
+
+    # 创建数据库表和默认管理员
+    with app.app_context():
+        db.create_all()
+        init_default_admin()
+
+    # 确保数据目录存在
+    users_dir = os.path.join(root_dir, 'data', 'users')
+    os.makedirs(users_dir, exist_ok=True)
+
+    # 预加载组件
+    _preload_components(root_dir)
+
+    # 注册路由
+    register_routes(app)
+
+    # 配置限流规则
+    _configure_rate_limits(app, limiter)
+
+    # 配置CSRF豁免
+    _configure_csrf_exemptions(app, csrf)
 
     return app
 
@@ -217,7 +246,6 @@ def init_default_admin():
     from src.models.user import User, db
     from src.auth.password import hash_password
 
-    # 检查是否已存在管理员
     admin = User.query.filter_by(employee_id='Administrator').first()
     if not admin:
         admin = User(

@@ -185,7 +185,8 @@ See `plugins/README.md` for full documentation.
 ## Development Guidelines
 
 ### Naming Conventions
-- Functions: `snake_case` (**不要在函数名前加下划线**)
+- Functions: `snake_case`
+- **私有/内部函数**: `_single_leading_underscore` 前缀（遵循 PEP 8）
 - Classes: `PascalCase`
 - Variables: `snake_case`
 - Constants: `UPPER_SNAKE_CASE`
@@ -193,6 +194,11 @@ See `plugins/README.md` for full documentation.
 **正确示例：**
 ```python
 def load_config():
+    """公共函数，不使用前缀"""
+    pass
+
+def _validate_path(path):
+    """私有/内部辅助函数，使用单下划线前缀"""
     pass
 
 class ConfigManager:
@@ -205,10 +211,10 @@ MAX_RETRY_COUNT = 3
 
 **错误示例：**
 ```python
-def _load_config():  # 不要加下划线前缀
+def loadConfig():  # 不要用驼峰命名
     pass
 
-def loadConfig():  # 不要用驼峰命名
+def __validate__(path):  # 不要用双下划线前后缀
     pass
 ```
 
@@ -249,12 +255,12 @@ def read_json(file_path, encoding='utf-8', validate=False, backup=False, log_err
 - 复杂逻辑添加简短说明
 
 ### Common Issues to Avoid
-1. 函数名加下划线前缀（如 `_load_config`）
-2. 过度的异常捕获和处理
-3. 不必要的参数验证
-4. 未来功能的预留代码
-5. 过度的抽象和封装
-6. 不必要的配置选项
+1. 过度的异常捕获和处理
+2. 不必要的参数验证
+3. 未来功能的预留代码
+4. 过度的抽象和封装
+5. 不必要的配置选项
+6. 使用双下划线前后缀（如 `__validate__`）
 
 ### CSRF Protection
 

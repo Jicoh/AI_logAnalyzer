@@ -93,20 +93,75 @@ def cmd_analyze(args):
         return 1
 
     # 初始化插件管理器
+    plugin_manager = _get_cli_plugin_manager()
+
+    # 准备分析路径
+    prep_result = _prepare_analysis_path(args.path)
+    if prep_result.get('error'):
+        print(f"错误: {prep_result['error']}")
+        return 1
+
+    analysis_path = prep_result['analysis_path']
+    log_file_paths = prep_result['log_file_paths']
+
+    # 获取插件ID
+    plugin_ids = _get_cli_plugin_ids(args.plugins)
+    print(f"使用插件: {', '.join(plugin_ids)}")
+
+    # 执行插件分析
+    plugin_result = _run_cli_plugin_analysis(plugin_manager, analysis_path, plugin_ids)
+    if plugin_result is None:
+        return 1
+
+    # 统计并显示结果
+    counts = count_severity(plugin_result.get('sections', []))
+    print(f"发现 {counts['errors']} 个错误, {counts['warnings']} 个警告")
+
+    # 保存插件分析结果
+    analysis_output_dir, plugin_output_file = _save_cli_plugin_result(args.path, plugin_result)
+    print(f"插件分析结果已保存: {plugin_output_file}")
+
+    # 显示结果概览
+    display_plugin_result(plugin_result)
+
+    # AI分析
+    if not args.ai:
+        print("跳过AI分析")
+        return 0
+
+    # 检查AI配置
+    if not _check_ai_config(settings_manager):
+        return 1
+
+    # 执行AI分析
+    return _run_cli_ai_analysis(
+        args, settings_manager, kb_manager, plugin_manager,
+        plugin_result, log_file_paths, analysis_output_dir, plugin_output_file
+    )
+
+
+def _get_cli_plugin_manager():
+    """获取CLI插件管理器。"""
     root_dir = PROJECT_ROOT
     custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
-    plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
+    return get_plugin_manager(custom_dirs=[custom_plugins_dir])
 
-    # 处理文件类型：压缩包需要解压
-    analysis_path = args.path  # 用于插件分析的路径
-    log_file_paths = [args.path]  # 用于AI智能选择的日志文件列表
 
-    if is_archive_file(args.path):
-        # 压缩包：解压到临时目录
+def _prepare_analysis_path(path: str) -> dict:
+    """
+    准备分析路径（处理压缩包）。
+
+    Returns:
+        dict: 包含 analysis_path, log_file_paths 或 error
+    """
+    analysis_path = path
+    log_file_paths = [path]
+
+    if is_archive_file(path):
         from datetime import datetime
         temp_base = get_data_dir('temp')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = os.path.basename(args.path)
+        filename = os.path.basename(path)
         clean_name = filename
         for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
             if clean_name.lower().endswith(ext):
@@ -117,81 +172,86 @@ def cmd_analyze(args):
         ensure_dir(work_dir)
 
         print(f"解压压缩包到: {work_dir}")
-        extract_archive_recursive(args.path, work_dir)
+        extract_archive_recursive(path, work_dir)
 
-        # 查找解压后的日志文件
         log_file_paths = find_log_files_in_directory(work_dir)
         if not log_file_paths:
-            print(f"错误: 压缩包中没有找到日志文件")
-            return 1
+            return {'error': '压缩包中没有找到日志文件'}
 
         print(f"找到 {len(log_file_paths)} 个日志文件")
-        # 插件分析使用解压后的目录
         analysis_path = work_dir
 
-    # CLI 使用用户指定的插件或默认插件
-    if args.plugins:
-        plugin_ids = [p.strip() for p in args.plugins.split(',')]
-    else:
-        # 默认使用 CloudBMC_00001 插件
-        plugin_ids = ['CloudBMC_00001']
+    return {'analysis_path': analysis_path, 'log_file_paths': log_file_paths}
 
-    if not plugin_ids:
-        logger.error("没有可用的插件")
-        print("错误: 没有可用的插件")
-        return 1
 
-    print(f"使用插件: {', '.join(plugin_ids)}")
+def _get_cli_plugin_ids(plugins_arg: str) -> list:
+    """获取CLI插件ID列表。"""
+    if plugins_arg:
+        return [p.strip() for p in plugins_arg.split(',')]
+    return ['CloudBMC_00001']
 
-    # 插件分析
+
+def _run_cli_plugin_analysis(plugin_manager, analysis_path: str, plugin_ids: list) -> dict:
+    """
+    执行CLI插件分析。
+
+    Returns:
+        dict: 插件分析结果，失败返回 None
+    """
     print(f"正在分析日志: {analysis_path}")
     try:
         log_content = read_log_files_to_content(analysis_path)
-        # 使用日志回调函数，支持不同日志级别
-        result_dict = plugin_manager.run_analysis('system', plugin_ids, log_content, log_callback=log_callback)
+        result = plugin_manager.run_analysis(
+            'system', plugin_ids, log_content, log_callback=log_callback
+        )
         logger.debug("插件分析完成")
+        return result
     except Exception as e:
         logger.error(f"插件分析失败: {e}")
         print(f"插件分析失败: {e}")
-        return 1
+        return None
 
-    # 统计错误和警告数量
-    sections = result_dict.get('sections', [])
-    counts = count_severity(sections)
-    total_errors = counts['errors']
-    total_warnings = counts['warnings']
 
-    print(f"发现 {total_errors} 个错误, {total_warnings} 个警告")
+def _save_cli_plugin_result(path: str, result_dict: dict) -> tuple:
+    """
+    保存CLI插件分析结果。
 
-    # 保存插件分析结果
+    Returns:
+        tuple: (analysis_output_dir, plugin_output_file)
+    """
     from datetime import datetime
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    # 使用日志文件名（去除扩展名）
-    log_filename = os.path.basename(args.path)
+    log_filename = os.path.basename(path)
     clean_name = clean_filename(log_filename)
     dir_name = f"{timestamp}_{clean_name}"
     analysis_output_dir = os.path.join('data', 'analysis_output', dir_name)
     ensure_dir(analysis_output_dir)
     plugin_output_file = os.path.join(analysis_output_dir, 'plugin_result.json')
     write_json(plugin_output_file, result_dict)
-    print(f"插件分析结果已保存: {plugin_output_file}")
+    return analysis_output_dir, plugin_output_file
 
-    # 显示结果概览
-    display_plugin_result(result_dict)
 
-    # AI分析
-    if not args.ai:
-        print("跳过AI分析")
-        return 0
-
-    # 检查AI配置
+def _check_ai_config(settings_manager) -> bool:
+    """检查AI配置是否完整。"""
     api_config = settings_manager.get('api', {})
     if not api_config.get('base_url') or not api_config.get('api_key'):
         print("警告: AI配置不完整，请先配置API信息")
         print("使用命令: python main.py config set api.base_url <url>")
         print("         python main.py config set api.api_key <key>")
-        return 1
+        return False
+    return True
 
+
+def _run_cli_ai_analysis(
+    args, settings_manager, kb_manager, plugin_manager,
+    plugin_result, log_file_paths, analysis_output_dir, plugin_output_file
+) -> int:
+    """
+    执行CLI AI分析。
+
+    Returns:
+        int: 退出码（0成功，1失败）
+    """
     # 获取知识库ID
     kb_id = args.kb
     if not kb_id:
@@ -225,14 +285,14 @@ def cmd_analyze(args):
         )
         result = subagent.analyze(
             log_files=log_file_paths,
-            plugin_result=result_dict,
+            plugin_result=plugin_result,
             kb_id=kb_id,
             user_prompt=user_prompt,
             log_rules_id=log_rules_id
         )
         html_result = result.get('html', '')
 
-        # 保存AI分析HTML结果（与Web界面一致）
+        # 保存AI分析HTML结果
         ai_html_file = os.path.join(analysis_output_dir, 'ai_analysis.html')
         with open(ai_html_file, 'w', encoding='utf-8') as f:
             f.write(html_result)
@@ -243,13 +303,12 @@ def cmd_analyze(args):
         print(f"\nAI分析完成")
         print(f"插件报告: {plugin_output_file.replace('.json', '.html')}")
         print(f"AI报告: {ai_html_file}")
+        return 0
 
     except Exception as e:
         logger.error(f"AI分析失败: {e}")
         print(f"AI分析失败: {e}")
         return 1
-
-    return 0
 
 
 def cmd_kb(args):
@@ -457,39 +516,59 @@ def cmd_analyze_batch(args):
         return 1
 
     # 初始化插件管理器
-    root_dir = PROJECT_ROOT
-    custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
-    plugin_manager = get_plugin_manager(custom_dirs=[custom_plugins_dir])
+    plugin_manager = _get_cli_plugin_manager()
 
-    # 确定要使用的插件
-    if args.plugins:
-        plugin_ids = [p.strip() for p in args.plugins.split(',')]
-    else:
-        # CLI 默认使用 CloudBMC_00001 插件
-        plugin_ids = ['CloudBMC_00001']
-
-    if not plugin_ids:
-        logger.error("没有可用的插件")
-        print("错误: 没有可用的插件")
-        return 1
+    # 获取插件ID
+    plugin_ids = _get_cli_plugin_ids(args.plugins)
+    print(f"使用插件: {', '.join(plugin_ids)}")
 
     # 构建分析单元列表
-    # 每个分析单元是一个路径（目录或文件）
+    analysis_units = _build_batch_analysis_units(args.path)
+    if not analysis_units:
+        print(f"错误: 目录中没有找到日志文件: {args.path}")
+        return 1
+
+    print(f"发现 {len(analysis_units)} 个分析单元")
+
+    # 创建批量输出目录
+    batch_output_dir = _create_batch_output_dir(args.path)
+
+    # 获取分析参数
+    kb_id = args.kb or settings_manager.get('knowledge_base.default_id')
+    log_rules_id = getattr(args, 'log_rules', None)
+    user_prompt = _get_user_prompt(args)
+
+    # 批量分析每个单元
+    batch_results, total_errors, total_warnings = _process_batch_units(
+        args, settings_manager, kb_manager, plugin_manager,
+        analysis_units, plugin_ids, batch_output_dir,
+        kb_id, log_rules_id, user_prompt
+    )
+
+    # 生成汇总
+    _generate_batch_summary(args.path, analysis_units, batch_results, total_errors, total_warnings, batch_output_dir)
+
+    return 0
+
+
+def _build_batch_analysis_units(path: str) -> list:
+    """
+    构建批量分析单元列表。
+
+    Returns:
+        list: 分析单元列表，每个单元包含 path, name, is_archive
+    """
     analysis_units = []
-    for item in os.listdir(args.path):
-        item_path = os.path.join(args.path, item)
+    for item in os.listdir(path):
+        item_path = os.path.join(path, item)
         if os.path.isfile(item_path) and is_valid_log_file(item_path):
-            # 单个日志文件
             analysis_units.append({
                 'path': item_path,
                 'name': item,
                 'is_archive': False
             })
         elif os.path.isfile(item_path) and is_archive_file(item_path):
-            # 压缩文件：解压
             temp_base = get_data_dir('temp')
-            extract_dir = os.path.join(temp_base, f"extract_{item}")
-            # 处理扩展名
             extract_name = item
             if item.lower().endswith('.tar.gz'):
                 extract_name = item[:-7]
@@ -505,19 +584,15 @@ def cmd_analyze_batch(args):
                 'name': extract_name,
                 'is_archive': True
             })
+    return analysis_units
 
-    if not analysis_units:
-        logger.error(f"目录中没有找到日志文件: {args.path}")
-        print(f"错误: 目录中没有找到日志文件: {args.path}")
-        return 1
 
-    print(f"发现 {len(analysis_units)} 个分析单元")
-    print(f"使用插件: {', '.join(plugin_ids)}")
-
-    # 创建批量输出目录
+def _create_batch_output_dir(path: str) -> str:
+    """创建批量输出目录。"""
+    from datetime import datetime
     analysis_output_base = get_data_dir('analysis_output')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    dir_name = os.path.basename(args.path)
+    dir_name = os.path.basename(path)
     clean_name = dir_name
     for ext in ['.tar.gz', '.tgz', '.tar', '.zip']:
         if clean_name.lower().endswith(ext):
@@ -526,26 +601,35 @@ def cmd_analyze_batch(args):
     batch_dir_name = f"{timestamp}_{clean_name}"
     batch_output_dir = os.path.join(analysis_output_base, batch_dir_name)
     ensure_dir(batch_output_dir)
+    return batch_output_dir
 
-    # 获取知识库ID
-    kb_id = args.kb
-    if not kb_id:
-        kb_id = settings_manager.get('knowledge_base.default_id')
 
-    log_rules_id = getattr(args, 'log_rules', None)
-
-    # 获取用户提示词
-    user_prompt = None
+def _get_user_prompt(args) -> str:
+    """获取用户提示词。"""
     if args.prompt:
         if os.path.exists(args.prompt):
-            user_prompt = read_file(args.prompt)
-        else:
-            user_prompt = args.prompt
+            return read_file(args.prompt)
+        return args.prompt
+    return None
 
-    # 批量分析每个单元
+
+def _process_batch_units(
+    args, settings_manager, kb_manager, plugin_manager,
+    analysis_units, plugin_ids, batch_output_dir,
+    kb_id, log_rules_id, user_prompt
+) -> tuple:
+    """
+    处理批量分析单元。
+
+    Returns:
+        tuple: (batch_results, total_errors, total_warnings)
+    """
+    from datetime import datetime
+
     batch_results = {}
     total_errors = 0
     total_warnings = 0
+    log_metadata_manager = None
 
     for idx, unit in enumerate(analysis_units, 1):
         unit_name = unit['name']
@@ -553,78 +637,36 @@ def cmd_analyze_batch(args):
 
         print(f"\n[{idx}/{len(analysis_units)}] 分析: {unit_name}")
 
-        # 创建单个单元的输出目录
         single_output_dir = create_single_log_output_dir(batch_output_dir, unit_name)
-
-        # 确定当前单元使用的插件
-        current_plugin_ids = plugin_ids
         current_log_files = find_log_files_in_directory(unit_path) if os.path.isdir(unit_path) else [unit_path]
 
         try:
-            unit_log_content = read_log_files_to_content(unit_path)
-            # 使用主程序的 logger 作为回调，保持日志一致性
-            plugin_result = plugin_manager.run_analysis(
-                'system', current_plugin_ids, unit_log_content,
-                log_callback=log_callback
-            )
+            # 插件分析
+            plugin_result = _run_cli_plugin_analysis(plugin_manager, unit_path, plugin_ids)
+            if plugin_result is None:
+                batch_results[unit_name] = {'error': '插件分析失败'}
+                continue
 
             # 保存插件结果
             plugin_output_file = os.path.join(single_output_dir, 'plugin_result.json')
             write_json(plugin_output_file, plugin_result)
-
-            # 生成HTML
             render_html(plugin_output_file)
 
-            # 计算错误和警告数
-            unit_errors = 0
-            unit_warnings = 0
-            for plugin_id, plugin_data in plugin_result.items():
-                if isinstance(plugin_data, dict):
-                    sections = plugin_data.get('sections', [])
-                    counts = count_severity(sections)
-                    unit_errors += counts['errors']
-                    unit_warnings += counts['warnings']
-
+            # 统计错误和警告
+            unit_errors, unit_warnings = _count_plugin_errors(plugin_result)
             total_errors += unit_errors
             total_warnings += unit_warnings
 
-            # AI分析（如果启用）
+            # AI分析
             ai_result = None
             if args.ai:
-                print(f"  AI分析中...")
-                # 检查AI配置
-                api_config = settings_manager.get('api', {})
-                if not api_config.get('base_url') or not api_config.get('api_key'):
-                    print(f"  警告: AI配置不完整，跳过AI分析")
-                else:
-                    try:
-                        # 初始化 log_metadata_manager（如果尚未初始化）
-                        if 'log_metadata_manager' not in dir() or log_metadata_manager is None:
-                            log_metadata_manager = LogMetadataManager()
-                            if log_rules_id:
-                                log_metadata_manager.set_active_rules(log_rules_id)
-
-                        subagent = LogAnalyzerSubagent(
-                            config_manager=settings_manager,
-                            kb_manager=kb_manager,
-                            log_metadata_manager=log_metadata_manager,
-                            plugin_manager=plugin_manager
-                        )
-                        result = subagent.analyze(
-                            log_files=current_log_files,
-                            plugin_result=plugin_result,
-                            kb_id=kb_id,
-                            user_prompt=user_prompt,
-                            log_rules_id=log_rules_id
-                        )
-                        html_result = result.get('html', '')
-                        ai_html_file = os.path.join(single_output_dir, 'ai_analysis.html')
-                        with open(ai_html_file, 'w', encoding='utf-8') as f:
-                            f.write(html_result)
-                        ai_result = {'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                        print(f"  AI分析完成")
-                    except Exception as e:
-                        print(f"  AI分析失败: {e}")
+                ai_result = _run_batch_ai_analysis(
+                    settings_manager, kb_manager, plugin_manager,
+                    plugin_result, current_log_files, single_output_dir,
+                    kb_id, log_rules_id, user_prompt, log_metadata_manager
+                )
+                if ai_result:
+                    log_metadata_manager = ai_result.get('log_metadata_manager')
 
             batch_results[unit_name] = {
                 'output_dir': os.path.basename(single_output_dir),
@@ -640,11 +682,83 @@ def cmd_analyze_batch(args):
             print(f"  分析失败: {e}")
             batch_results[unit_name] = {'error': str(e)}
 
-    # 生成汇总JSON
+    return batch_results, total_errors, total_warnings
+
+
+def _count_plugin_errors(plugin_result: dict) -> tuple:
+    """统计插件分析结果中的错误和警告数。"""
+    unit_errors = 0
+    unit_warnings = 0
+    for plugin_id, plugin_data in plugin_result.items():
+        if isinstance(plugin_data, dict):
+            sections = plugin_data.get('sections', [])
+            counts = count_severity(sections)
+            unit_errors += counts['errors']
+            unit_warnings += counts['warnings']
+    return unit_errors, unit_warnings
+
+
+def _run_batch_ai_analysis(
+    settings_manager, kb_manager, plugin_manager,
+    plugin_result, log_files, output_dir,
+    kb_id, log_rules_id, user_prompt, log_metadata_manager
+) -> dict:
+    """
+    执行批量AI分析。
+
+    Returns:
+        dict: AI分析结果
+    """
+    from datetime import datetime
+
+    print(f"  AI分析中...")
+    api_config = settings_manager.get('api', {})
+    if not api_config.get('base_url') or not api_config.get('api_key'):
+        print(f"  警告: AI配置不完整，跳过AI分析")
+        return None
+
+    try:
+        if log_metadata_manager is None:
+            log_metadata_manager = LogMetadataManager()
+            if log_rules_id:
+                log_metadata_manager.set_active_rules(log_rules_id)
+
+        subagent = LogAnalyzerSubagent(
+            config_manager=settings_manager,
+            kb_manager=kb_manager,
+            log_metadata_manager=log_metadata_manager,
+            plugin_manager=plugin_manager
+        )
+        result = subagent.analyze(
+            log_files=log_files,
+            plugin_result=plugin_result,
+            kb_id=kb_id,
+            user_prompt=user_prompt,
+            log_rules_id=log_rules_id
+        )
+        html_result = result.get('html', '')
+        ai_html_file = os.path.join(output_dir, 'ai_analysis.html')
+        with open(ai_html_file, 'w', encoding='utf-8') as f:
+            f.write(html_result)
+        print(f"  AI分析完成")
+        return {
+            'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'log_metadata_manager': log_metadata_manager
+        }
+    except Exception as e:
+        print(f"  AI分析失败: {e}")
+        return None
+
+
+def _generate_batch_summary(path, analysis_units, batch_results, total_errors, total_warnings, batch_output_dir):
+    """生成批量分析汇总。"""
+    from datetime import datetime
+    from plugins.renderer.html_renderer import render_batch_html
+
     batch_summary_file = os.path.join(batch_output_dir, 'batch_summary.json')
     summary_data = {
         'batch_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'directory': args.path,
+        'directory': path,
         'total_files': len(analysis_units),
         'total_errors': total_errors,
         'total_warnings': total_warnings,
@@ -652,8 +766,6 @@ def cmd_analyze_batch(args):
     }
     write_json(batch_summary_file, summary_data)
 
-    # 生成汇总HTML
-    from plugins.renderer.html_renderer import render_batch_html
     batch_html_path = render_batch_html(batch_summary_file)
 
     print("\n" + "=" * 50)
@@ -663,8 +775,6 @@ def cmd_analyze_batch(args):
     print(f"总错误数: {total_errors}")
     print(f"总警告数: {total_warnings}")
     print(f"汇总报告: {batch_html_path}")
-
-    return 0
 
 
 def cmd_log_rules(args):
