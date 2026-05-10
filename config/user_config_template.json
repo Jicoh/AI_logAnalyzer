@@ -4,8 +4,7 @@
     "selected_log_rules_id": "",
     "default_kb_id": "",
     "default_log_rules_id": "",
-    "enable_ai": true,
-    "ai_selection_mode": false,
+    "enable_ai": false,
     "last_selected_category": "CloudBMC",
     "assistant_settings": {
         "enabled_mcp_servers": [],

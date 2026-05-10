@@ -65,7 +65,8 @@ def create_app():
 
     # 初始化数据库
     from src.models.user import db
-    from src.models.feedback import Feedback  # 确保 Feedback 表被创建
+    from src.models.feedback import Feedback
+    from src.models.token_usage import TokenUsage
     db.init_app(app)
 
     # 初始化 Flask-Login
@@ -124,6 +125,9 @@ def create_app():
     limiter.limit("5 per minute")(app.view_functions['auth.do_login'])
     # 注册接口: 每IP每小时10次
     limiter.limit("10 per hour")(app.view_functions['auth.do_register'])
+
+    # 缓存统计接口: 放宽限流（用于侧边栏存储空间显示）
+    limiter.limit("200 per minute")(app.view_functions['cache_api.get_cache_stats'])
 
     # CSRF豁免：SSE流式端点无法使用标准CSRF Token
     csrf.exempt(app.view_functions['analyze_api.analyze_stream'])
@@ -187,6 +191,7 @@ def create_app():
     csrf.exempt(app.view_functions['admin_api.update_user_quota'])
     csrf.exempt(app.view_functions['admin_api.reset_user_password'])
     csrf.exempt(app.view_functions['admin_api.toggle_user_active'])
+    csrf.exempt(app.view_functions['admin_api.delete_user'])
     csrf.exempt(app.view_functions['feedback_api.reply_feedback'])
 
     # CSRF豁免：反馈API（已使用登录保护）

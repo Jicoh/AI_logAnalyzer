@@ -75,6 +75,7 @@
                                 <th>角色</th>
                                 <th>状态</th>
                                 <th>注册时间</th>
+                                <th>Token(7天)</th>
                                 <th>存储使用</th>
                                 <th>配额</th>
                                 <th>操作</th>
@@ -93,6 +94,7 @@
                                               x-text="user.is_active ? '正常' : '禁用'"></span>
                                     </td>
                                     <td x-text="user.created_at"></td>
+                                    <td x-text="user.token_usage_7d?.toLocaleString() || 0"></td>
                                     <td>
                                         <span x-text="user.storage_used_formatted"></span>
                                         <span class="text-muted" x-text="'(' + user.storage_percent + '%)'"></span>
@@ -110,6 +112,9 @@
                                                     :class="user.is_active ? '' : 'active'"
                                                     @click="toggleActive(user)" title="启用/禁用">
                                                 <i class="bi" :class="user.is_active ? 'bi-pause' : 'bi-play'"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click="deleteUser(user)" title="删除用户">
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -471,6 +476,31 @@ function adminApp() {
                 }
             } catch (e) {
                 this.showToast('error', '错误', '操作失败');
+            }
+        },
+
+        async deleteUser(user) {
+            if (user.employee_id === 'Administrator') {
+                this.showToast('error', '错误', 'Administrator 账号无法被删除');
+                return;
+            }
+            if (!confirm(`确定要删除用户 ${user.employee_id} 吗？此操作不可恢复！`)) return;
+            if (!confirm(`再次确认：删除用户 ${user.employee_id} 的所有数据？`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/users/${user.id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.showToast('success', '成功', data.message);
+                    this.loadUsers();
+                    this.loadStats();
+                } else {
+                    this.showToast('error', '错误', data.error);
+                }
+            } catch (e) {
+                this.showToast('error', '错误', '删除失败');
             }
         },
 

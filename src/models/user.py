@@ -19,6 +19,7 @@ class User(db.Model, UserMixin):
     is_admin = db.Column(db.Boolean, default=False)  # 管理员标识
     is_active = db.Column(db.Boolean, default=True)  # 账号是否激活
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 注册时间
+    last_login_at = db.Column(db.DateTime)  # 最后登录时间
     storage_quota = db.Column(db.Integer, default=300 * 1024 * 1024)  # 配额 300MB
 
     def get_id(self):

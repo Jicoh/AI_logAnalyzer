@@ -55,8 +55,6 @@ def update_user_config():
             manager.set('default_log_rules_id', data['default_log_rules_id'])
         if 'enable_ai' in data:
             manager.set('enable_ai', data['enable_ai'])
-        if 'ai_selection_mode' in data:
-            manager.set('ai_selection_mode', data['ai_selection_mode'])
         if 'last_selected_category' in data:
             manager.set('last_selected_category', data['last_selected_category'])
         if 'assistant_settings' in data:

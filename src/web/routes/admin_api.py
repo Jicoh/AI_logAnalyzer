@@ -5,10 +5,11 @@
 
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from src.models.user import User, db
+from src.models.token_usage import TokenUsage
 from src.auth.password import hash_password, verify_password
 from src.auth.decorators import admin_required, login_required
 from src.system_config_manager.manager import SystemConfigManager
@@ -27,6 +28,7 @@ def list_users():
     """获取所有用户列表。"""
     try:
         users = User.query.order_by(User.created_at.desc()).all()
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
 
         user_list = []
         for u in users:
@@ -38,6 +40,12 @@ def list_users():
                 logger.debug(f"计算用户存储失败: {u.employee_id}, {str(e)}")
                 storage_used = 0
 
+            # 计算最近7天 token 使用量
+            token_usage = db.session.query(db.func.sum(TokenUsage.tokens_used)).filter(
+                TokenUsage.user_id == u.id,
+                TokenUsage.created_at >= seven_days_ago
+            ).scalar() or 0
+
             user_list.append({
                 'id': u.id,
                 'employee_id': u.employee_id,
@@ -48,7 +56,8 @@ def list_users():
                 'storage_quota_formatted': format_size(u.storage_quota),
                 'storage_used': storage_used,
                 'storage_used_formatted': format_size(storage_used),
-                'storage_percent': round(storage_used / u.storage_quota * 100, 1) if u.storage_quota > 0 else 0
+                'storage_percent': round(storage_used / u.storage_quota * 100, 1) if u.storage_quota > 0 else 0,
+                'token_usage_7d': token_usage
             })
 
         return jsonify({'success': True, 'data': user_list})
@@ -133,6 +142,10 @@ def toggle_user_active(user_id):
         if user.id == current_user.id:
             return jsonify({'success': False, 'error': '不能禁用自己'}), 400
 
+        # Administrator 账号无法被禁用
+        if user.employee_id == 'Administrator':
+            return jsonify({'success': False, 'error': 'Administrator 账号无法被禁用'}), 400
+
         data = request.get_json()
         is_active = data.get('is_active', True)
 
@@ -148,6 +161,53 @@ def toggle_user_active(user_id):
         })
     except Exception as e:
         db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    """删除用户。"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': '用户不存在'}), 404
+
+        # 不能删除自己
+        if user.id == current_user.id:
+            return jsonify({'success': False, 'error': '不能删除自己'}), 400
+
+        # Administrator 账号无法被删除
+        if user.employee_id == 'Administrator':
+            return jsonify({'success': False, 'error': 'Administrator 账号无法被删除'}), 400
+
+        employee_id = user.employee_id
+
+        # 删除用户数据目录
+        try:
+            user_dir = get_user_data_dir(employee_id)
+            if os.path.exists(user_dir):
+                import shutil
+                shutil.rmtree(user_dir)
+        except Exception as e:
+            logger.warning(f"删除用户数据目录失败: {employee_id}, {str(e)}")
+
+        # 删除关联的 token 使用记录
+        TokenUsage.query.filter_by(user_id=user.id).delete()
+
+        # 删除用户
+        db.session.delete(user)
+        db.session.commit()
+
+        logger.info(f"管理员 {current_user.employee_id} 删除用户 {employee_id}")
+
+        return jsonify({
+            'success': True,
+            'message': f'用户 {employee_id} 已删除'
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"删除用户失败: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -234,7 +294,9 @@ def get_stats():
     try:
         # 用户统计
         total_users = User.query.count()
-        active_users = User.query.filter_by(is_active=True).count()
+        # 活跃用户：最近7天登录过的用户
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        active_users = User.query.filter(User.last_login_at >= seven_days_ago).count()
         admin_users = User.query.filter_by(is_admin=True).count()
 
         # 存储统计

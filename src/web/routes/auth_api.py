@@ -3,6 +3,7 @@
 处理用户注册、登录、登出、修改密码等。
 """
 
+from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, current_app
 from flask_login import login_user, logout_user, current_user, LoginManager
 from src.models.user import User, db
@@ -71,6 +72,11 @@ def do_login():
             return jsonify({'success': False, 'error': '密码错误'})
 
         login_user(user)
+
+        # 更新最后登录时间
+        user.last_login_at = datetime.utcnow()
+        db.session.commit()
+
         logger.info(f"用户登录成功: {employee_id}")
 
         return jsonify({

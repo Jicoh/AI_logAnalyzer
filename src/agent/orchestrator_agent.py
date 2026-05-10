@@ -16,6 +16,8 @@ from .skill_loader import get_skill_loader
 from src.session_manager.manager import SessionManager
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
+from src.models.user import User, db
+from src.models.token_usage import TokenUsage
 from src.utils import get_logger
 
 logger = get_logger('orchestrator_agent')
@@ -249,6 +251,27 @@ class OrchestratorAgent:
     def register_prepare_handlers(self):
         """注册各Subagent的准备函数"""
         self.prepare_handlers["log_analyzer"] = self.prepare_log_analyzer
+
+    def record_token_usage(self, tokens: int):
+        """
+        记录token使用量
+
+        Args:
+            tokens: 使用的token数量
+        """
+        try:
+            user = User.query.filter_by(employee_id=self.user_id).first()
+            if user:
+                usage = TokenUsage(
+                    user_id=user.id,
+                    tokens_used=tokens
+                )
+                db.session.add(usage)
+                db.session.commit()
+                logger.debug(f"记录token使用: user={self.user_id}, tokens={tokens}")
+        except Exception as e:
+            db.session.rollback()
+            logger.warning(f"记录token使用失败: {str(e)}")
 
     def load_config(self):
         """加载Orchestrator配置"""
@@ -517,6 +540,10 @@ class OrchestratorAgent:
 
             try:
                 response = self.client.chat_with_tools(messages, self.tools, "auto")
+
+                # 记录token使用量
+                if response.usage and response.usage.get('total_tokens'):
+                    self.record_token_usage(response.usage['total_tokens'])
             except Exception as e:
                 logger.error(f"AI调用失败: {str(e)}")
                 final_response = f"AI调用失败: {str(e)}"

@@ -409,7 +409,6 @@ function analyzerApp() {
         logRulesList: [],
         selectedLogRulesId: '',
         enableAi: true,
-        aiSelectionMode: false,
         userPrompt: '',
         analyzing: false,
         completed: false,
@@ -675,7 +674,6 @@ function analyzerApp() {
                     this.selectedKbIds = config.selected_kb_ids || [];
                     this.selectedLogRulesId = config.selected_log_rules_id || '';
                     this.enableAi = config.enable_ai !== undefined ? config.enable_ai : true;
-                    this.aiSelectionMode = config.ai_selection_mode !== undefined ? config.ai_selection_mode : false;
                     this.lastSelectedCategory = config.last_selected_category || '';
                 }
             } catch (error) {
@@ -702,7 +700,6 @@ function analyzerApp() {
                         selected_kb_ids: this.selectedKbIds,
                         selected_log_rules_id: this.selectedLogRulesId,
                         enable_ai: this.enableAi,
-                        ai_selection_mode: this.aiSelectionMode,
                         last_selected_category: this.lastSelectedCategory
                     })
                 });

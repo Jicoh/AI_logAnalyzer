@@ -13,9 +13,10 @@ logger = get_logger('ai_client')
 class AIResponse:
     """AI响应封装类"""
 
-    def __init__(self, content: str = None, tool_calls: list = None):
+    def __init__(self, content: str = None, tool_calls: list = None, usage: dict = None):
         self.content = content
         self.tool_calls = tool_calls or []
+        self.usage = usage or {}
 
     def has_tool_calls(self) -> bool:
         """判断是否有工具调用"""
@@ -208,7 +209,7 @@ class AIClient:
                         f"completion={usage.get('completion_tokens')}, "
                         f"total={usage.get('total_tokens')}")
 
-        return AIResponse(content=content, tool_calls=tool_calls)
+        return AIResponse(content=content, tool_calls=tool_calls, usage=usage)
 
     def count_tokens(self, messages: list, tools: list = None) -> int:
         """

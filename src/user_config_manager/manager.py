@@ -22,7 +22,6 @@ class UserConfigManager:
         "default_kb_id": "",
         "default_log_rules_id": "",
         "enable_ai": True,
-        "ai_selection_mode": False,
         "last_selected_category": "CloudBMC",
         "assistant_settings": {
             "enabled_mcp_servers": [],
