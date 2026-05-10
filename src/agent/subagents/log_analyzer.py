@@ -408,7 +408,8 @@ class LogAnalyzerSubagent(SubagentBase):
         """获取prompt文件路径"""
         if self.prompt_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            agent_dir = os.path.dirname(os.path.dirname(current_dir))
+            # current_dir = .../src/agent/subagents，需要往上一层到 agent 目录
+            agent_dir = os.path.dirname(current_dir)
             self.prompt_path = os.path.join(agent_dir, 'prompts', 'subagent_log_analyze_prompt.txt')
         return self.prompt_path
 
@@ -416,7 +417,8 @@ class LogAnalyzerSubagent(SubagentBase):
         """获取HTML模板路径"""
         if self.template_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            agent_dir = os.path.dirname(os.path.dirname(current_dir))
+            # current_dir = .../src/agent/subagents，需要往上一层到 agent 目录
+            agent_dir = os.path.dirname(current_dir)
             self.template_path = os.path.join(agent_dir, 'templates', 'ai_report_template.html')
         return self.template_path
 

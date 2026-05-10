@@ -81,8 +81,12 @@
             init() {
                 this.loadUserInfo();
                 this.loadQuota();
-                // 定期刷新存储空间（每60秒）
-                setInterval(() => this.loadQuota(), 60000);
+                // 页面切换回来时刷新存储空间
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        this.loadQuota();
+                    }
+                });
             },
             loadUserInfo() {
                 fetch('/api/auth/me').then(r => r.json()).then(d => {

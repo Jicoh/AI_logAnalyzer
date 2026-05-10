@@ -44,17 +44,60 @@ const Utils = {
      */
     showToast(message, type = 'info', duration = 3000) {
         const toast = document.createElement('div');
-        toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-        toast.style.cssText = 'bottom: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-        toast.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        const bgColors = {
+            'info': 'var(--accent-primary)',
+            'success': 'var(--success)',
+            'warning': 'var(--warning)',
+            'error': 'var(--danger)',
+            'danger': 'var(--danger)'
+        };
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            min-width: 280px;
+            padding: 14px 20px;
+            border-radius: 10px;
+            background: ${bgColors[type] || bgColors['info']};
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            animation: toastIn 0.3s ease;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         `;
+        toast.innerHTML = `
+            <span>${message}</span>
+            <button type="button" style="background: transparent; border: none; color: white; opacity: 0.7; cursor: pointer; padding: 4px; font-size: 18px;" onclick="this.parentElement.remove()">×</button>
+        `;
+
+        // Add animation styles if not exists
+        if (!document.querySelector('#toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.textContent = `
+                @keyframes toastIn {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes toastOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(20px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
         document.body.appendChild(toast);
 
         setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 150);
+            toast.style.animation = 'toastOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
         }, duration);
     }
 };

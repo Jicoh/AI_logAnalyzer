@@ -4,20 +4,50 @@
 
 {% block extra_head %}
 <style>
-/* 整体布局 */
-.assistant-container {
-    height: calc(100vh - 60px);
-    display: flex;
+/* 引入现代字体 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+/* CSS变量 - 精致简约配色 */
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f8fa;
+    --bg-tertiary: #eef0f5;
+    --border-color: #e5e7eb;
+    --border-light: #f0f1f3;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --accent-primary: #6366f1;
+    --accent-light: #e0e7ff;
+    --accent-hover: #4f46e5;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
+    --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --transition: all 0.2s ease;
 }
 
-/* 左侧边栏 */
+/* 整体布局 */
+.assistant-container {
+    height: calc(100vh - 48px);
+    display: flex;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg-secondary);
+}
+
+/* ========== 左侧边栏 ========== */
 .sidebar-left {
-    width: 280px;
-    min-width: 280px;
+    width: 300px;
+    min-width: 300px;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #dee2e6;
-    background: #f8f9fa;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--border-light);
 }
 
 /* 会话列表区域 */
@@ -28,109 +58,295 @@
 }
 
 .session-header {
-    padding: 12px 16px;
+    padding: 16px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #e9ecef;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.session-header-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.session-header-title i {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.session-header .btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    border: none;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.session-header .btn:hover {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.session-list {
+    padding: 8px;
 }
 
 .session-card {
-    padding: 10px 16px;
-    border-bottom: 1px solid #eee;
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: background 0.2s;
+    transition: var(--transition);
+    margin-bottom: 4px;
+    border: 1px solid transparent;
 }
 
 .session-card:hover {
-    background: #e9ecef;
+    background: var(--bg-tertiary);
 }
 
 .session-card.active {
-    background: #cfe2ff;
+    background: var(--accent-light);
+    border-color: var(--accent-primary);
 }
 
 .session-title {
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: 14px;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.session-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.session-time {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.session-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.session-delete {
+    opacity: 0;
+    transition: var(--transition);
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.session-card:hover .session-delete {
+    opacity: 1;
+}
+
+.session-delete:hover {
+    color: var(--danger) !important;
+}
+
 /* Agent设置区域 */
 .agent-settings-section {
     flex: 0 0 auto;
-    border-top: 2px solid #dee2e6;
-    max-height: 350px;
+    border-top: 1px solid var(--border-light);
+    max-height: 320px;
     overflow-y: auto;
 }
 
 .section-header {
-    padding: 10px 16px;
-    background: #e9ecef;
+    padding: 14px 20px;
+    background: var(--bg-primary);
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
 }
 
 .agent-settings-content {
-    padding: 8px;
+    padding: 12px;
 }
 
-.resource-dropdown {
-    margin-bottom: 8px;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    background: #fff;
+/* 资源选择器按钮 */
+.resource-selector {
+    margin-bottom: 10px;
+    position: relative;
 }
 
-.resource-header {
-    padding: 10px 12px;
+.resource-btn {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
-    background: #f8f9fa;
-    border-radius: 8px 8px 0 0;
+    transition: var(--transition);
 }
 
-.resource-header:hover {
-    background: #e9ecef;
+.resource-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
 }
 
-.resource-header.expanded {
-    border-radius: 8px 8px 0 0;
+.resource-btn.active {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--accent-light);
 }
 
 .resource-title {
-    font-weight: 600;
-    font-size: 0.9rem;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.resource-title i {
+    font-size: 15px;
+    color: var(--text-secondary);
 }
 
 .resource-count {
-    font-size: 0.8rem;
-    color: #6c757d;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 4px;
 }
 
-.resource-content {
+.resource-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.selected-count {
+    font-size: 12px;
+    color: var(--accent-primary);
+    background: var(--accent-light);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+/* 资源弹出面板 */
+.resource-popup {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: all 0.2s ease;
+    width: 280px;
+    max-height: 320px;
+    display: flex;
+    flex-direction: column;
+}
+
+.resource-popup.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.popup-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.popup-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.popup-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.popup-actions .btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    transition: var(--transition);
+}
+
+.popup-actions .btn:hover {
+    background: var(--accent-light);
+    color: var(--accent-primary);
+}
+
+.popup-actions .btn.loading i {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.popup-content {
+    max-height: 200px;
+    overflow-y: auto;
     padding: 8px;
-    display: none;
-}
-
-.resource-content.show {
-    display: block;
 }
 
 /* 资源卡片 */
 .resource-card {
-    padding: 10px;
-    border: 1px solid #e9ecef;
-    border-radius: 6px;
-    margin-bottom: 6px;
-    background: #fff;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    background: var(--bg-secondary);
+    transition: var(--transition);
 }
 
 .resource-card:last-child {
@@ -139,263 +355,572 @@
 
 .resource-card-name {
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: 13px;
+    color: var(--text-primary);
     margin-bottom: 4px;
 }
 
 .resource-card-desc {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-bottom: 8px;
-    line-height: 1.4;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .resource-card-actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
 }
 
 .resource-card-actions .btn {
-    font-size: 0.75rem;
-    padding: 4px 8px;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
 }
 
 .resource-card.selected {
-    border-color: #0d6efd;
-    background: #f0f6ff;
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
 }
 
-/* 中间聊天区域 */
+/* ========== 中间聊天区域 ========== */
 .chat-main {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #fff;
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    overflow: hidden;
 }
 
 /* 消息列表 */
 .message-list {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: 24px;
     min-height: 0;
 }
 
 .message {
-    margin-bottom: 16px;
+    margin-bottom: 20px;
+    animation: messageIn 0.25s ease;
+}
+
+@keyframes messageIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .message-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.message-role {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.message-role.user {
+    background: var(--accent-light);
+    color: var(--accent-primary);
+}
+
+.message-role.assistant {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.message-time {
+    font-size: 11px;
+    color: var(--text-muted);
 }
 
 .message-content {
-    padding: 10px 14px;
-    border-radius: 12px;
+    padding: 16px 20px;
+    border-radius: var(--radius-lg);
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: 1.6;
+    line-height: 1.7;
+    font-size: 14px;
 }
 
 .message-content.user {
-    background: #0d6efd;
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+    color: white;
+    margin-left: 0;
+    border-bottom-left-radius: 4px;
 }
 
 .message-content.assistant {
-    background: #f8f9fa;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-bottom-left-radius: 4px;
 }
 
 .message-content pre {
-    background: #e9ecef;
-    padding: 8px;
-    border-radius: 6px;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
     overflow-x: auto;
+    margin: 12px 0;
+    font-size: 13px;
 }
 
 .message-content code {
-    background: #e9ecef;
-    padding: 2px 6px;
+    background: var(--bg-tertiary);
+    padding: 3px 7px;
     border-radius: 4px;
+    font-size: 13px;
+}
+
+.message-content pre code {
+    background: transparent;
+    padding: 0;
 }
 
 /* 输入区域 */
 .chat-input-area {
-    padding: 6px 16px;
-    border-top: 1px solid #dee2e6;
-    background: #f8f9fa;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-primary);
 }
 
 .chat-input-wrapper {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: flex-end;
 }
 
 .chat-input-wrapper textarea {
     flex: 1;
     resize: none;
-    border-radius: 12px;
-    padding: 8px 12px;
-    font-size: 0.95rem;
-    min-height: 40px;
-    max-height: 100px;
+    border-radius: var(--radius-lg);
+    padding: 14px 18px;
+    font-size: 14px;
+    min-height: 50px;
+    max-height: 120px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.chat-input-wrapper textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.chat-input-wrapper textarea::placeholder {
+    color: var(--text-muted);
 }
 
 .chat-input-wrapper .btn-send {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+    transition: var(--transition);
 }
 
-/* 上下文使用情况 */
-.context-usage-section {
-    flex: 0 0 auto;
-    padding: 12px 16px;
-    border-top: 1px solid #dee2e6;
-    background: #fff;
+.chat-input-wrapper .btn-send:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: scale(1.02);
 }
 
-.context-progress-bar {
-    height: 8px;
-    background: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
+.chat-input-wrapper .btn-send:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
 }
 
-.progress-fill {
-    height: 100%;
-    background: #0d6efd;
-    border-radius: 4px;
-    transition: width 0.3s;
-}
-
-.progress-fill.warning {
-    background: #ffc107;
-}
-
-.progress-fill.danger {
-    background: #dc3545;
-}
-
-.context-text {
-    font-size: 0.85rem;
-    color: #495057;
-}
-
-/* 右侧文件列表 */
-.sidebar-right {
-    width: 250px;
-    min-width: 250px;
-    border-left: 1px solid #dee2e6;
-    display: flex;
-    flex-direction: column;
-    background: #f8f9fa;
-}
-
-.file-header {
-    padding: 12px 16px;
-    background: #e9ecef;
-}
-
-.file-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px;
-}
-
-.file-item {
-    padding: 8px 10px;
-    border-radius: 6px;
-    margin-bottom: 4px;
-    background: #fff;
-    border: 1px solid #e9ecef;
-}
-
-.file-item:hover {
-    background: #e9ecef;
-}
-
-/* 拖拽状态 */
-.chat-input-wrapper textarea.dragging {
-    border-color: #0d6efd;
-    background: #f0f6ff;
-}
-
-/* 待上传文件列表 */
+/* 待上传文件 */
 .pending-files {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 8px 0;
+    margin-bottom: 12px;
 }
 
 .pending-file-item {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: #e9ecef;
-    border-radius: 6px;
-    font-size: 0.85rem;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--accent-primary);
 }
 
 .pending-file-item .remove-btn {
     cursor: pointer;
-    color: #dc3545;
-    margin-left: 4px;
+    opacity: 0.6;
+    transition: var(--transition);
 }
 
-/* 侧边栏上传按钮 */
+.pending-file-item .remove-btn:hover {
+    opacity: 1;
+    color: var(--danger);
+}
+
+/* 拖拽状态 */
+.chat-input-wrapper textarea.dragging {
+    border-color: var(--accent-primary);
+    background: var(--accent-light);
+}
+
+/* 加载状态 */
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.typing-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+/* ========== 右侧文件列表 ========== */
+.sidebar-right {
+    width: 280px;
+    min-width: 280px;
+    border-left: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.file-header {
+    padding: 16px 20px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.file-header-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.file-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.file-actions .btn {
+    flex: 1;
+    font-size: 12px;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+}
+
+.file-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    transition: var(--transition);
+}
+
+.file-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.file-item .form-check-input {
+    margin-right: 10px;
+}
+
+.file-item .file-icon {
+    color: var(--accent-primary);
+    font-size: 16px;
+}
+
+.file-item .file-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 8px;
+}
+
+.file-item .file-size {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
 .sidebar-upload-btn {
     padding: 12px 16px;
-    border-top: 1px solid #dee2e6;
-    background: #fff;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-primary);
 }
 
-/* 详情模态框 */
+.sidebar-upload-btn .btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+/* ========== 上下文使用情况 ========== */
+.context-usage-section {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-primary);
+}
+
+.context-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-fill.warning {
+    background: var(--warning);
+}
+
+.progress-fill.danger {
+    background: var(--danger);
+}
+
+.context-text {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.context-label {
+    color: var(--text-muted);
+}
+
+.context-value {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ========== 模态框 ========== */
 .detail-modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1050;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .detail-modal-content {
-    background: #fff;
-    border-radius: 12px;
-    max-width: 500px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    max-width: 480px;
     width: 90%;
     max-height: 80vh;
     overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .detail-modal-header {
-    padding: 16px;
-    border-bottom: 1px solid #dee2e6;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-light);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.detail-modal-body {
-    padding: 16px;
+.detail-modal-header h5 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
 }
 
+.detail-modal-header .btn-close {
+    opacity: 0.5;
+    transition: var(--transition);
+}
+
+.detail-modal-header .btn-close:hover {
+    opacity: 1;
+}
+
+.detail-modal-body {
+    padding: 24px;
+}
+
+.detail-modal-body .info-row {
+    display: flex;
+    margin-bottom: 16px;
+}
+
+.detail-modal-body .info-label {
+    width: 80px;
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.detail-modal-body .info-value {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+/* 空状态 */
+.empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-muted);
+}
+
+.empty-state i {
+    font-size: 48px;
+    opacity: 0.4;
+    margin-bottom: 16px;
+}
+
+.empty-state p {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Alpine.js cloak */
 [x-cloak] { display: none !important; }
+
+/* 滚动条美化 */
+.message-list::-webkit-scrollbar,
+.session-section::-webkit-scrollbar,
+.file-list::-webkit-scrollbar,
+.agent-settings-section::-webkit-scrollbar,
+.popup-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.message-list::-webkit-scrollbar-track,
+.session-section::-webkit-scrollbar-track,
+.file-list::-webkit-scrollbar-track,
+.agent-settings-section::-webkit-scrollbar-track,
+.popup-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.message-list::-webkit-scrollbar-thumb,
+.session-section::-webkit-scrollbar-thumb,
+.file-list::-webkit-scrollbar-thumb,
+.agent-settings-section::-webkit-scrollbar-thumb,
+.popup-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.message-list::-webkit-scrollbar-thumb:hover,
+.session-section::-webkit-scrollbar-thumb:hover,
+.file-list::-webkit-scrollbar-thumb:hover,
+.agent-settings-section::-webkit-scrollbar-thumb:hover,
+.popup-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
 </style>
 {% endblock %}
 
@@ -406,9 +931,11 @@
         <!-- 会话列表 -->
         <div class="session-section">
             <div class="session-header">
-                <span><i class="bi bi-chat-left-text"></i> 会话列表</span>
-                <button class="btn btn-sm btn-primary" @click="createSession()" :disabled="creatingSession">
-                    <i class="bi bi-plus"></i>
+                <span class="session-header-title">
+                    <i class="bi bi-chat-left-text"></i> 会话
+                </span>
+                <button class="btn" @click="createSession()" :disabled="creatingSession" title="新建会话">
+                    <i class="bi bi-plus-lg"></i>
                 </button>
             </div>
             <div class="session-list">
@@ -418,19 +945,19 @@
                          @click="selectSession(session.session_id)">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="session-title" x-text="session.title || '新会话'"></div>
-                            <button class="btn btn-sm btn-link text-danger p-0" @click.stop="deleteSession(session.session_id)">
+                            <button class="btn btn-link text-muted session-delete p-0" @click.stop="deleteSession(session.session_id)">
                                 <i class="bi bi-trash3"></i>
                             </button>
                         </div>
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <small class="text-muted" x-text="session.updated_at"></small>
-                            <span class="badge bg-light text-dark" x-text="session.message_count + '条'"></span>
+                        <div class="session-meta">
+                            <span class="session-time" x-text="session.updated_at"></span>
+                            <span class="session-count" x-text="session.message_count + '条'"></span>
                         </div>
                     </div>
                 </template>
-                <div x-show="sessions.length === 0" class="text-center text-muted p-4">
-                    <i class="bi bi-chat-left-text fs-3"></i>
-                    <p class="mt-2 small">暂无会话</p>
+                <div x-show="sessions.length === 0" class="empty-state">
+                    <i class="bi bi-chat-left-text"></i>
+                    <p>暂无会话</p>
                 </div>
             </div>
         </div>
@@ -438,136 +965,169 @@
         <!-- Agent设置区域 -->
         <div class="agent-settings-section">
             <div class="section-header">
-                <i class="bi bi-gear"></i> Agent设置
+                <i class="bi bi-sliders"></i> Agent设置
             </div>
-            <div class="agent-settings-content">
+            <div class="agent-settings-content" @click.away="closeAllPopups()">
                 <!-- MCP Server -->
-                <div class="resource-dropdown">
-                <div class="resource-header" :class="{ 'expanded': expandedResources.mcp }" @click="toggleResource('mcp')">
-                    <div>
-                        <i class="bi bi-plug me-1"></i>
-                        <span class="resource-title">MCP Server</span>
-                        <span class="resource-count ms-1" x-text="'(' + mcpServers.length + ')'"></span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadMcpServers()" title="刷新">
-                            <i class="bi bi-arrow-repeat"></i>
-                        </button>
-                        <i class="bi" :class="expandedResources.mcp ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-                    </div>
-                </div>
-                <div class="resource-content" :class="{ 'show': expandedResources.mcp }">
-                    <template x-for="mcp in mcpServers" :key="mcp.name">
-                        <div class="resource-card">
-                            <div class="resource-card-name" x-text="mcp.name"></div>
-                            <div class="resource-card-desc" x-text="mcp.description || '暂无描述'"></div>
-                            <div class="resource-card-actions">
-                                <button class="btn"
-                                        :class="mcp.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
-                                        @click="toggleMcp(mcp.name, !mcp.user_enabled)"
-                                        x-text="mcp.user_enabled ? '已启用' : '启用'">
-                                </button>
-                                <button class="btn btn-outline-secondary" @click="showMcpDetail(mcp)">
-                                    <i class="bi bi-info-circle"></i> 详情
+                <div class="resource-selector" x-ref="mcpSelector">
+                    <button class="resource-btn" :class="{ 'active': activePopup === 'mcp' }" @click.stop="togglePopup('mcp')">
+                        <div class="resource-title">
+                            <i class="bi bi-plug"></i>
+                            MCP Server
+                            <span class="resource-count" x-text="'(' + mcpServers.length + ')'"></span>
+                        </div>
+                        <div class="resource-indicator">
+                            <i class="bi bi-chevron-up" :class="activePopup === 'mcp' ? '' : 'bi-chevron-down'"></i>
+                        </div>
+                    </button>
+                    <div class="resource-popup" :class="{ 'show': activePopup === 'mcp' }" :style="popupStyle.mcp">
+                        <div class="popup-header">
+                            <span class="popup-title">
+                                MCP Server
+                                <span class="selected-count" x-show="mcpServers.filter(m => m.user_enabled).length > 0"
+                                      x-text="'已启用 ' + mcpServers.filter(m => m.user_enabled).length"></span>
+                            </span>
+                            <div class="popup-actions">
+                                <button class="btn" @click="reloadMcpServers()" title="刷新" :class="{ 'loading': loadingMcp }">
+                                    <i class="bi bi-arrow-repeat"></i>
                                 </button>
                             </div>
                         </div>
-                    </template>
-                    <div x-show="mcpServers.length === 0" class="text-center text-muted p-2 small">
-                        暂无MCP Server
+                        <div class="popup-content">
+                            <template x-for="mcp in mcpServers" :key="mcp.name">
+                                <div class="resource-card" :class="{ 'selected': mcp.user_enabled }">
+                                    <div class="resource-card-name" x-text="mcp.name"></div>
+                                    <div class="resource-card-desc" x-text="mcp.description || '暂无描述'"></div>
+                                    <div class="resource-card-actions">
+                                        <button class="btn btn-sm"
+                                                :class="mcp.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
+                                                @click="toggleMcp(mcp.name, !mcp.user_enabled)"
+                                                x-text="mcp.user_enabled ? '已启用' : '启用'">
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="showMcpDetail(mcp)">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="mcpServers.length === 0" class="text-center text-muted py-3" style="font-size: 13px;">
+                                暂无MCP Server
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skill -->
+                <div class="resource-selector" x-ref="skillSelector">
+                    <button class="resource-btn" :class="{ 'active': activePopup === 'skill' }" @click.stop="togglePopup('skill')">
+                        <div class="resource-title">
+                            <i class="bi bi-wrench-adjustable"></i>
+                            Skill
+                            <span class="resource-count" x-text="'(' + skills.length + ')'"></span>
+                        </div>
+                        <div class="resource-indicator">
+                            <i class="bi bi-chevron-up" :class="activePopup === 'skill' ? '' : 'bi-chevron-down'"></i>
+                        </div>
+                    </button>
+                    <div class="resource-popup" :class="{ 'show': activePopup === 'skill' }" :style="popupStyle.skill">
+                        <div class="popup-header">
+                            <span class="popup-title">
+                                Skill
+                                <span class="selected-count" x-show="skills.filter(s => s.user_enabled).length > 0"
+                                      x-text="'已启用 ' + skills.filter(s => s.user_enabled).length"></span>
+                            </span>
+                            <div class="popup-actions">
+                                <button class="btn" @click="reloadSkills()" title="刷新" :class="{ 'loading': loadingSkill }">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="popup-content">
+                            <template x-for="skill in skills" :key="skill.name">
+                                <div class="resource-card" :class="{ 'selected': skill.user_enabled }">
+                                    <div class="resource-card-name" x-text="skill.name"></div>
+                                    <div class="resource-card-desc" x-text="skill.description || '暂无描述'"></div>
+                                    <div class="resource-card-actions">
+                                        <button class="btn btn-sm"
+                                                :class="skill.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
+                                                @click="toggleSkill(skill.name, !skill.user_enabled)"
+                                                x-text="skill.user_enabled ? '已启用' : '启用'">
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="showSkillDetail(skill)">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="skills.length === 0" class="text-center text-muted py-3" style="font-size: 13px;">
+                                暂无Skill
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 知识库 -->
+                <div class="resource-selector" x-ref="kbSelector">
+                    <button class="resource-btn" :class="{ 'active': activePopup === 'kb' }" @click.stop="togglePopup('kb')">
+                        <div class="resource-title">
+                            <i class="bi bi-database"></i>
+                            知识库
+                            <span class="resource-count" x-text="'(' + kbList.length + ')'"></span>
+                        </div>
+                        <div class="resource-indicator">
+                            <i class="bi bi-chevron-up" :class="activePopup === 'kb' ? '' : 'bi-chevron-down'"></i>
+                        </div>
+                    </button>
+                    <div class="resource-popup" :class="{ 'show': activePopup === 'kb' }" :style="popupStyle.kb">
+                        <div class="popup-header">
+                            <span class="popup-title">
+                                知识库
+                                <span class="selected-count" x-show="selectedKbIds.length > 0"
+                                      x-text="'已选择 ' + selectedKbIds.length"></span>
+                            </span>
+                            <div class="popup-actions">
+                                <button class="btn" @click="reloadKbList()" title="刷新" :class="{ 'loading': loadingKb }">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="popup-content">
+                            <template x-for="kb in kbList" :key="kb.id">
+                                <div class="resource-card" :class="{ 'selected': selectedKbIds.includes(kb.id) }">
+                                    <div class="resource-card-name" x-text="kb.name"></div>
+                                    <div class="resource-card-desc" x-text="kb.description || '暂无描述'"></div>
+                                    <div class="resource-card-actions">
+                                        <button class="btn btn-sm"
+                                                :class="selectedKbIds.includes(kb.id) ? 'btn-success' : 'btn-outline-success'"
+                                                @click="toggleKb(kb.id)">
+                                            <i class="bi" :class="selectedKbIds.includes(kb.id) ? 'bi-check-circle-fill' : 'bi-circle'"></i>
+                                            <span x-text="selectedKbIds.includes(kb.id) ? '已选择' : '选择'"></span>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="showKbDetail(kb)">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="kbList.length === 0" class="text-center text-muted py-3" style="font-size: 13px;">
+                                暂无知识库
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Skill -->
-            <div class="resource-dropdown">
-                <div class="resource-header" :class="{ 'expanded': expandedResources.skill }" @click="toggleResource('skill')">
-                    <div>
-                        <i class="bi bi-wrench-adjustable me-1"></i>
-                        <span class="resource-title">Skill</span>
-                        <span class="resource-count ms-1" x-text="'(' + skills.length + ')'"></span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadSkills()" title="刷新">
-                            <i class="bi bi-arrow-repeat"></i>
-                        </button>
-                        <i class="bi" :class="expandedResources.skill ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-                    </div>
+            <!-- 上下文使用情况 -->
+            <div class="context-usage-section">
+                <div class="context-progress-bar">
+                    <div class="progress-fill"
+                         :class="{'warning': contextUsage >= 0.7, 'danger': contextUsage >= 0.9}"
+                         :style="{ width: (contextUsage * 100) + '%' }"></div>
                 </div>
-                <div class="resource-content" :class="{ 'show': expandedResources.skill }">
-                    <template x-for="skill in skills" :key="skill.name">
-                        <div class="resource-card">
-                            <div class="resource-card-name" x-text="skill.name"></div>
-                            <div class="resource-card-desc" x-text="skill.description || '暂无描述'"></div>
-                            <div class="resource-card-actions">
-                                <button class="btn"
-                                        :class="skill.user_enabled ? 'btn-primary' : 'btn-outline-primary'"
-                                        @click="toggleSkill(skill.name, !skill.user_enabled)"
-                                        x-text="skill.user_enabled ? '已启用' : '启用'">
-                                </button>
-                                <button class="btn btn-outline-secondary" @click="showSkillDetail(skill)">
-                                    <i class="bi bi-info-circle"></i> 详情
-                                </button>
-                            </div>
-                        </div>
-                    </template>
-                    <div x-show="skills.length === 0" class="text-center text-muted p-2 small">
-                        暂无Skill
-                    </div>
+                <div class="context-text">
+                    <span class="context-label">上下文</span>
+                    <span class="context-value" x-text="formatContextTokens()"></span>
                 </div>
-            </div>
-
-            <!-- 知识库 -->
-            <div class="resource-dropdown">
-                <div class="resource-header" :class="{ 'expanded': expandedResources.kb }" @click="toggleResource('kb')">
-                    <div>
-                        <i class="bi bi-database me-1"></i>
-                        <span class="resource-title">知识库</span>
-                        <span class="resource-count ms-1" x-text="'(' + kbList.length + ')'"></span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" @click.stop="reloadKbList()" title="刷新">
-                            <i class="bi bi-arrow-repeat"></i>
-                        </button>
-                        <i class="bi" :class="expandedResources.kb ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-                    </div>
-                </div>
-                <div class="resource-content" :class="{ 'show': expandedResources.kb }">
-                    <template x-for="kb in kbList" :key="kb.id">
-                        <div class="resource-card" :class="{ 'selected': selectedKbIds.includes(kb.id) }">
-                            <div class="resource-card-name" x-text="kb.name"></div>
-                            <div class="resource-card-desc" x-text="kb.description || '暂无描述'"></div>
-                            <div class="resource-card-actions">
-                                <button class="btn"
-                                        :class="selectedKbIds.includes(kb.id) ? 'btn-success' : 'btn-outline-success'"
-                                        @click="toggleKb(kb.id)">
-                                    <i class="bi" :class="selectedKbIds.includes(kb.id) ? 'bi-check-circle' : 'bi-circle'"></i>
-                                    <span x-text="selectedKbIds.includes(kb.id) ? '已选择' : '选择'"></span>
-                                </button>
-                                <button class="btn btn-outline-secondary" @click="showKbDetail(kb)">
-                                    <i class="bi bi-info-circle"></i> 详情
-                                </button>
-                            </div>
-                        </div>
-                    </template>
-                    <div x-show="kbList.length === 0" class="text-center text-muted p-2 small">
-                        暂无知识库
-                    </div>
-                </div>
-            </div>
-            </div>
-        </div>
-
-        <!-- 上下文使用情况 -->
-        <div class="context-usage-section">
-            <div class="context-progress-bar">
-                <div class="progress-fill"
-                     :class="{'warning': contextUsage >= 0.7, 'danger': contextUsage >= 0.9}"
-                     :style="{ width: (contextUsage * 100) + '%' }"></div>
-            </div>
-            <div class="context-text d-flex justify-content-between align-items-center mt-2">
-                <small class="text-muted">上下文</small>
-                <span x-text="formatContextTokens()"></span>
             </div>
         </div>
     </div>
@@ -579,24 +1139,29 @@
             <template x-for="msg in messages" :key="msg.id">
                 <div class="message">
                     <div class="message-header">
-                        <span class="badge" :class="msg.role === 'user' ? 'bg-primary' : 'bg-secondary'"
+                        <span class="message-role" :class="msg.role"
                               x-text="msg.role === 'user' ? '用户' : '助手'"></span>
-                        <small class="text-muted" x-text="msg.timestamp"></small>
+                        <span class="message-time" x-text="msg.timestamp"></span>
                     </div>
                     <div class="message-content" :class="msg.role" x-html="formatMessage(msg.content)"></div>
                 </div>
             </template>
-            <div x-show="messages.length === 0 && currentSessionId" class="text-center text-muted p-4">
-                <i class="bi bi-chat-dots fs-3"></i>
-                <p class="mt-2">开始对话吧！</p>
-            </div>
-            <div x-show="!currentSessionId" class="text-center text-muted p-4">
-                <i class="bi bi-hand-index fs-3"></i>
-                <p class="mt-2">请选择或创建一个会话</p>
-            </div>
-            <div x-show="loading" class="text-center p-3">
-                <span class="spinner-border spinner-border-sm"></span>
+
+            <div x-show="loading" class="loading-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
                 <span class="ms-2">思考中...</span>
+            </div>
+
+            <div x-show="messages.length === 0 && currentSessionId" class="empty-state">
+                <i class="bi bi-chat-dots"></i>
+                <p>开始对话吧</p>
+            </div>
+
+            <div x-show="!currentSessionId" class="empty-state">
+                <i class="bi bi-hand-index"></i>
+                <p>请选择或创建一个会话</p>
             </div>
         </div>
 
@@ -625,7 +1190,7 @@
                           rows="1"
                           :disabled="!currentSessionId || loading || uploadingFiles"
                           @input="autoResizeTextarea($event)"></textarea>
-                <button class="btn btn-primary btn-send"
+                <button class="btn btn-send"
                         @click="loading ? stopGeneration() : sendMessage()"
                         :disabled="!currentSessionId || uploadingFiles || (!loading && !inputMessage && pendingFiles.length === 0)"
                         :title="loading ? '停止生成' : '发送消息'">
@@ -638,43 +1203,43 @@
     <!-- 右侧文件列表 -->
     <div class="sidebar-right" x-show="currentSessionId" x-cloak>
         <div class="file-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-folder"></i> 工作目录</span>
-                <div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-outline-primary"
-                            @click="downloadSelectedFiles()"
-                            :disabled="selectedFilePaths.length === 0">
-                        <i class="bi bi-download"></i> 下载
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger"
-                            @click="deleteSelectedFiles()"
-                            :disabled="selectedFilePaths.length === 0">
-                        <i class="bi bi-trash3"></i> 删除
-                    </button>
-                </div>
+            <div class="file-header-title">
+                <i class="bi bi-folder2-open"></i> 工作目录
+            </div>
+            <div class="file-actions">
+                <button class="btn btn-outline-primary"
+                        @click="downloadSelectedFiles()"
+                        :disabled="selectedFilePaths.length === 0">
+                    <i class="bi bi-download"></i> 下载
+                </button>
+                <button class="btn btn-outline-danger"
+                        @click="deleteSelectedFiles()"
+                        :disabled="selectedFilePaths.length === 0">
+                    <i class="bi bi-trash3"></i> 删除
+                </button>
             </div>
         </div>
         <div class="file-list">
             <template x-for="file in files" :key="file.path">
-                <div class="file-item d-flex align-items-center">
-                    <input type="checkbox" class="form-check-input me-2 flex-shrink-0"
+                <div class="file-item">
+                    <input type="checkbox" class="form-check-input"
                            :value="file.path"
                            x-model="selectedFilePaths">
-                    <i class="bi bi-file-earmark text-primary"></i>
-                    <span class="ms-1 text-truncate" x-text="file.name"></span>
-                    <small class="text-muted ms-1 flex-shrink-0" x-text="formatSize(file.size)"></small>
+                    <i class="bi bi-file-earmark file-icon"></i>
+                    <span class="file-name" x-text="file.name"></span>
+                    <small class="file-size" x-text="formatSize(file.size)"></small>
                 </div>
             </template>
-            <div x-show="files.length === 0" class="text-center text-muted p-3">
-                <i class="bi bi-folder2-open"></i>
-                <p class="mt-1 small">暂无文件</p>
+            <div x-show="files.length === 0" class="empty-state" style="padding: 24px;">
+                <i class="bi bi-folder2-open" style="font-size: 32px;"></i>
+                <p style="font-size: 13px;">暂无文件</p>
             </div>
         </div>
 
         <!-- 上传文件按钮 -->
         <div class="sidebar-upload-btn">
             <input type="file" x-ref="sidebarFileInput" multiple hidden @change="uploadFromSidebar($event)">
-            <button class="btn btn-outline-primary w-100"
+            <button class="btn btn-outline-primary"
                     @click="$refs.sidebarFileInput.click()"
                     :disabled="!currentSessionId || uploadingFiles">
                 <i class="bi bi-upload"></i> 上传文件
@@ -690,16 +1255,16 @@
                 <button class="btn-close" @click="showMcpDetailModal = false"></button>
             </div>
             <div class="detail-modal-body" x-show="selectedMcp">
-                <div class="mb-3">
-                    <strong>描述：</strong>
-                    <span x-text="selectedMcp?.description || '暂无描述'"></span>
+                <div class="info-row">
+                    <span class="info-label">描述</span>
+                    <span class="info-value" x-text="selectedMcp?.description || '暂无描述'"></span>
                 </div>
-                <div class="mb-3">
-                    <strong>传输类型：</strong>
-                    <span x-text="selectedMcp?.transport || 'stdio'"></span>
+                <div class="info-row">
+                    <span class="info-label">传输类型</span>
+                    <span class="info-value" x-text="selectedMcp?.transport || 'stdio'"></span>
                 </div>
-                <div class="mb-3">
-                    <strong>状态：</strong>
+                <div class="info-row">
+                    <span class="info-label">状态</span>
                     <span class="badge" :class="selectedMcp?.enabled ? 'bg-success' : 'bg-secondary'"
                           x-text="selectedMcp?.enabled ? '已启用' : '已禁用'"></span>
                 </div>
@@ -715,13 +1280,13 @@
                 <button class="btn-close" @click="showSkillDetailModal = false"></button>
             </div>
             <div class="detail-modal-body" x-show="selectedSkill">
-                <div class="mb-3">
-                    <strong>描述：</strong>
-                    <span x-text="selectedSkill?.description || '暂无描述'"></span>
+                <div class="info-row">
+                    <span class="info-label">描述</span>
+                    <span class="info-value" x-text="selectedSkill?.description || '暂无描述'"></span>
                 </div>
-                <div class="mb-3" x-show="selectedSkill?.metadata?.version">
-                    <strong>版本：</strong>
-                    <span x-text="selectedSkill?.metadata?.version"></span>
+                <div class="info-row" x-show="selectedSkill?.metadata?.version">
+                    <span class="info-label">版本</span>
+                    <span class="info-value" x-text="selectedSkill?.metadata?.version"></span>
                 </div>
             </div>
         </div>
@@ -735,21 +1300,21 @@
                 <button class="btn-close" @click="showKbDetailModal = false"></button>
             </div>
             <div class="detail-modal-body" x-show="selectedKb">
-                <div class="mb-3">
-                    <strong>ID：</strong>
-                    <code x-text="selectedKb?.id"></code>
+                <div class="info-row">
+                    <span class="info-label">ID</span>
+                    <code class="info-value" x-text="selectedKb?.id"></code>
                 </div>
-                <div class="mb-3">
-                    <strong>描述：</strong>
-                    <span x-text="selectedKb?.description || '暂无描述'"></span>
+                <div class="info-row">
+                    <span class="info-label">描述</span>
+                    <span class="info-value" x-text="selectedKb?.description || '暂无描述'"></span>
                 </div>
-                <div class="mb-3">
-                    <strong>文档数：</strong>
-                    <span x-text="selectedKb?.document_count || 0"></span>
+                <div class="info-row">
+                    <span class="info-label">文档数</span>
+                    <span class="info-value" x-text="selectedKb?.document_count || 0"></span>
                 </div>
-                <div class="mb-3" x-show="selectedKb?.created_at">
-                    <strong>创建时间：</strong>
-                    <span x-text="formatDate(selectedKb?.created_at)"></span>
+                <div class="info-row" x-show="selectedKb?.created_at">
+                    <span class="info-label">创建时间</span>
+                    <span class="info-value" x-text="formatDate(selectedKb?.created_at)"></span>
                 </div>
             </div>
         </div>
@@ -770,7 +1335,7 @@ function assistantApp() {
         loading: false,
         creatingSession: false,
         contextUsage: 0,
-        abortController: null,  // 用于取消请求的控制器
+        abortController: null,
 
         // 文件上传状态
         pendingFiles: [],
@@ -785,7 +1350,11 @@ function assistantApp() {
         selectedKbIds: [],
 
         // UI状态
-        expandedResources: { mcp: false, skill: false, kb: false },
+        activePopup: null,
+        popupStyle: { mcp: '', skill: '', kb: '' },
+        loadingMcp: false,
+        loadingSkill: false,
+        loadingKb: false,
         showMcpDetailModal: false,
         showSkillDetailModal: false,
         showKbDetailModal: false,
@@ -821,7 +1390,7 @@ function assistantApp() {
                 const response = await fetch('/api/user/mcp-servers');
                 const data = await response.json();
                 if (data.success) {
-                    this.mcpServers = data.data;
+                    this.mcpServers = data.data || [];
                 }
             } catch (e) {
                 console.error('加载MCP列表失败:', e);
@@ -833,7 +1402,7 @@ function assistantApp() {
                 const response = await fetch('/api/user/skills');
                 const data = await response.json();
                 if (data.success) {
-                    this.skills = data.data;
+                    this.skills = data.data || [];
                 }
             } catch (e) {
                 console.error('加载Skill列表失败:', e);
@@ -866,6 +1435,7 @@ function assistantApp() {
         },
 
         async reloadMcpServers() {
+            this.loadingMcp = true;
             try {
                 const response = await fetch('/api/user/mcp-servers/reload', { method: 'POST' });
                 const data = await response.json();
@@ -878,9 +1448,11 @@ function assistantApp() {
             } catch (e) {
                 Utils.showToast('刷新失败: ' + e.message, 'error');
             }
+            this.loadingMcp = false;
         },
 
         async reloadSkills() {
+            this.loadingSkill = true;
             try {
                 const response = await fetch('/api/skills/reload', { method: 'POST' });
                 const data = await response.json();
@@ -893,9 +1465,11 @@ function assistantApp() {
             } catch (e) {
                 Utils.showToast('刷新失败: ' + e.message, 'error');
             }
+            this.loadingSkill = false;
         },
 
         async reloadKbList() {
+            this.loadingKb = true;
             try {
                 const response = await fetch('/api/kb/reload', { method: 'POST' });
                 const data = await response.json();
@@ -908,10 +1482,43 @@ function assistantApp() {
             } catch (e) {
                 Utils.showToast('刷新失败: ' + e.message, 'error');
             }
+            this.loadingKb = false;
         },
 
-        toggleResource(type) {
-            this.expandedResources[type] = !this.expandedResources[type];
+        togglePopup(type) {
+            if (this.activePopup === type) {
+                this.activePopup = null;
+                return;
+            }
+
+            const refName = type + 'Selector';
+            const el = this.$refs[refName];
+
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                const windowHeight = window.innerHeight;
+                const windowWidth = window.innerWidth;
+
+                let left = rect.left;
+                if (left + 280 > windowWidth) {
+                    left = windowWidth - 290;
+                }
+
+                const popupHeight = 280;
+                const spaceAbove = rect.top;
+
+                if (spaceAbove >= popupHeight) {
+                    this.popupStyle[type] = `bottom: ${windowHeight - rect.top + 8}px; left: ${left}px;`;
+                } else {
+                    this.popupStyle[type] = `top: ${rect.bottom + 8}px; left: ${left}px;`;
+                }
+            }
+
+            this.activePopup = type;
+        },
+
+        closeAllPopups() {
+            this.activePopup = null;
         },
 
         async toggleMcp(name, enabled) {
@@ -1107,22 +1714,18 @@ function assistantApp() {
         async sendMessage() {
             if (!this.currentSessionId || this.loading) return;
 
-            // 先上传待上传的文件
             if (this.pendingFiles.length > 0) {
                 await this.uploadPendingFiles();
             }
 
-            // 如果没有消息内容，不继续发送
             if (!this.inputMessage) return;
 
             const message = this.inputMessage;
             this.inputMessage = '';
             this.loading = true;
 
-            // 创建AbortController
             this.abortController = new AbortController();
 
-            // 添加用户消息
             const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             this.messages.push({
                 id: messageId,
@@ -1190,7 +1793,6 @@ function assistantApp() {
             textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
         },
 
-        // 拖拽处理
         handleDragOver(event) {
             event.preventDefault();
             this.isDragging = true;

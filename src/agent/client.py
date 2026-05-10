@@ -49,6 +49,7 @@ class AIClient:
         self.model = config.get('model', '')
         self.temperature = config.get('temperature', 0.7)
         self.max_tokens = config.get('max_tokens', 4096)
+        logger.debug(f"AIClient初始化: base_url={self.base_url}, model={self.model}, api_key前10位={str(self.api_key)[:10]}...")
 
     def chat(self, messages, temperature=None, max_tokens=None):
         """
