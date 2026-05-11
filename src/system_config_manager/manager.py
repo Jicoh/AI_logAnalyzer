@@ -66,12 +66,10 @@ class SystemConfigManager:
         "orchestrator": {
             "max_rounds": 20,
             "tool_call_limit": 50,
-            "enable_mcp_tools": True,
             "compression_retain_rounds": 5,
             "context_limit": 120000,
             "compression_threshold": 0.8
         },
-        "subagent_api": {},
         "agent": {
             "max_tokens": 60000,
             "max_rounds": 10,

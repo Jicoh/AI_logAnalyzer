@@ -371,4 +371,3 @@ data/sessions/{user_id}/session_{timestamp}_{random}/
 ### API配置
 
 - `orchestrator_api`: 主Agent API配置（base_url, model, temperature, max_tokens, max_context）
-- `subagent_api`: Subagent API配置

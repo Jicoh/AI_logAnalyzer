@@ -261,7 +261,3 @@ def init_default_admin():
         db.session.add(admin)
         db.session.commit()
         logger.info("创建默认管理员账号: Administrator / Admin@9000")
-
-
-# 创建应用实例
-app = create_app()

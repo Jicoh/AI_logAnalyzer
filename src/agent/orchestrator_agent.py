@@ -278,7 +278,6 @@ class OrchestratorAgent:
         orchestrator_config = self.settings_manager.get('orchestrator', {})
         self.max_rounds = orchestrator_config.get('max_rounds', 20)
         self.tool_call_limit = orchestrator_config.get('tool_call_limit', 50)
-        self.enable_mcp_tools = orchestrator_config.get('enable_mcp_tools', True)
         self.compression_retain_rounds = orchestrator_config.get('compression_retain_rounds', 5)
 
         # 上下文限制（从orchestrator配置块读取）
@@ -287,33 +286,6 @@ class OrchestratorAgent:
 
     def get_orchestrator_api_config(self) -> Dict:
         """获取Orchestrator API配置 - 直接使用api配置"""
-        return self.settings_manager.get('api', {})
-
-    def get_subagent_api_config(self, subagent_name: str = None) -> Dict:
-        """
-        获取Subagent API配置
-
-        Args:
-            subagent_name: Subagent名称，如 'log_analyzer'
-
-        Returns:
-            Dict: API配置，按名称查找，没配置则回退到api
-        """
-        if subagent_name:
-            subagent_apis = self.settings_manager.get('subagent_api', {})
-            specific_config = subagent_apis.get(subagent_name, {})
-
-            # 检查是否有有效配置（至少有base_url和api_key）
-            if specific_config.get('base_url') and specific_config.get('api_key'):
-                return {
-                    'base_url': specific_config.get('base_url'),
-                    'api_key': specific_config.get('api_key'),
-                    'model': specific_config.get('model'),
-                    'temperature': specific_config.get('temperature', 0.1),
-                    'max_tokens': specific_config.get('max_tokens', 60000)
-                }
-
-        # 回退到默认api配置
         return self.settings_manager.get('api', {})
 
     def get_prompt_path(self) -> str:
@@ -325,7 +297,7 @@ class OrchestratorAgent:
         """构建工具列表（内置 + MCP）"""
         tools = ORCHESTRATOR_TOOLS.copy()
 
-        if self.enable_mcp_tools and self.mcp_client:
+        if self.mcp_client:
             mcp_tools = self.mcp_client.list_tools()
             tools.extend(mcp_tools)
             logger.debug(f"已加载 {len(mcp_tools)} 个MCP工具")
@@ -852,7 +824,7 @@ class OrchestratorAgent:
             "log_files": log_files,
             "kb_ids": self.session_state.get("kb_ids", []),
             "kb_manager": self.kb_manager,
-            "subagent_api_config": self.get_subagent_api_config(subagent_name),
+            "api_config": self.get_orchestrator_api_config(),
             "user_intent": user_intent or request,
             "user_id": self.user_id
         }

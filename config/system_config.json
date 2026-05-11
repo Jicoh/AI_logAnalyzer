@@ -14,19 +14,9 @@
     "orchestrator": {
         "max_rounds": 20,
         "tool_call_limit": 50,
-        "enable_mcp_tools": true,
         "compression_retain_rounds": 5,
         "context_limit": 120000,
         "compression_threshold": 0.8
-    },
-    "subagent_api": {
-        "log_analyzer": {
-            "base_url": "",
-            "api_key": "",
-            "model": "",
-            "temperature": 0.1,
-            "max_tokens": 60000
-        }
     },
     "agent": {
         "max_tokens": 60000,

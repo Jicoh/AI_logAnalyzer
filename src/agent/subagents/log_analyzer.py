@@ -1416,7 +1416,7 @@ class LogAnalyzerSubagent(SubagentBase):
         log_files = context.get('log_files', [])
         kb_ids = context.get('kb_ids', [])
         user_intent = context.get('user_intent', request)
-        api_config = context.get('subagent_api_config', {})
+        api_config = context.get('api_config', {})
         user_id = context.get('user_id')
 
         if not log_files:
