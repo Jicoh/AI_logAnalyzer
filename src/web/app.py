@@ -64,6 +64,8 @@ def _create_flask_app(resource_dir):
 def _init_database(app, root_dir):
     """初始化数据库。"""
     db_path = os.path.join(root_dir, 'data', 'app.db')
+    # 确保data目录存在
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -120,6 +122,9 @@ def _configure_rate_limits(app, limiter):
     # 认证接口限流
     limiter.limit("5 per minute")(app.view_functions['auth.do_login'])
     limiter.limit("10 per hour")(app.view_functions['auth.do_register'])
+
+    # 用户信息接口放宽限流（页面加载时必调用）
+    limiter.limit("200 per minute")(app.view_functions['auth.get_me'])
 
     # 缓存统计接口放宽限流
     limiter.limit("200 per minute")(app.view_functions['cache_api.get_cache_stats'])

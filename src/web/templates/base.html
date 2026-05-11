@@ -79,36 +79,97 @@
             userInfo: {},
             quotaStatus: {},
             lastQuotaLoad: 0,
+            // 存储监听器引用以便清理
+            visibilityHandler: null,
+            // AbortController用于取消pending请求
+            userInfoAbortController: null,
+            quotaAbortController: null,
+
             init() {
                 this.loadUserInfo();
                 this.loadQuota();
-                // 页面切换回来时刷新存储空间（添加防抖，避免频繁请求）
-                document.addEventListener('visibilitychange', () => {
+
+                // 使用命名函数保存引用，便于清理
+                this.visibilityHandler = () => {
                     if (document.visibilityState === 'visible') {
-                        // 至少间隔3秒才重新加载
                         const now = Date.now();
                         if (now - this.lastQuotaLoad > 3000) {
                             this.loadQuota();
                         }
                     }
-                });
+                };
+                document.addEventListener('visibilitychange', this.visibilityHandler);
             },
+
+            // Alpine.js会在组件销毁时自动调用此方法
+            destroy() {
+                // 清理visibilitychange监听器
+                if (this.visibilityHandler) {
+                    document.removeEventListener('visibilitychange', this.visibilityHandler);
+                    this.visibilityHandler = null;
+                }
+                // 取消pending的请求
+                if (this.userInfoAbortController) {
+                    this.userInfoAbortController.abort();
+                    this.userInfoAbortController = null;
+                }
+                if (this.quotaAbortController) {
+                    this.quotaAbortController.abort();
+                    this.quotaAbortController = null;
+                }
+            },
+
             loadUserInfo() {
-                fetch('/api/auth/me').then(r => r.json()).then(d => {
-                    if(d.success) {
-                        this.userInfo = d.data;
-                    } else {
-                        window.location.href = '/login';
-                    }
-                });
+                // 取消之前的pending请求
+                if (this.userInfoAbortController) {
+                    this.userInfoAbortController.abort();
+                }
+                this.userInfoAbortController = new AbortController();
+
+                fetch('/api/auth/me', { signal: this.userInfoAbortController.signal })
+                    .then(r => {
+                        // 只有 401 (未授权) 才重定向到登录页
+                        // 429 (限流) 或其他错误不应该触发重定向
+                        if (r.status === 401) {
+                            window.location.href = '/login';
+                            throw new Error('Unauthorized');
+                        }
+                        return r.json();
+                    })
+                    .then(d => {
+                        if(d.success) {
+                            this.userInfo = d.data;
+                        }
+                        // 其他错误（如限流）不处理，保留当前用户信息
+                    })
+                    .catch(e => {
+                        if (e.name !== 'AbortError' && e.message !== 'Unauthorized') {
+                            console.error('Failed to load user info:', e);
+                        }
+                    });
             },
+
             loadQuota() {
                 this.lastQuotaLoad = Date.now();
-                fetch('/api/cache/stats').then(r => r.json()).then(d => {
-                    if(d.success) {
-                        this.quotaStatus = d.data.quota || {};
-                    }
-                }).catch(e => console.error('Failed to load quota:', e));
+
+                // 取消之前的pending请求
+                if (this.quotaAbortController) {
+                    this.quotaAbortController.abort();
+                }
+                this.quotaAbortController = new AbortController();
+
+                fetch('/api/cache/stats', { signal: this.quotaAbortController.signal })
+                    .then(r => r.json())
+                    .then(d => {
+                        if(d.success) {
+                            this.quotaStatus = d.data.quota || {};
+                        }
+                    })
+                    .catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error('Failed to load quota:', e);
+                        }
+                    });
             }
         };
     }

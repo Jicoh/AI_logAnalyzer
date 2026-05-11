@@ -983,6 +983,9 @@ function settingsApp() {
         // 缓存统计
         cacheStats: {},
 
+        // IntersectionObserver引用
+        scrollObserver: null,
+
         init() {
             this.loadUserInfo();
             this.loadConfig();
@@ -1023,7 +1026,7 @@ function settingsApp() {
 
         setupScrollObserver() {
             const sections = ['config', 'kb', 'analysis', 'mcp', 'skills', 'cache'];
-            const observer = new IntersectionObserver((entries) => {
+            this.scrollObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         const sectionId = entry.target.id.replace('section-', '');
@@ -1035,8 +1038,16 @@ function settingsApp() {
             }, { threshold: 0.3 });
             sections.forEach(section => {
                 const element = document.getElementById('section-' + section);
-                if (element) observer.observe(element);
+                if (element) this.scrollObserver.observe(element);
             });
+        },
+
+        destroy() {
+            // 清理IntersectionObserver
+            if (this.scrollObserver) {
+                this.scrollObserver.disconnect();
+                this.scrollObserver = null;
+            }
         },
 
         showToast(type, title, message) {
