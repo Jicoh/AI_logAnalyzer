@@ -717,7 +717,7 @@ class LogAnalyzerSubagent(SubagentBase):
             plugin = self.plugin_manager.get_plugin(plugin_id)
             if plugin:
                 try:
-                    analysis = plugin.analyze(log_content)
+                    analysis = plugin.analyze(log_content, source='system')
                     result[plugin_id] = analysis.to_dict()
                 except Exception as e:
                     logger.error(f"插件 {plugin_id} 分析失败: {str(e)}")

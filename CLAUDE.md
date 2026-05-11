@@ -82,7 +82,7 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
 - **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
-- Each plugin implements `BasePlugin` with `analyze(log_content: Dict[str, List[str]])` returning `AnalysisResult`
+- Each plugin implements `BasePlugin` with `analyze(log_content, task_name="", bmc_ip="", date="", source="system")` returning `AnalysisResult` (source='system') or `CliResult` (source='cli')
 - `log_content` is a `{"文件名/相对路径": ["行1", "行2"]}` dictionary, prepared by `read_log_files_to_content(path)`
 - Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
@@ -121,15 +121,21 @@ custom_plugins/my_plugin/
 
 **plugin.py:**
 ```python
-from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem
+from typing import Dict, List, Union
+from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem, CliResult
 
 class MyPlugin(BasePlugin):
-    def analyze(self, log_content: Dict[str, List[str]]) -> AnalysisResult:
+    def analyze(self, log_content: Dict[str, List[str]],
+                task_name: str = "", bmc_ip: str = "", date: str = "",
+                source: str = "system") -> Union[AnalysisResult, CliResult]:
         from datetime import datetime
 
         # log_content 是 {"相对路径": ["行1", "行2"]} 字典
         log_files = list(log_content.keys())
 
+        # 执行分析逻辑...
+
+        # 构建 system 格式返回值
         meta = ResultMeta(
             plugin_id=self.id,
             plugin_name=self.name,
@@ -142,6 +148,20 @@ class MyPlugin(BasePlugin):
         result.add_stats("概览", [
             StatsItem(label="文件数", value=len(log_files), severity="info")
         ])
+
+        # 同时构建 cli 格式返回值
+        cli_result = CliResult(
+            task_name=task_name,
+            bmc_ip=bmc_ip,
+            status='OK',
+            description='正常',
+            log_detail={},
+            date=date
+        )
+
+        # 根据 source 按需返回
+        if source == 'cli':
+            return cli_result
         return result
 
 plugin_class = MyPlugin
