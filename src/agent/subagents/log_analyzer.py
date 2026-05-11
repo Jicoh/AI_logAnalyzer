@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .base import SubagentBase, SubagentResult
 from src.agent.client import AIClient
 from src.utils import get_logger
+from src.utils.file_utils import read_log_files_to_content
 
 logger = get_logger('log_analyzer_subagent')
 
@@ -702,12 +703,21 @@ class LogAnalyzerSubagent(SubagentBase):
         if not self.plugin_manager:
             return {}
 
+        # 将文件路径列表转为日志内容字典
+        log_content: Dict[str, List[str]] = {}
+        for f in log_files:
+            try:
+                with open(f, 'r', encoding='utf-8', errors='ignore') as fh:
+                    log_content[os.path.basename(f)] = fh.read().splitlines()
+            except Exception:
+                pass
+
         result = {}
         for plugin_id in plugin_ids:
             plugin = self.plugin_manager.get_plugin(plugin_id)
             if plugin:
                 try:
-                    analysis = plugin.analyze(log_files)
+                    analysis = plugin.analyze(log_content)
                     result[plugin_id] = analysis.to_dict()
                 except Exception as e:
                     logger.error(f"插件 {plugin_id} 分析失败: {str(e)}")

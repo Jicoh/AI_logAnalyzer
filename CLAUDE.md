@@ -82,8 +82,8 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
 - **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
-- Each plugin implements `BasePlugin` with `analyze(log_content: Dict[str, str])` returning `AnalysisResult`
-- `log_content` is a `{"文件名/相对路径": "文件内容"}` dictionary, prepared by `read_log_files_to_content(path)`
+- Each plugin implements `BasePlugin` with `analyze(log_content: Dict[str, List[str]])` returning `AnalysisResult`
+- `log_content` is a `{"文件名/相对路径": ["行1", "行2"]}` dictionary, prepared by `read_log_files_to_content(path)`
 - Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 - **Standalone CLI**: `plugins/cli_main.py` for script integration
@@ -124,10 +124,10 @@ custom_plugins/my_plugin/
 from plugins.base import BasePlugin, AnalysisResult, ResultMeta, StatsItem
 
 class MyPlugin(BasePlugin):
-    def analyze(self, log_content: Dict[str, str]) -> AnalysisResult:
+    def analyze(self, log_content: Dict[str, List[str]]) -> AnalysisResult:
         from datetime import datetime
 
-        # log_content 是 {"相对路径": "文件内容"} 字典
+        # log_content 是 {"相对路径": ["行1", "行2"]} 字典
         log_files = list(log_content.keys())
 
         meta = ResultMeta(
