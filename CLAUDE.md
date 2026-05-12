@@ -81,12 +81,18 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 - Plugins extend log analysis capabilities
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
 - **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
+- **Example plugins**: `plugins/builtin/example/` (demo plugins for development reference, only loaded in development mode)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
 - Each plugin implements `BasePlugin` with `analyze(log_content, task_name="", bmc_ip="", date="", source="system")` returning `AnalysisResult` (source='system') or `CliResult` (source='cli')
 - `log_content` is a `{"文件名/相对路径": ["行1", "行2"]}` dictionary, prepared by `read_log_files_to_content(path)`
-- Plugin types: CloudBMC, iBMC, LxBMC (used for categorization and selection)
+- Plugin types: CloudBMC, iBMC, LxBMC, example (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 - **Standalone CLI**: `plugins/cli_main.py` for script integration
+
+#### Development Mode
+- Development mode detection: `sys.frozen` (source code = development, packaged exe = production)
+- Example plugins are only loaded in development mode
+- Flask's "WARNING: This is a development server" message is triggered by `debug=True`, independent of plugin development mode detection
 
 #### Section Types
 Plugins can return multiple section types in `AnalysisResult.sections`:
