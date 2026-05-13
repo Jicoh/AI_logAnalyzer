@@ -1003,6 +1003,19 @@ def cmd_cache(args):
     return 1
 
 
+def cmd_serve(args):
+    """启动常驻分析服务。"""
+    from src.serve.server import AnalyzeServer
+
+    host = getattr(args, 'host', '127.0.0.1')
+    port = getattr(args, 'port', 19888)
+    socket_path = getattr(args, 'socket', None)
+
+    server = AnalyzeServer(host=host, port=port, socket_path=socket_path)
+    server.start()
+    return 0
+
+
 def handle_command(args):
     """处理CLI子命令（供main直接调用）"""
     if args.command == 'analyze':
@@ -1025,6 +1038,8 @@ def handle_command(args):
         return cmd_log_rules(args)
     elif args.command == 'cache':
         return cmd_cache(args)
+    elif args.command == 'serve':
+        return cmd_serve(args)
     else:
         return 1
 

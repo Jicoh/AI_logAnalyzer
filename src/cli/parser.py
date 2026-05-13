@@ -123,6 +123,15 @@ def get_parser(include_web=False):
     cache_subparsers.add_parser('clear-results', help='清理分析结果')
     cache_subparsers.add_parser('clear-temp', help='清理临时文件')
 
+    # serve 命令
+    serve_parser = subparsers.add_parser('serve', help='启动常驻分析服务')
+    serve_parser.add_argument('--host', type=str, default='127.0.0.1',
+                              help='TCP绑定地址 (默认: 127.0.0.1)')
+    serve_parser.add_argument('--port', type=int, default=19888,
+                              help='TCP绑定端口 (默认: 19888)')
+    serve_parser.add_argument('--socket', type=str, default=None,
+                              help='Unix socket路径 (仅Linux，优先于TCP)')
+
     # web 命令（仅main.py需要）
     if include_web:
         web_parser = subparsers.add_parser('web', help='启动Web界面')

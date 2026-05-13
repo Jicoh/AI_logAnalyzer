@@ -33,6 +33,11 @@ python main.py plugin list
 python main.py plugin select <category>  # 如 CloudBMC、iBMC 等
 python main.py log-rules list  # 日志规则管理
 python main.py cache stats  # 缓存统计
+
+# 常驻分析服务（高频调用场景）
+python main.py serve                                # 默认 TCP 端口 19888
+python main.py serve --port 9000                    # 自定义端口
+python main.py serve --socket /tmp/ai_log_analyzer.sock  # Linux Unix socket
 ```
 
 ## Architecture
@@ -57,6 +62,7 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Settings Manager | `src/system_config_manager/` | System config (API, BM25, embedding) |
 | User Config | `src/user_config_manager/` | User-level preferences (plugin selection, KB selection) |
 | Knowledge Base | `src/knowledge_base/` | CRUD, BM25+Vector indexing, hybrid search (RRF fusion) |
+| Serve | `src/serve/` | 常驻分析服务，TCP/Unix socket IPC |
 | Agent | `src/agent/` | Prompt building, API calls with streaming |
 | Orchestrator Agent | `src/agent/orchestrator_agent.py` | 主Agent编排器，理解用户意图、调度Subagent/MCP工具 |
 | Log Analyzer Subagent | `src/agent/subagents/log_analyzer.py` | 日志分析Subagent（核心分析引擎，含智能选择） |
@@ -71,6 +77,17 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 | Admin API | `src/web/routes/admin_api.py` | User management, system configuration |
 | Storage | `src/storage/` | User storage quota management |
 | Session Manager | `src/session_manager/` | 智能助手会话管理 |
+
+### Serve（常驻分析服务）
+
+常驻进程模式，通过 TCP/Unix socket 提供高频 IPC 调用能力，避免每次调用启动新进程的开销。
+
+- **启动**: `python main.py serve` 启动常驻服务
+- **监听**: Linux 优先 Unix domain socket，Windows 使用 TCP 端口（默认 19888）
+- **协议**: 4字节长度头 + JSON body
+- **操作**: `analyze`（cli格式分析）、`ping`（心跳）、`shutdown`（关闭）
+- **客户端**: `src/serve/client.py` 无第三方依赖，调用方可直接拷贝使用
+- **进程管理**: 锁文件 `data/.serve.lock` 防止多实例
 
 #### SSE Streaming
 Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`), allowing real-time progress updates during long-running AI analysis.
