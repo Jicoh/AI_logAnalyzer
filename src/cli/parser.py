@@ -38,7 +38,7 @@ def get_parser(include_web=False):
     plugin_subparsers.add_parser('categories', help='按分类查看插件列表')
 
     plugin_select = plugin_subparsers.add_parser('select', help='选择插件（必须指定类别）')
-    plugin_select.add_argument('category', nargs='?', help='插件类别名（CloudBMC/iBMC/LxBMC），不指定则显示当前选择')
+    plugin_select.add_argument('category', nargs='?', help='插件类别名，不指定则显示当前选择')
     plugin_select.add_argument('plugins', nargs='?', help='插件ID列表（逗号分隔），不指定则选择该类别全部插件')
 
     plugin_subparsers.add_parser('selected', help='显示已选择的插件')

@@ -30,7 +30,7 @@ python main.py analyze --format cli --plugin-id <id>  # CLI脚本集成格式（
 echo '{"system.log": ["内容"]}' | python main.py analyze --format cli --plugin-id CloudBMC_00001
 echo '{"system.log": ["内容"]}' | python main.py analyze --format cli --plugin-id CloudBMC_00001 --task-name "任务" --bmc-ip "192.168.1.1" --date "2026-05-09"
 python main.py plugin list
-python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
+python main.py plugin select <category>  # 如 CloudBMC、iBMC 等
 python main.py log-rules list  # 日志规则管理
 python main.py cache stats  # 缓存统计
 ```
@@ -78,12 +78,12 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 ### Plugin System
 - Plugins extend log analysis capabilities
 - **Submodule**: `plugins/` is a git submodule (`log-analyzer-plugins` repo)
-- **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type: CloudBMC/iBMC/LxBMC)
+- **Builtin plugins**: `plugins/builtin/` (core plugins in submodule, organized by plugin_type，由目录结构决定)
 - **Example plugins**: `plugins/builtin/example/` (demo plugins for development reference, only loaded in development mode)
 - **Custom plugins**: `custom_plugins/` (user-defined plugins in main project)
 - Each plugin implements `BasePlugin` with `analyze(log_content, task_name="", bmc_ip="", date="", source="system")` returning `AnalysisResult` (source='system') or `CliResult` (source='cli')
 - `log_content` is a `{"文件名/相对路径": ["行1", "行2"]}` dictionary, prepared by `read_log_files_to_content(path)`
-- Plugin types: CloudBMC, iBMC, LxBMC, example (used for categorization and selection)
+- Plugin types: 由 `builtin/` 下的分类子目录名决定（如 CloudBMC、iBMC、LxBMC、HNT1），example 类型仅开发模式加载
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
 - **CLI Integration**: `main.py analyze --format cli` for script integration (reads JSON from stdin)
 

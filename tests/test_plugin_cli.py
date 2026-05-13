@@ -38,7 +38,7 @@ class TestPluginList:
         assert len(lines) > 0
         # 验证输出格式: [类型] 名称(ID): 描述 (v版本)
         import re
-        pattern = re.compile(r'^\[(CloudBMC|iBMC|LxBMC|example)\] .+\(.+\): .+ \(v.+\)$')
+        pattern = re.compile(r'^\[\w+\] .+\(.+\): .+ \(v.+\)$')
         for line in lines:
             assert pattern.match(line), f"输出格式不匹配: {line}"
 
