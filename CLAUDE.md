@@ -26,15 +26,13 @@ python main.py kb add --kb-id <id> --file <document>
 python main.py analyze <path>                       # 插件分析（无AI）
 python main.py analyze <path> --ai                  # 插件分析+AI分析
 python main.py analyze <path> --log-rules <rules_id>  # 使用日志规则辅助分析
+python main.py analyze --format cli --plugin-id <id>  # CLI脚本集成格式（从stdin读JSON）
+echo '{"system.log": ["内容"]}' | python main.py analyze --format cli --plugin-id CloudBMC_00001
+echo '{"system.log": ["内容"]}' | python main.py analyze --format cli --plugin-id CloudBMC_00001 --task-name "任务" --bmc-ip "192.168.1.1" --date "2026-05-09"
 python main.py plugin list
 python main.py plugin select <category>  # CloudBMC/iBMC/LxBMC
 python main.py log-rules list  # 日志规则管理
 python main.py cache stats  # 缓存统计
-
-# 插件独立CLI（脚本集成用）
-python plugins/cli_main.py plugin list
-echo '{"system.log": "内容"}' | python plugins/cli_main.py analyze --plugin-id CloudBMC_00001
-echo '{"system.log": "内容"}' | python plugins/cli_main.py analyze --plugin-id CloudBMC_00001 --task-name "任务" --bmc-ip "192.168.1.1" --date "2026-05-09"
 ```
 
 ## Architecture
@@ -87,7 +85,7 @@ Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`)
 - `log_content` is a `{"文件名/相对路径": ["行1", "行2"]}` dictionary, prepared by `read_log_files_to_content(path)`
 - Plugin types: CloudBMC, iBMC, LxBMC, example (used for categorization and selection)
 - **HTML Renderer**: `plugins/renderer/` converts plugin results to static HTML
-- **Standalone CLI**: `plugins/cli_main.py` for script integration
+- **CLI Integration**: `main.py analyze --format cli` for script integration (reads JSON from stdin)
 
 #### Development Mode
 - Development mode detection: `sys.frozen` (source code = development, packaged exe = production)

@@ -17,8 +17,14 @@ def get_parser(include_web=False):
 
     # analyze 命令
     analyze_parser = subparsers.add_parser('analyze', help='分析日志文件或目录')
-    analyze_parser.add_argument('path', help='日志文件或目录路径')
-    analyze_parser.add_argument('--plugins', help='指定插件ID，多个用逗号分隔')
+    analyze_parser.add_argument('path', nargs='?', help='日志文件或目录路径（cli格式时不需要）')
+    analyze_parser.add_argument('--format', choices=['system', 'cli'], default='system',
+                                help='输出格式: system=Web格式(默认), cli=脚本集成格式')
+    analyze_parser.add_argument('--plugin-id', help='插件ID（cli格式必填）')
+    analyze_parser.add_argument('--task-name', default='', help='任务名称（cli格式）')
+    analyze_parser.add_argument('--bmc-ip', default='', help='BMC IP地址（cli格式）')
+    analyze_parser.add_argument('--date', default='', help='日期（cli格式）')
+    analyze_parser.add_argument('--plugins', help='指定插件ID，多个用逗号分隔（system格式）')
     analyze_parser.add_argument('--kb', '-k', help='知识库ID')
     analyze_parser.add_argument('--prompt', '-p', help='用户提示词（配合--ai使用）')
     analyze_parser.add_argument('--ai', action='store_true', help='启用AI分析')

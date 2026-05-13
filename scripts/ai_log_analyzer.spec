@@ -18,7 +18,6 @@ a = Analysis(
     datas=[
         # 配置文件（打包到exe内部作为默认值）
         (os.path.join(project_root, 'config/*.json'), 'config'),
-        (os.path.join(project_root, 'config/*.txt'), 'config'),
         # Web模板和静态文件
         (os.path.join(project_root, 'src/web/templates'), 'src/web/templates'),
         (os.path.join(project_root, 'src/web/static'), 'src/web/static'),
@@ -31,7 +30,6 @@ a = Analysis(
         (os.path.join(project_root, 'plugins/builtin'), 'plugins/builtin'),
         (os.path.join(project_root, 'plugins/renderer'), 'plugins/renderer'),
         (os.path.join(project_root, 'plugins/README.md'), 'plugins'),
-        (os.path.join(project_root, 'plugins/plugin_dependencies.json'), 'plugins'),
         # 自定义插件目录（空目录占位）
         (os.path.join(project_root, 'custom_plugins/__init__.py'), 'custom_plugins'),
     ],
@@ -101,7 +99,8 @@ a = Analysis(
         'flask_sqlalchemy',
         'sqlalchemy',
         'src.cli.parser',
-        'src.cli.handler'],
+        'src.cli.handler',
+        'python-dateutil'],
     hookspath=[os.path.join(project_root, 'hooks')],
     hooksconfig={},
     runtime_hooks=[os.path.join(project_root, 'hooks/runtime_hook.py')],

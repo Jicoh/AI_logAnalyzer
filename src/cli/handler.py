@@ -79,6 +79,41 @@ def display_plugin_result(result: Dict):
                 print(f"  {label}: {value}")
 
 
+def cmd_analyze_cli(args):
+    """CLI格式的分析命令，从stdin读取JSON，返回CliResult列表"""
+    import json as json_module
+
+    if not args.plugin_id:
+        print("错误: cli格式必须指定 --plugin-id", file=sys.stderr)
+        return 1
+
+    # 从stdin读取日志内容JSON
+    try:
+        input_data = sys.stdin.read()
+        log_content = json_module.loads(input_data)
+    except json_module.JSONDecodeError as e:
+        print(f"错误: 日志内容JSON解析失败: {e}", file=sys.stderr)
+        return 1
+
+    if not isinstance(log_content, dict):
+        print("错误: 日志内容必须是字典格式", file=sys.stderr)
+        return 1
+
+    # 初始化插件管理器
+    plugin_manager = _get_cli_plugin_manager()
+
+    result = plugin_manager.run_analysis(
+        source='cli',
+        plugin_ids=[args.plugin_id],
+        log_content=log_content,
+        task_name=args.task_name or "",
+        bmc_ip=args.bmc_ip or "",
+        date=args.date or ""
+    )
+    print(json_module.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def cmd_analyze(args):
     """分析日志命令"""
     logger.debug(f"开始分析日志: {args.path}")
@@ -439,10 +474,9 @@ def cmd_plugin(args):
         if not plugins:
             print("暂无可用插件")
             return 0
-        print("可用插件列表:")
         for plugin in plugins:
             plugin_type = plugin.get_plugin_type()
-            print(f"  [{plugin_type}] {plugin.id}: {plugin.get_chinese_description()} (v{plugin.get_version()})")
+            print(f"[{plugin_type}] {plugin.name}({plugin.id}): {plugin.get_chinese_description()} (v{plugin.get_version()})")
         return 0
 
     if args.plugin_action == 'categories':
@@ -972,6 +1006,11 @@ def cmd_cache(args):
 def handle_command(args):
     """处理CLI子命令（供main直接调用）"""
     if args.command == 'analyze':
+        if getattr(args, 'format', 'system') == 'cli':
+            return cmd_analyze_cli(args)
+        if not args.path:
+            print("错误: 请指定日志文件或目录路径", file=sys.stderr)
+            return 1
         if os.path.isdir(args.path):
             return cmd_analyze_batch(args)
         else:
