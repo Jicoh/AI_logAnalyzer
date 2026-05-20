@@ -3,7 +3,7 @@
 """
 
 from src.utils import get_logger
-from plugins.manager import get_plugin_manager
+from src.agent import AgentService
 from plugins.base import CliResult
 
 logger = get_logger('serve_handler')
@@ -13,16 +13,16 @@ class RequestHandler:
     """处理客户端请求。"""
 
     def __init__(self):
-        self._plugin_manager = None
+        self._agent_service = None
         self._server = None
 
     def set_server(self, server):
         """设置 server 引用，用于 shutdown 操作。"""
         self._server = server
 
-    def _ensure_plugin_manager(self):
-        """延迟初始化 PluginManager。"""
-        if self._plugin_manager is None:
+    def _ensure_agent_service(self):
+        """延迟初始化 AgentService。"""
+        if self._agent_service is None:
             import os
             import sys
 
@@ -32,10 +32,11 @@ class RequestHandler:
                 root_dir = os.path.dirname(sys.executable)
 
             custom_plugins_dir = os.path.join(root_dir, 'custom_plugins')
-            self._plugin_manager = get_plugin_manager(
-                custom_dirs=[custom_plugins_dir])
+            self._agent_service = AgentService()
+            # 延迟初始化 plugin_manager 以加载自定义插件
+            _ = self._agent_service.plugin_manager
             logger.info(f"插件已加载: "
-                        f"{[p.id for p in self._plugin_manager.get_all_plugins()]}")
+                        f"{[p.id for p in self._agent_service.plugin_manager.get_all_plugins()]}")
 
     def handle(self, request: dict) -> dict:
         """处理请求，返回响应字典。"""
@@ -56,7 +57,7 @@ class RequestHandler:
 
     def _handle_analyze(self, request: dict) -> dict:
         """处理分析请求。"""
-        self._ensure_plugin_manager()
+        self._ensure_agent_service()
 
         plugin_id = request.get('plugin_id', '')
         log_content = request.get('log_content')
@@ -71,16 +72,16 @@ class RequestHandler:
             return {'status': 'error', 'message': '缺少 log_content'}
 
         # 验证插件存在
-        plugin = self._plugin_manager.get_plugin(plugin_id)
+        plugin = self._agent_service.plugin_manager.get_plugin(plugin_id)
         if not plugin:
-            available = [p.id for p in self._plugin_manager.get_all_plugins()]
+            available = [p.id for p in self._agent_service.plugin_manager.get_all_plugins()]
             return {
                 'status': 'error',
                 'message': f'插件不存在: {plugin_id}，可用插件: {available}'
             }
 
         try:
-            result = self._plugin_manager.run_analysis(
+            result = self._agent_service.run_plugin_only(
                 source='cli',
                 plugin_ids=[plugin_id],
                 log_content=log_content,

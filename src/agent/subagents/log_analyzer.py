@@ -308,7 +308,7 @@ class ToolExecutor:
             return {"error": "知识库未配置", "available": False}
 
         try:
-            results = self.kb_manager.search(self.kb_id, query, top_k=3)
+            results = self.kb_manager.search(self.kb_id, query, top_n=3)
             chunks = []
             for r in results:
                 chunk = r.get('chunk', {})

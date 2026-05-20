@@ -8,7 +8,7 @@ from datetime import datetime
 from flask import Blueprint, request, Response, stream_with_context, jsonify
 from flask_login import current_user
 
-from src.agent.subagents.log_analyzer import LogAnalyzerSubagent
+from src.agent import AgentService
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.log_metadata.manager import LogMetadataManager
 from src.system_config_manager.manager import SystemConfigManager
@@ -165,14 +165,14 @@ def run_ai_analysis(
     Returns:
         dict: AI 分析结果信息，包含 html_path 和 analysis_time
     """
-    subagent = LogAnalyzerSubagent(
+    agent_service = AgentService(
         config_manager=get_settings_manager(),
         kb_manager=get_kb_manager(),
         log_metadata_manager=get_log_metadata_manager(),
         plugin_manager=get_plugin_manager_with_custom()
     )
 
-    result = subagent.analyze(
+    result = agent_service.analyze(
         log_files=log_file_paths,
         plugin_result=plugin_result,
         kb_ids=kb_ids or [],

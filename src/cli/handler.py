@@ -13,7 +13,7 @@ from src.cli.parser import get_parser
 
 from src.system_config_manager import SystemConfigManager
 from src.knowledge_base import KnowledgeBaseManager
-from src.agent.subagents.log_analyzer import LogAnalyzerSubagent
+from src.agent import AgentService
 from src.log_metadata import LogMetadataManager
 from src.utils import read_file, write_json, ensure_dir, get_logger
 from src.utils.file_utils import (
@@ -312,16 +312,16 @@ def _run_cli_ai_analysis(
         if log_rules_id:
             log_metadata_manager.set_active_rules(log_rules_id)
 
-        subagent = LogAnalyzerSubagent(
+        agent_service = AgentService(
             config_manager=settings_manager,
             kb_manager=kb_manager,
             log_metadata_manager=log_metadata_manager,
             plugin_manager=plugin_manager
         )
-        result = subagent.analyze(
+        result = agent_service.analyze(
             log_files=log_file_paths,
             plugin_result=plugin_result,
-            kb_id=kb_id,
+            kb_ids=[kb_id] if kb_id else None,
             user_prompt=user_prompt,
             log_rules_id=log_rules_id
         )
@@ -757,16 +757,16 @@ def _run_batch_ai_analysis(
             if log_rules_id:
                 log_metadata_manager.set_active_rules(log_rules_id)
 
-        subagent = LogAnalyzerSubagent(
+        agent_service = AgentService(
             config_manager=settings_manager,
             kb_manager=kb_manager,
             log_metadata_manager=log_metadata_manager,
             plugin_manager=plugin_manager
         )
-        result = subagent.analyze(
+        result = agent_service.analyze(
             log_files=log_files,
             plugin_result=plugin_result,
-            kb_id=kb_id,
+            kb_ids=[kb_id] if kb_id else None,
             user_prompt=user_prompt,
             log_rules_id=log_rules_id
         )

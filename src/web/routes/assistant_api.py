@@ -12,7 +12,7 @@ from flask_login import current_user
 
 from src.auth.decorators import login_required
 from src.session_manager.manager import SessionManager
-from src.agent.orchestrator_agent import OrchestratorAgent
+from src.agent import AgentService
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
 from src.user_config_manager.manager import UserConfigManager
@@ -494,28 +494,20 @@ def chat(session_id):
             kb_context = retrieve_knowledge_context(kb_manager, kb_ids, user_input)
             logger.debug(f"知识库检索结果: {len(kb_context)}字符")
 
-        # 初始化OrchestratorAgent
-        plugin_manager = get_plugin_manager()
-        log_metadata_manager = LogMetadataManager()
-        agent = OrchestratorAgent(
-            user_id=user_id,
-            session_id=session_id,
-            settings_manager=settings_manager,
-            kb_manager=kb_manager,
-            plugin_manager=plugin_manager,
-            log_metadata_manager=log_metadata_manager
+        # 初始化AgentService
+        agent_service = AgentService(
+            config_manager=settings_manager,
+            kb_manager=kb_manager
         )
 
-        # 设置知识库上下文
-        if kb_context:
-            agent.set_kb_context(kb_context)
-
-        # 设置知识库ID给Subagent使用
-        if kb_ids:
-            agent.set_kb_ids(kb_ids)
-
         # 调用chat方法
-        response, metadata = agent.chat(user_input)
+        response, metadata = agent_service.chat(
+            session_id=session_id,
+            user_input=user_input,
+            user_id=user_id,
+            kb_context=kb_context,
+            kb_ids=kb_ids
+        )
 
         logger.debug(f"对话完成: session={session_id}, context_usage={metadata.get('context_usage', 0)}")
 
@@ -553,7 +545,7 @@ def retrieve_knowledge_context(kb_manager, kb_ids, query):
                 continue
 
             # 执行检索
-            results = kb_manager.search(kb_id, query, top_k=3)
+            results = kb_manager.search(kb_id, query, top_n=3)
 
             if results:
                 kb_name = kb_info.get('name', kb_id)
@@ -616,27 +608,20 @@ def chat_stream(session_id):
             if kb_ids:
                 kb_context = retrieve_knowledge_context(kb_manager, kb_ids, user_input)
 
-            # 初始化Agent
-            plugin_manager = get_plugin_manager()
-            log_metadata_manager = LogMetadataManager()
-            agent = OrchestratorAgent(
-                user_id=user_id,
-                session_id=session_id,
-                settings_manager=settings_manager,
-                kb_manager=kb_manager,
-                plugin_manager=plugin_manager,
-                log_metadata_manager=log_metadata_manager
+            # 初始化AgentService
+            agent_service = AgentService(
+                config_manager=settings_manager,
+                kb_manager=kb_manager
             )
 
-            if kb_context:
-                agent.set_kb_context(kb_context)
-
-            # 设置知识库ID给Subagent使用
-            if kb_ids:
-                agent.set_kb_ids(kb_ids)
-
             # 流式调用
-            for chunk in agent.chat_stream(user_input):
+            for chunk in agent_service.chat_stream(
+                session_id=session_id,
+                user_input=user_input,
+                user_id=user_id,
+                kb_context=kb_context,
+                kb_ids=kb_ids
+            ):
                 yield generate_sse_event({'content': chunk})
 
             yield generate_sse_event({'done': True})
