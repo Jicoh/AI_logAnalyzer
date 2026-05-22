@@ -3,7 +3,7 @@
 """
 
 from src.utils import get_logger
-from src.agent import AgentService
+from src.agent.service import AgentService
 from plugins.base import CliResult
 
 logger = get_logger('serve_handler')

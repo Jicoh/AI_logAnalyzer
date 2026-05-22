@@ -38,6 +38,10 @@ python main.py cache stats  # 缓存统计
 python main.py serve                                # 默认 TCP 端口 19888
 python main.py serve --port 9000                    # 自定义端口
 python main.py serve --socket /tmp/ai_log_analyzer.sock  # Linux Unix socket
+
+# 打包
+python scripts/build_package.py           # 打包全功能二进制 ai_log_analyzer
+python scripts/build_package.py serve     # 打包常驻服务二进制 log_analyze_serve
 ```
 
 ## Architecture
@@ -88,6 +92,10 @@ This is a BMC server log analysis tool that uses AI to identify problems and sug
 - **操作**: `analyze`（cli格式分析）、`ping`（心跳）、`shutdown`（关闭）
 - **客户端**: `src/serve/client.py` 无第三方依赖，调用方可直接拷贝使用
 - **进程管理**: 锁文件 `data/.serve.lock` 防止多实例
+
+#### Serve 专属二进制
+
+打包 `python scripts/build_package.py serve` 生成 `log_analyze_serve`，仅支持 `serve` 命令，无 Web/CLI 分析等功能，体积更小启动更快。
 
 #### SSE Streaming
 Analysis results stream to web UI via Server-Sent Events (`/api/analyze/stream`), allowing real-time progress updates during long-running AI analysis.

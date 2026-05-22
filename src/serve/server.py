@@ -215,7 +215,7 @@ class AnalyzeServer:
         self._write_lock_file(address_info)
 
         # 预加载插件
-        self._handler._ensure_plugin_manager()
+        self._handler._ensure_agent_service()
 
         # 注册信号处理
         def signal_handler(signum, frame):

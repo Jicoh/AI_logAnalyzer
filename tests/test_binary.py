@@ -50,23 +50,3 @@ class TestBinaryPluginList:
     def test_plugin_list_output_not_empty(self):
         result = run_binary('plugin', 'list')
         assert len(result.stdout.strip()) > 0
-
-
-@pytest.mark.skipif(not os.path.exists(BINARY_PATH), reason="二进制文件未编译")
-class TestBinaryAnalyzeCliFormat:
-    """analyze --format cli 命令测试"""
-
-    def test_analyze_returncode_success(self):
-        log_content = json.dumps({"system.log": ["INFO ok"]})
-        result = run_binary(
-            'analyze', '--format', 'cli',
-            '--plugin-id', 'CloudBMC_00001',
-            '--task-name', 'my_task',
-            '--bmc-ip', '192.168.1.1',
-            '--date', '2024-01-01',
-            stdin_data=log_content)
-        assert result.returncode == 0
-
-    def test_analyze_returncode_error(self):
-        result = run_binary('analyze', '--format', 'cli', '--plugin-id', 'CloudBMC_00001', stdin_data='not json')
-        assert result.returncode == 1

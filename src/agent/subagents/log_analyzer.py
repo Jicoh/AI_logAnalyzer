@@ -9,7 +9,14 @@ import re
 import html
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+# jinja2 为可选依赖，用于HTML模板渲染
+# 如果不可用，将使用 fallback HTML 生成
+try:
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    JINJA2_AVAILABLE = True
+except ImportError:
+    JINJA2_AVAILABLE = False
 
 from .base import SubagentBase, SubagentResult
 from src.agent.client import AIClient
@@ -426,6 +433,9 @@ class LogAnalyzerSubagent(SubagentBase):
     def load_template(self):
         """加载HTML模板（启用自动转义防止XSS）"""
         if self.html_template is None:
+            if not JINJA2_AVAILABLE:
+                # jinja2 不可用时，使用 fallback HTML 生成
+                return
             template_path = self.get_template_path()
             if os.path.exists(template_path):
                 template_dir = os.path.dirname(template_path)

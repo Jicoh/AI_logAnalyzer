@@ -4,9 +4,10 @@
 打包脚本 - 生成可分发的AI日志分析器
 
 用法:
-    python scripts/build_package.py
+    python scripts/build_package.py           # 打包全功能二进制 ai_log_analyzer
+    python scripts/build_package.py serve     # 打包常驻服务二进制 log_analyze_serve
 
-打包结果位于: dist/AI_Log_Analyzer/
+打包结果位于: dist/AI_Log_Analyzer/ 或 dist/AI_Log_Analyzer_Serve/
 """
 
 import os
@@ -16,6 +17,7 @@ import sys
 import json
 import re
 import platform
+import argparse
 
 # 根据操作系统确定可执行文件后缀
 EXE_SUFFIX = '.exe' if platform.system() == 'Windows' else ''
@@ -76,13 +78,46 @@ def update_spec_file(spec_file, plugin_deps):
         f.write(content)
 
 
+# ---- 构建配置 ----
+
+BUILD_CONFIGS = {
+    None: {
+        'name': '全功能版',
+        'spec_file': 'ai_log_analyzer.spec',
+        'exe_name': 'ai_log_analyzer',
+        'dist_dir': 'AI_Log_Analyzer',
+        'data_dirs': ['uploads', 'temp', 'analysis_output', 'users'],
+        'create_document_dir': True,
+        'usage_func': 'create_usage_file',
+    },
+    'serve': {
+        'name': '常驻服务版',
+        'spec_file': 'ai_log_analyzer_serve.spec',
+        'exe_name': 'log_analyze_serve',
+        'dist_dir': 'AI_Log_Analyzer_Serve',
+        'data_dirs': ['temp'],
+        'create_document_dir': True,
+        'usage_func': 'create_serve_usage_file',
+    },
+}
+
+
 def main():
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='AI日志分析器打包脚本')
+    parser.add_argument('mode', nargs='?', default=None,
+                        choices=['serve'],
+                        help='打包模式: 不指定=全功能版, serve=常驻服务版')
+    args = parser.parse_args()
+
+    config = BUILD_CONFIGS[args.mode]
+
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    dist_dir = os.path.join(project_root, 'dist', 'AI_Log_Analyzer')
-    exe_path = os.path.join(project_root, 'dist', f'ai_log_analyzer{EXE_SUFFIX}')
+    dist_dir = os.path.join(project_root, 'dist', config['dist_dir'])
+    exe_path = os.path.join(project_root, 'dist', f"{config['exe_name']}{EXE_SUFFIX}")
 
     print("=" * 50)
-    print("AI日志分析器打包脚本")
+    print(f"AI日志分析器打包脚本 - {config['name']}")
     print("=" * 50)
 
     # 1. 检查PyInstaller是否安装
@@ -100,7 +135,7 @@ def main():
         shutil.rmtree(cache_dir)
         print(f"  删除: {cache_dir}")
 
-    spec_file = os.path.join(project_root, 'scripts', 'ai_log_analyzer.spec')
+    spec_file = os.path.join(project_root, 'scripts', config['spec_file'])
 
     # 读取插件依赖并更新 .spec 文件
     print("\n[1/8] 读取插件依赖配置...")
@@ -135,10 +170,10 @@ def main():
     # 移动exe到最终目录
     print("\n[3/8] 移动exe到最终目录...")
     os.makedirs(dist_dir, exist_ok=True)
-    final_exe_path = os.path.join(dist_dir, f'ai_log_analyzer{EXE_SUFFIX}')
+    final_exe_path = os.path.join(dist_dir, f"{config['exe_name']}{EXE_SUFFIX}")
     if os.path.exists(exe_path):
         shutil.move(exe_path, final_exe_path)
-        print(f"  移动: ai_log_analyzer{EXE_SUFFIX} -> {final_exe_path}")
+        print(f"  移动: {config['exe_name']}{EXE_SUFFIX} -> {final_exe_path}")
     else:
         print(f"  错误: 找不到exe文件 {exe_path}")
         sys.exit(1)
@@ -157,16 +192,16 @@ def main():
 
     # 4. 创建空的数据目录
     print("\n[5/8] 创建数据目录...")
-    data_dirs = ['uploads', 'temp', 'analysis_output', 'users']
-    for d in data_dirs:
+    for d in config['data_dirs']:
         data_path = os.path.join(dist_dir, 'data', d)
         os.makedirs(data_path, exist_ok=True)
         print(f"  创建: data/{d}")
 
     # 5. 创建空的document和custom_plugins目录
     print("\n[6/8] 创建其他目录...")
-    os.makedirs(os.path.join(dist_dir, 'document'), exist_ok=True)
-    print("  创建: document/")
+    if config['create_document_dir']:
+        os.makedirs(os.path.join(dist_dir, 'document'), exist_ok=True)
+        print("  创建: document/")
 
     custom_plugins_dir = os.path.join(dist_dir, 'custom_plugins')
     os.makedirs(custom_plugins_dir, exist_ok=True)
@@ -179,7 +214,10 @@ def main():
 
     # 7. 创建使用说明
     print("\n[7/8] 创建使用说明...")
-    create_usage_file(dist_dir, EXE_SUFFIX)
+    if config['usage_func'] == 'create_serve_usage_file':
+        create_serve_usage_file(dist_dir, EXE_SUFFIX)
+    else:
+        create_usage_file(dist_dir, EXE_SUFFIX)
     print("  创建: 使用说明.txt")
 
     # 8. 清理打包临时文件
@@ -201,9 +239,14 @@ def main():
     print("打包完成!")
     print("=" * 50)
     print(f"输出目录: {dist_dir}")
+    print(f"可执行文件: {config['exe_name']}{EXE_SUFFIX}")
     print("\n使用方法:")
-    print(f"  1. 运行 ./ai_log_analyzer{EXE_SUFFIX} 启动Web界面")
-    print("  2. 配置API后即可使用AI分析功能")
+    if args.mode == 'serve':
+        print(f"  1. 运行 ./{config['exe_name']}{EXE_SUFFIX} 启动分析服务")
+        print("  2. 配置API后即可使用AI分析功能")
+    else:
+        print(f"  1. 运行 ./{config['exe_name']}{EXE_SUFFIX} 启动Web界面")
+        print("  2. 配置API后即可使用AI分析功能")
     print("=" * 50)
 
 
@@ -296,6 +339,88 @@ def create_usage_file(dist_dir, exe_suffix):
 - 压缩包: .zip, .tar.gz, .tgz, .tar
 - 日志文件: .log, .txt
 - JSON日志集: .json (包含日志文件列表)
+
+================================================================================
+如有问题，请查看项目文档或联系开发者。
+"""
+    usage_file = os.path.join(dist_dir, '使用说明.txt')
+    with open(usage_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+
+def create_serve_usage_file(dist_dir, exe_suffix):
+    exe_name = f'log_analyze_serve{exe_suffix}'
+    content = f"""AI日志分析器 - 常驻分析服务 使用说明
+
+================================================================================
+一、启动方式
+================================================================================
+
+1. 默认启动（TCP模式）:
+   {exe_name}
+   {exe_name} serve
+
+2. 自定义TCP端口:
+   {exe_name} serve --port 9000
+
+3. 自定义绑定地址:
+   {exe_name} serve --host 0.0.0.0 --port 19888
+
+4. Unix socket模式（仅Linux）:
+   {exe_name} serve --socket /tmp/ai_log_analyzer.sock
+
+================================================================================
+二、客户端调用
+================================================================================
+
+使用 src/serve/client.py 中的 AnalyzeClient 连接服务:
+
+   from src.serve.client import AnalyzeClient
+
+   # TCP 连接
+   client = AnalyzeClient(port=19888)
+
+   # Unix socket 连接
+   client = AnalyzeClient(socket_path='/tmp/ai_log_analyzer.sock')
+
+   # 心跳检测
+   client.ping()
+
+   # 执行分析
+   result = client.analyze(
+       plugin_id='CloudBMC_00001',
+       log_content={{'system.log': ['日志行1', '日志行2']}},
+       task_name='任务名称',
+       bmc_ip='192.168.1.1',
+       date='2024-01-01'
+   )
+
+客户端代码无第三方依赖，可直接拷贝使用。
+
+================================================================================
+三、首次使用配置
+================================================================================
+
+首次使用需要配置AI API，编辑配置文件:
+   打开 config/system_config.json 文件，修改 api 部分的配置
+
+================================================================================
+四、自定义插件
+================================================================================
+
+将自定义插件放入 custom_plugins/ 目录
+每个插件需要包含:
+- plugin.py: 插件实现代码
+- plugin.json: 插件元数据
+
+================================================================================
+五、注意事项
+================================================================================
+
+- 本程序仅支持 serve 命令（常驻分析服务），不支持 Web 界面和 CLI 分析
+- Linux 优先使用 Unix socket，Windows 使用 TCP 端口
+- 默认锁文件位于 data/.serve.lock，防止多实例运行
+- 支持信号退出: Ctrl+C 或 kill 命令
 
 ================================================================================
 如有问题，请查看项目文档或联系开发者。

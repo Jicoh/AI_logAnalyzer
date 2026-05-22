@@ -34,7 +34,7 @@ ENV/
 .vscode/
 *.swp
 *.swo
-.codemate/
+.codemate
 
 # Project specific
 data/

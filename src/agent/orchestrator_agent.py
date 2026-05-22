@@ -17,8 +17,18 @@ from .tools.log_file_tool import upload_log_file as upload_log_file_tool, prepar
 from src.session_manager.manager import SessionManager
 from src.system_config_manager.manager import SystemConfigManager
 from src.knowledge_base.manager import KnowledgeBaseManager
-from src.models.user import User, db
-from src.models.token_usage import TokenUsage
+
+# 数据库模型为可选依赖，仅Web模式需要
+try:
+    from src.models.user import User, db
+    from src.models.token_usage import TokenUsage
+    DB_MODELS_AVAILABLE = True
+except ImportError:
+    DB_MODELS_AVAILABLE = False
+    User = None
+    db = None
+    TokenUsage = None
+
 from src.utils import get_logger
 
 logger = get_logger('orchestrator_agent')
@@ -252,6 +262,10 @@ class OrchestratorAgent:
         Args:
             tokens: 使用的token数量
         """
+        if not DB_MODELS_AVAILABLE:
+            # 非Web模式跳过数据库记录
+            return
+
         try:
             user = User.query.filter_by(employee_id=self.user_id).first()
             if user:
