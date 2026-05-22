@@ -15,6 +15,10 @@ import subprocess
 import sys
 import json
 import re
+import platform
+
+# 根据操作系统确定可执行文件后缀
+EXE_SUFFIX = '.exe' if platform.system() == 'Windows' else ''
 
 
 def load_plugin_dependencies(project_root):
@@ -75,7 +79,7 @@ def update_spec_file(spec_file, plugin_deps):
 def main():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dist_dir = os.path.join(project_root, 'dist', 'AI_Log_Analyzer')
-    exe_path = os.path.join(project_root, 'dist', 'ai_log_analyzer.exe')
+    exe_path = os.path.join(project_root, 'dist', f'ai_log_analyzer{EXE_SUFFIX}')
 
     print("=" * 50)
     print("AI日志分析器打包脚本")
@@ -131,10 +135,10 @@ def main():
     # 移动exe到最终目录
     print("\n[3/8] 移动exe到最终目录...")
     os.makedirs(dist_dir, exist_ok=True)
-    final_exe_path = os.path.join(dist_dir, 'ai_log_analyzer.exe')
+    final_exe_path = os.path.join(dist_dir, f'ai_log_analyzer{EXE_SUFFIX}')
     if os.path.exists(exe_path):
         shutil.move(exe_path, final_exe_path)
-        print(f"  移动: ai_log_analyzer.exe -> {final_exe_path}")
+        print(f"  移动: ai_log_analyzer{EXE_SUFFIX} -> {final_exe_path}")
     else:
         print(f"  错误: 找不到exe文件 {exe_path}")
         sys.exit(1)
@@ -175,7 +179,7 @@ def main():
 
     # 7. 创建使用说明
     print("\n[7/8] 创建使用说明...")
-    create_usage_file(dist_dir)
+    create_usage_file(dist_dir, EXE_SUFFIX)
     print("  创建: 使用说明.txt")
 
     # 8. 清理打包临时文件
@@ -198,32 +202,33 @@ def main():
     print("=" * 50)
     print(f"输出目录: {dist_dir}")
     print("\n使用方法:")
-    print("  1. 双击 ai_log_analyzer.exe 启动Web界面")
+    print(f"  1. 运行 ./ai_log_analyzer{EXE_SUFFIX} 启动Web界面")
     print("  2. 配置API后即可使用AI分析功能")
     print("=" * 50)
 
 
-def create_usage_file(dist_dir):
-    content = """AI日志分析器 使用说明
+def create_usage_file(dist_dir, exe_suffix):
+    exe_name = f'ai_log_analyzer{exe_suffix}'
+    content = f"""AI日志分析器 使用说明
 
 ================================================================================
 一、启动方式
 ================================================================================
 
 1. Web界面启动:
-   - 双击 ai_log_analyzer.exe 启动Web界面（自动打开浏览器）
-   - 命令行启动指定端口: ai_log_analyzer.exe web --port 18888
-   - 命令行启动指定主机: ai_log_analyzer.exe web --host 0.0.0.0 --port 80
-   - 不自动打开浏览器: ai_log_analyzer.exe web --no-browser
+   - 双击 {exe_name} 启动Web界面（自动打开浏览器）
+   - 命令行启动指定端口: {exe_name} web --port 18888
+   - 命令行启动指定主机: {exe_name} web --host 0.0.0.0 --port 80
+   - 不自动打开浏览器: {exe_name} web --no-browser
 
 2. CLI命令行分析:
-   ai_log_analyzer.exe analyze <日志路径>
-   ai_log_analyzer.exe analyze <日志路径> --ai  # 启用AI分析
+   {exe_name} analyze <日志路径>
+   {exe_name} analyze <日志路径> --ai  # 启用AI分析
 
 3. 配置管理:
-   ai_log_analyzer.exe config set api.base_url <API地址>
-   ai_log_analyzer.exe config set api.api_key <API密钥>
-   ai_log_analyzer.exe config set api.model <模型名称>
+   {exe_name} config set api.base_url <API地址>
+   {exe_name} config set api.api_key <API密钥>
+   {exe_name} config set api.model <模型名称>
 
 ================================================================================
 二、用户登录
@@ -246,9 +251,9 @@ def create_usage_file(dist_dir):
 首次使用需要配置AI API，有两种方式：
 
 方式1：命令行配置
-   ai_log_analyzer.exe config set api.base_url https://api.example.com/v1
-   ai_log_analyzer.exe config set api.api_key your-api-key
-   ai_log_analyzer.exe config set api.model gpt-4
+   {exe_name} config set api.base_url https://api.example.com/v1
+   {exe_name} config set api.api_key your-api-key
+   {exe_name} config set api.model gpt-4
 
 方式2：直接编辑配置文件
    打开 config/ai_config.json 文件，修改 api 部分的配置
@@ -263,13 +268,13 @@ def create_usage_file(dist_dir):
 - plugin.json: 插件元数据
 
 示例 plugin.json:
-{
+{{
     "id": "my_plugin",
     "name": "My Plugin",
     "version": "1.0.0",
     "description": "插件描述",
     "plugin_type": "CloudBMC"
-}
+}}
 
 【重要】插件依赖声明:
 如果插件需要额外的Python模块，需要在打包前声明依赖：
